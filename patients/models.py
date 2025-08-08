@@ -6,7 +6,9 @@ class Patient(models.Model):
     last_name = models.CharField(max_length=100, verbose_name="Last Name")
     date_of_birth = models.DateField(verbose_name="Date of Birth")
     email = models.EmailField(unique=True, verbose_name="Email Address")
-    phone_number = models.CharField(max_length=15, blank=True, verbose_name="Phone Number")
+    phone_number = models.CharField(
+        max_length=15, blank=True, verbose_name="Phone Number"
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
 
@@ -20,11 +22,17 @@ class Patient(models.Model):
 
 
 class BloodPressure(models.Model):
-    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="blood_pressures",
-                                verbose_name="Patient")
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="blood_pressures",
+        verbose_name="Patient",
+    )
     systolic = models.PositiveIntegerField(verbose_name="Systolic Pressure")
     diastolic = models.PositiveIntegerField(verbose_name="Diastolic Pressure")
-    measurement_date = models.DateTimeField(auto_now_add=True, verbose_name="Measurement Date")
+    measurement_date = models.DateTimeField(
+        auto_now_add=True, verbose_name="Measurement Date"
+    )
 
     class Meta:
         verbose_name = "Blood Pressure"
@@ -36,7 +44,12 @@ class BloodPressure(models.Model):
 
 
 class LabTest(models.Model):
-    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="lab_tests", verbose_name="Patient")
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="lab_tests",
+        verbose_name="Patient",
+    )
     test_name = models.CharField(max_length=200, verbose_name="Test Name")
     result = models.TextField(verbose_name="Test Result")
     test_date = models.DateTimeField(auto_now_add=True, verbose_name="Test Date")

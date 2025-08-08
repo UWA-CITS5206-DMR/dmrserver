@@ -14,7 +14,7 @@ class PatientSerializer(serializers.ModelSerializer):
             "email",
             "phone_number",
             "created_at",
-            "updated_at"
+            "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
@@ -24,9 +24,13 @@ class PatientSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         instance.first_name = validated_data.get("first_name", instance.first_name)
         instance.last_name = validated_data.get("last_name", instance.last_name)
-        instance.date_of_birth = validated_data.get("date_of_birth", instance.date_of_birth)
+        instance.date_of_birth = validated_data.get(
+            "date_of_birth", instance.date_of_birth
+        )
         instance.email = validated_data.get("email", instance.email)
-        instance.phone_number = validated_data.get("phone_number", instance.phone_number)
+        instance.phone_number = validated_data.get(
+            "phone_number", instance.phone_number
+        )
         instance.save()
         return instance
 
@@ -36,13 +40,7 @@ class BloodPressureSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BloodPressure
-        fields = [
-            "id",
-            "patient",
-            "systolic",
-            "diastolic",
-            "measurement_date"
-        ]
+        fields = ["id", "patient", "systolic", "diastolic", "measurement_date"]
         read_only_fields = ["id", "measurement_date"]
 
     def create(self, validated_data):
@@ -60,13 +58,7 @@ class LabTestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LabTest
-        fields = [
-            "id",
-            "patient",
-            "test_name",
-            "result",
-            "test_date"
-        ]
+        fields = ["id", "patient", "test_name", "result", "test_date"]
         read_only_fields = ["id", "test_date"]
 
     def create(self, validated_data):
