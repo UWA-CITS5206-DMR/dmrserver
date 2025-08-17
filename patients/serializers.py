@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Patient, BloodPressure, LabTest
+from .models import Patient, File
 
 
 class PatientSerializer(serializers.ModelSerializer):
@@ -35,37 +35,17 @@ class PatientSerializer(serializers.ModelSerializer):
         return instance
 
 
-class BloodPressureSerializer(serializers.ModelSerializer):
-    patient = serializers.PrimaryKeyRelatedField(queryset=Patient.objects.all())
+class FileSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(
+        max_length=None,
+        use_url=True,  # Set to True to return the file's URL, otherwise return the file name
+    )
 
     class Meta:
-        model = BloodPressure
-        fields = ["id", "patient", "systolic", "diastolic", "measurement_date"]
-        read_only_fields = ["id", "measurement_date"]
+        model = File
+        fields = ["id", "display_name", "file", "created_at"]
+        read_only_fields = ["id", "display_name", "created_at"]
 
     def create(self, validated_data):
-        return BloodPressure.objects.create(**validated_data)
-
-    def update(self, instance, validated_data):
-        instance.systolic = validated_data.get("systolic", instance.systolic)
-        instance.diastolic = validated_data.get("diastolic", instance.diastolic)
-        instance.save()
-        return instance
-
-
-class LabTestSerializer(serializers.ModelSerializer):
-    patient = serializers.PrimaryKeyRelatedField(queryset=Patient.objects.all())
-
-    class Meta:
-        model = LabTest
-        fields = ["id", "patient", "test_name", "result", "test_date"]
-        read_only_fields = ["id", "test_date"]
-
-    def create(self, validated_data):
-        return LabTest.objects.create(**validated_data)
-
-    def update(self, instance, validated_data):
-        instance.test_name = validated_data.get("test_name", instance.test_name)
-        instance.result = validated_data.get("result", instance.result)
-        instance.save()
-        return instance
+        validated_data["display_name"] = validated_data["file"].name
+        return super().create(validated_data)

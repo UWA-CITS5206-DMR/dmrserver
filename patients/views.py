@@ -1,7 +1,7 @@
 from rest_framework import permissions, viewsets
 
-from .models import Patient, BloodPressure, LabTest
-from .serializers import PatientSerializer, BloodPressureSerializer, LabTestSerializer
+from .models import Patient, File
+from .serializers import PatientSerializer, FileSerializer
 
 
 class PatientViewSet(viewsets.ModelViewSet):
@@ -10,13 +10,7 @@ class PatientViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
 
-class BloodPressureViewSet(viewsets.ModelViewSet):
-    queryset = BloodPressure.objects.all().order_by("-measurement_date")
-    serializer_class = BloodPressureSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-
-class LabTestViewSet(viewsets.ModelViewSet):
-    queryset = LabTest.objects.all().order_by("-test_date")
-    serializer_class = LabTestSerializer
+class FileViewSet(viewsets.ModelViewSet):
+    queryset = File.objects.all().order_by("-created_at")
+    serializer_class = FileSerializer
     permission_classes = [permissions.IsAuthenticated]

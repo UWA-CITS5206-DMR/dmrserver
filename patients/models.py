@@ -1,3 +1,8 @@
+import os
+import glob
+import uuid
+from datetime import datetime
+from django.conf import settings
 from django.db import models
 
 
@@ -21,43 +26,36 @@ class Patient(models.Model):
         return f"{self.first_name} {self.last_name}"
 
 
-class BloodPressure(models.Model):
-    patient = models.ForeignKey(
-        Patient,
-        on_delete=models.CASCADE,
-        related_name="blood_pressures",
-        verbose_name="Patient",
+class File(models.Model):
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, verbose_name="File ID"
     )
-    systolic = models.PositiveIntegerField(verbose_name="Systolic Pressure")
-    diastolic = models.PositiveIntegerField(verbose_name="Diastolic Pressure")
-    measurement_date = models.DateTimeField(
-        auto_now_add=True, verbose_name="Measurement Date"
+    display_name = models.CharField(
+        max_length=255, editable=False, verbose_name="Display name"
     )
+    file = models.FileField(upload_to="upload_to", verbose_name="File")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
 
     class Meta:
-        verbose_name = "Blood Pressure"
-        verbose_name_plural = "Blood Pressures"
-        ordering = ["-measurement_date"]
+        verbose_name = "File"
+        verbose_name_plural = "Files"
+
+    @staticmethod
+    def upload_to(instance, filename):
+        today = datetime.today().strftime("%Y/%m/%d")
+        ext = filename.split(".")[-1]
+        unique_filename = f"{instance.id}.{ext}"
+        return os.path.join("uploads", today, unique_filename)
+
+    def get_full_path(self):
+        return os.path.join(settings.MEDIA_ROOT, self.file.path)
+
+    def delete(self, *args, **kwargs):
+        files = glob.glob(f"{self.get_full_path()}*")
+        for file in files:
+            os.remove(file)
+        self.file.delete(save=False)
+        super().delete(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.patient} - {self.systolic}/{self.diastolic} on {self.measurement_date}"
-
-
-class LabTest(models.Model):
-    patient = models.ForeignKey(
-        Patient,
-        on_delete=models.CASCADE,
-        related_name="lab_tests",
-        verbose_name="Patient",
-    )
-    test_name = models.CharField(max_length=200, verbose_name="Test Name")
-    result = models.TextField(verbose_name="Test Result")
-    test_date = models.DateTimeField(auto_now_add=True, verbose_name="Test Date")
-
-    class Meta:
-        verbose_name = "Lab Test"
-        verbose_name_plural = "Lab Tests"
-        ordering = ["-test_date"]
-
-    def __str__(self):
-        return f"{self.patient} - {self.test_name} on {self.test_date}"
+        return self.display_name or str(self.id)
