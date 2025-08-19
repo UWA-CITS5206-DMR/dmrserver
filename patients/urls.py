@@ -5,9 +5,8 @@ from . import views
 
 router = DefaultRouter()
 router.register(r"patients", views.PatientViewSet)
-router.register(r"blood-pressures", views.BloodPressureViewSet)
-router.register(r"lab-tests", views.LabTestViewSet)
+router.register(r"files", views.FileViewSet)
 
 urlpatterns = [
-    path("api/", include(router.urls)),
+    path("", include(router.urls)),
 ]
