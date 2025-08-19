@@ -3,7 +3,25 @@ from rest_framework import serializers
 from .models import Patient, File
 
 
+class FileSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(
+        max_length=None,
+        use_url=True,  # Set to True to return the file's URL, otherwise return the file name
+    )
+
+    class Meta:
+        model = File
+        fields = ["id", "patient", "display_name", "file", "created_at"]
+        read_only_fields = ["id", "patient", "display_name", "created_at"]
+
+    def create(self, validated_data):
+        validated_data["display_name"] = validated_data["file"].name
+        return super().create(validated_data)
+
+
 class PatientSerializer(serializers.ModelSerializer):
+    files = FileSerializer(many=True, read_only=True)
+
     class Meta:
         model = Patient
         fields = [
@@ -15,6 +33,7 @@ class PatientSerializer(serializers.ModelSerializer):
             "phone_number",
             "created_at",
             "updated_at",
+            "files",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
@@ -33,19 +52,3 @@ class PatientSerializer(serializers.ModelSerializer):
         )
         instance.save()
         return instance
-
-
-class FileSerializer(serializers.ModelSerializer):
-    file = serializers.FileField(
-        max_length=None,
-        use_url=True,  # Set to True to return the file's URL, otherwise return the file name
-    )
-
-    class Meta:
-        model = File
-        fields = ["id", "display_name", "file", "created_at"]
-        read_only_fields = ["id", "display_name", "created_at"]
-
-    def create(self, validated_data):
-        validated_data["display_name"] = validated_data["file"].name
-        return super().create(validated_data)

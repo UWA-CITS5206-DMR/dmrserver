@@ -20,6 +20,7 @@ dist/
 build/
 *.manifest
 *.spec
+.ruff_cache/
 
 # Django
 *.log

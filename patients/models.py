@@ -1,5 +1,4 @@
 import os
-import glob
 import uuid
 from datetime import datetime
 from django.conf import settings
@@ -30,6 +29,9 @@ class File(models.Model):
     id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, verbose_name="File ID"
     )
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="files", verbose_name="Patient"
+    )
     display_name = models.CharField(
         max_length=255, editable=False, verbose_name="Display name"
     )
@@ -39,6 +41,7 @@ class File(models.Model):
     class Meta:
         verbose_name = "File"
         verbose_name_plural = "Files"
+        ordering = ["-created_at"]
 
     @staticmethod
     def upload_to(instance, filename):
@@ -51,9 +54,6 @@ class File(models.Model):
         return os.path.join(settings.MEDIA_ROOT, self.file.path)
 
     def delete(self, *args, **kwargs):
-        files = glob.glob(f"{self.get_full_path()}*")
-        for file in files:
-            os.remove(file)
         self.file.delete(save=False)
         super().delete(*args, **kwargs)
 

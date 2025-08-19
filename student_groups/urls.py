@@ -6,13 +6,21 @@ from .views import (
     BloodPressureViewSet,
     HeartRateViewSet,
     BodyTemperatureViewSet,
+    ObservationsViewSet,
 )
 
 router = DefaultRouter()
-router.register(r"notes", NoteViewSet)
-router.register(r"blood-pressures", BloodPressureViewSet)
-router.register(r"heart-rates", HeartRateViewSet)
-router.register(r"body-temperatures", BodyTemperatureViewSet)
+router.register(r"notes", NoteViewSet, basename="note")
+router.register(
+    r"observations/blood-pressures", BloodPressureViewSet, basename="blood-pressure"
+)
+router.register(r"observations/heart-rates", HeartRateViewSet, basename="heart-rate")
+router.register(
+    r"observations/body-temperatures",
+    BodyTemperatureViewSet,
+    basename="body-temperature",
+)
+router.register(r"observations", ObservationsViewSet, basename="observation")
 
 urlpatterns = [
     path("", include(router.urls)),

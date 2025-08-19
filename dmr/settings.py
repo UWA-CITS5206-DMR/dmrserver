@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "corsheaders",
     "patients",
+    "student_groups",
 ]
 
 MIDDLEWARE = [
@@ -141,3 +142,12 @@ REST_FRAMEWORK = {
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = "*"
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "DMR API",
+    "DESCRIPTION": "DMR API documentation",
+    "VERSION": "0.0.1",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SCHEMA_PATH_PREFIX": "/api",
+}

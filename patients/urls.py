@@ -1,12 +1,12 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from rest_framework_nested import routers
 
-from . import views
+from .views import PatientViewSet, FileViewSet
 
-router = DefaultRouter()
-router.register(r"patients", views.PatientViewSet)
-router.register(r"files", views.FileViewSet)
+router = routers.SimpleRouter()
+router.register(r"patients", PatientViewSet)
 
-urlpatterns = [
-    path("", include(router.urls)),
-]
+files_router = routers.NestedSimpleRouter(router, r"patients", lookup="patient")
+files_router.register(r"files", FileViewSet)
+
+
+urlpatterns = router.urls + files_router.urls
