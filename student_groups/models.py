@@ -1,0 +1,180 @@
+from django.db import models
+from django.contrib.auth.models import User
+from patients.models import Patient
+from .validators import ObservationValidator
+from django.db import transaction
+
+
+class Note(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="notes",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="notes",
+        verbose_name="User",
+    )
+    content = models.TextField(verbose_name="Content")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
+
+    class Meta:
+        verbose_name = "Note"
+        verbose_name_plural = "Notes"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.patient} - {self.content[:50]}... ({self.user.username})"
+
+
+class BloodPressure(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="blood_pressures",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="blood_pressures",
+        verbose_name="User",
+    )
+    systolic = models.PositiveIntegerField(verbose_name="Systolic Pressure")
+    diastolic = models.PositiveIntegerField(verbose_name="Diastolic Pressure")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+
+    class Meta:
+        verbose_name = "Blood Pressure"
+        verbose_name_plural = "Blood Pressures"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        ObservationValidator.validate_blood_pressure(
+            self.patient, self.user, self.systolic, self.diastolic
+        )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.patient} - {self.systolic}/{self.diastolic} mmHg ({self.user.username})"
+
+
+class HeartRate(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="heart_rates",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="heart_rates",
+        verbose_name="User",
+    )
+    heart_rate = models.PositiveIntegerField(verbose_name="Heart Rate (bpm)")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+
+    class Meta:
+        verbose_name = "Heart Rate"
+        verbose_name_plural = "Heart Rates"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        ObservationValidator.validate_heart_rate(
+            self.patient, self.user, self.heart_rate
+        )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.patient} - {self.heart_rate} bpm ({self.user.username})"
+
+
+class BodyTemperature(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="body_temperatures",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="body_temperatures",
+        verbose_name="User",
+    )
+    temperature = models.DecimalField(
+        max_digits=4, decimal_places=1, verbose_name="Temperature (°C)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+
+    class Meta:
+        verbose_name = "Body Temperature"
+        verbose_name_plural = "Body Temperatures"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        ObservationValidator.validate_body_temperature(
+            self.patient, self.user, self.temperature
+        )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.patient} - {self.temperature}°C ({self.user.username})"
+
+
+class ObservationManager:
+    @staticmethod
+    def create_observations(validated_data):
+        """
+        Create observation records in a single transaction.
+
+        :param validated_data: A dictionary containing observation data,
+                               e.g., {'blood_pressure': {...}, 'heart_rate': {...}}
+        :return: A dictionary of created observation instances.
+        """
+        created_instances = {}
+        with transaction.atomic():
+            if "blood_pressure" in validated_data:
+                bp_data = validated_data["blood_pressure"]
+                created_instances["blood_pressure"] = BloodPressure.objects.create(
+                    **bp_data
+                )
+
+            if "heart_rate" in validated_data:
+                hr_data = validated_data["heart_rate"]
+                created_instances["heart_rate"] = HeartRate.objects.create(**hr_data)
+
+            if "body_temperature" in validated_data:
+                bt_data = validated_data["body_temperature"]
+                created_instances["body_temperature"] = BodyTemperature.objects.create(
+                    **bt_data
+                )
+        return created_instances
+
+    @staticmethod
+    def get_observations_by_user_and_patient(user_id, patient_id):
+        return {
+            "blood_pressures": BloodPressure.objects.filter(
+                user_id=user_id, patient_id=patient_id
+            ),
+            "heart_rates": HeartRate.objects.filter(
+                user_id=user_id, patient_id=patient_id
+            ),
+            "body_temperatures": BodyTemperature.objects.filter(
+                user_id=user_id, patient_id=patient_id
+            ),
+        }

@@ -62,9 +62,6 @@ uv run python manage.py runserver
 ### Running with uv (Recommended)
 
 ```bash
-# Run Django management commands
-uv run python manage.py <command>
-
 # Start development server
 uv run python manage.py runserver
 
@@ -94,48 +91,11 @@ python manage.py runserver
 python manage.py test
 ```
 
-## Dependency Management
-
-This project uses [uv](https://docs.astral.sh/uv/) for fast and reliable dependency management.
-
-### Adding Dependencies
-
-```bash
-# Add a new dependency
-uv add package-name
-
-# Add a development dependency
-uv add --dev package-name
-
-# Add a specific version
-uv add "package-name==1.0.0"
-```
-
-### Updating Dependencies
-
-```bash
-# Update all dependencies
-uv lock --upgrade
-
-# Update a specific package
-uv lock --upgrade-package package-name
-
-# Sync dependencies after updates
-uv sync
-```
-
-### Removing Dependencies
-
-```bash
-# Remove a dependency
-uv remove package-name
-```
-
 ## API Documentation
 
 Once the server is running, you can access:
 
-- **API Documentation**: `http://127.0.0.1:8000/api/schema/swagger-ui/`
+- **API Documentation**: `http://127.0.0.1:8000/schema/swagger-ui/`
 - **Admin Interface**: `http://127.0.0.1:8000/admin/`
 
 ## Environment Variables
@@ -166,6 +126,6 @@ DATABASE_URL=sqlite:///db.sqlite3
 
 ### Getting Help
 
-- Check the [uv documentation](https://docs.astral.sh/uv/)
-- Django documentation: https://docs.djangoproject.com/
-- DRF documentation: https://www.django-rest-framework.org/
+- Check the uv documentation: <https://docs.astral.sh/uv/>
+- Django documentation: <https://docs.djangoproject.com/>
+- DRF documentation: <https://www.django-rest-framework.org/>
