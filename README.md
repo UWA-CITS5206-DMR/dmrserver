@@ -108,13 +108,28 @@ SECRET_KEY=your-secret-key-here
 DATABASE_URL=sqlite:///db.sqlite3
 ```
 
+## Documentation
+
+For comprehensive development guides and documentation, see the [`docs/`](docs/) directory:
+
+- **[📚 Documentation Index](docs/README.md)** - Overview of all available guides
+- **[🚀 Development Guide](docs/DEVELOPMENT_GUIDE.md)** - Complete setup and development workflow
+- **[🔌 API Guide](docs/API_GUIDE.md)** - Comprehensive API documentation
+- **[🏗️ Project Structure](docs/PROJECT_STRUCTURE.md)** - Architecture and codebase organization
+- **[🧪 Testing Guide](docs/TESTING_GUIDE.md)** - Testing strategies and best practices
+
+### Quick Links
+- **API Documentation**: http://127.0.0.1:8000/schema/swagger-ui/ (when server is running)
+- **Admin Interface**: http://127.0.0.1:8000/admin/
+
 ## Contributing
 
-1. Create a new branch for your feature
-2. Make your changes
-3. Add dependencies with `uv add` if needed
-4. Run tests with `uv run python manage.py test`
-5. Submit a pull request
+1. Read the [Development Guide](docs/DEVELOPMENT_GUIDE.md) for detailed setup instructions
+2. Create a new branch for your feature
+3. Follow the coding standards outlined in the documentation
+4. Write tests following the [Testing Guide](docs/TESTING_GUIDE.md)
+5. Run tests with `./start.sh test`
+6. Submit a pull request
 
 ## Troubleshooting
 
@@ -124,8 +139,12 @@ DATABASE_URL=sqlite:///db.sqlite3
 2. **uv not found**: Make sure uv is installed and in your PATH
 3. **Dependencies not syncing**: Try `uv sync --reinstall` to force reinstall
 
+For detailed troubleshooting, see the [Development Guide](docs/DEVELOPMENT_GUIDE.md#troubleshooting).
+
 ### Getting Help
 
+- Check the [Documentation](docs/) for comprehensive guides
+- Review the [Troubleshooting section](docs/DEVELOPMENT_GUIDE.md#troubleshooting)
 - Check the uv documentation: <https://docs.astral.sh/uv/>
 - Django documentation: <https://docs.djangoproject.com/>
 - DRF documentation: <https://www.django-rest-framework.org/>
