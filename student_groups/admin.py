@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BloodPressure, HeartRate, BodyTemperature, Note
+from .models import BloodPressure, HeartRate, BodyTemperature, Note, LabRequest
 
 
 @admin.register(Note)
@@ -63,4 +63,33 @@ class BodyTemperatureAdmin(admin.ModelAdmin):
         ("Patient Information", {"fields": ("patient", "user")}),
         ("Temperature Data", {"fields": ("temperature",)}),
         ("Other Information", {"fields": ("created_at",)}),
+    )
+
+
+@admin.register(LabRequest)
+class LabRequestAdmin(admin.ModelAdmin):
+    list_display = [
+        "patient",
+        "user",
+        "test_type",
+        "status",
+        "created_at",
+        "updated_at",
+    ]
+    list_filter = ["user", "status", "created_at", "updated_at"]
+    search_fields = [
+        "patient__first_name",
+        "patient__last_name",
+        "user__username",
+        "test_type",
+    ]
+    readonly_fields = ["created_at", "updated_at"]
+
+    fieldsets = (
+        ("Patient Information", {"fields": ("patient", "user")}),
+        ("Lab Test", {"fields": ("test_type", "status")}),
+        (
+            "Timestamps",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
+        ),
     )
