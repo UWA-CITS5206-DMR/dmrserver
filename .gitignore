@@ -50,3 +50,6 @@ coverage.xml
 *.py,cover
 .cache
 .pytest_cache/
+
+# Personal starter script
+start.sh
