@@ -178,3 +178,37 @@ class ObservationManager:
                 user_id=user_id, patient_id=patient_id
             ),
         }
+
+
+class LabRequest(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="lab_requests",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="lab_requests",
+        verbose_name="User",
+    )
+    test_type = models.CharField(max_length=100, verbose_name="Test Type")
+    status = models.CharField(
+        max_length=50,
+        choices=[("pending", "Pending"), ("completed", "Completed")],
+        default="pending",
+        verbose_name="Status",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
+
+    class Meta:
+        verbose_name = "Lab Request"
+        verbose_name_plural = "Lab Requests"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"{self.patient} - {self.test_type} ({self.status}) by {self.user.username}"
+        )

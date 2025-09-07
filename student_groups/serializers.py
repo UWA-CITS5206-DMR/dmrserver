@@ -1,5 +1,12 @@
 from rest_framework import serializers
-from .models import Note, BloodPressure, HeartRate, BodyTemperature, ObservationManager
+from .models import (
+    Note,
+    BloodPressure,
+    HeartRate,
+    BodyTemperature,
+    ObservationManager,
+    LabRequest,
+)
 from .validators import ObservationValidator
 
 
@@ -117,3 +124,41 @@ class ObservationDataSerializer(serializers.Serializer):
         child=BodyTemperatureOutputSerializer(),
         help_text="List of body temperature records",
     )
+
+
+class LabRequestSerializer(BaseModelSerializer):
+    class Meta:
+        model = LabRequest
+        fields = [
+            "id",
+            "patient",
+            "user",
+            "test_type",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "user"]
+
+
+class LabRequestStatusUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for instructor to update only the status field of LabRequest.
+    Used to enforce that instructors can only change status from pending to completed.
+    """
+
+    class Meta:
+        model = LabRequest
+        fields = ["status"]
+
+    def validate_status(self, value):
+        """Ensure status can only be changed from pending to completed"""
+        if self.instance and self.instance.status == "completed":
+            raise serializers.ValidationError(
+                "Cannot modify status of an already completed request."
+            )
+        if value not in ["pending", "completed"]:
+            raise serializers.ValidationError(
+                "Status must be either 'pending' or 'completed'."
+            )
+        return value

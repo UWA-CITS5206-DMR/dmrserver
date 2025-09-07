@@ -7,6 +7,7 @@ from .views import (
     HeartRateViewSet,
     BodyTemperatureViewSet,
     ObservationsViewSet,
+    LabRequestViewSet,
 )
 
 router = DefaultRouter()
@@ -21,6 +22,7 @@ router.register(
     basename="body-temperature",
 )
 router.register(r"observations", ObservationsViewSet, basename="observation")
+router.register(r"lab-requests", LabRequestViewSet, basename="lab-request")
 
 urlpatterns = [
     path("", include(router.urls)),

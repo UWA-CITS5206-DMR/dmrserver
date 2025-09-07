@@ -6,43 +6,96 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
-            name='Patient',
+            name="Patient",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('first_name', models.CharField(max_length=100, verbose_name='First Name')),
-                ('last_name', models.CharField(max_length=100, verbose_name='Last Name')),
-                ('date_of_birth', models.DateField(verbose_name='Date of Birth')),
-                ('email', models.EmailField(max_length=254, unique=True, verbose_name='Email Address')),
-                ('phone_number', models.CharField(blank=True, max_length=15, verbose_name='Phone Number')),
-                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Created At')),
-                ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Updated At')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "first_name",
+                    models.CharField(max_length=100, verbose_name="First Name"),
+                ),
+                (
+                    "last_name",
+                    models.CharField(max_length=100, verbose_name="Last Name"),
+                ),
+                ("date_of_birth", models.DateField(verbose_name="Date of Birth")),
+                (
+                    "email",
+                    models.EmailField(
+                        max_length=254, unique=True, verbose_name="Email Address"
+                    ),
+                ),
+                (
+                    "phone_number",
+                    models.CharField(
+                        blank=True, max_length=15, verbose_name="Phone Number"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(auto_now_add=True, verbose_name="Created At"),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(auto_now=True, verbose_name="Updated At"),
+                ),
             ],
             options={
-                'verbose_name': 'Patient',
-                'verbose_name_plural': 'Patients',
-                'ordering': ['last_name', 'first_name'],
+                "verbose_name": "Patient",
+                "verbose_name_plural": "Patients",
+                "ordering": ["last_name", "first_name"],
             },
         ),
         migrations.CreateModel(
-            name='File',
+            name="File",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False, verbose_name='File ID')),
-                ('display_name', models.CharField(editable=False, max_length=255, verbose_name='Display name')),
-                ('file', models.FileField(upload_to='upload_to', verbose_name='File')),
-                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Created At')),
-                ('patient', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='files', to='patients.patient', verbose_name='Patient')),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="File ID",
+                    ),
+                ),
+                (
+                    "display_name",
+                    models.CharField(
+                        editable=False, max_length=255, verbose_name="Display name"
+                    ),
+                ),
+                ("file", models.FileField(upload_to="upload_to", verbose_name="File")),
+                (
+                    "created_at",
+                    models.DateTimeField(auto_now_add=True, verbose_name="Created At"),
+                ),
+                (
+                    "patient",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="files",
+                        to="patients.patient",
+                        verbose_name="Patient",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'File',
-                'verbose_name_plural': 'Files',
+                "verbose_name": "File",
+                "verbose_name_plural": "Files",
             },
         ),
     ]

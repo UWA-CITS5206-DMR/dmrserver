@@ -2,7 +2,14 @@ from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
-from .models import Note, BloodPressure, HeartRate, BodyTemperature, ObservationManager
+from .models import (
+    Note,
+    BloodPressure,
+    HeartRate,
+    BodyTemperature,
+    ObservationManager,
+    LabRequest,
+)
 from .serializers import (
     NoteSerializer,
     BloodPressureSerializer,
@@ -10,7 +17,10 @@ from .serializers import (
     BodyTemperatureSerializer,
     ObservationsSerializer,
     ObservationDataSerializer,
+    LabRequestSerializer,
+    LabRequestStatusUpdateSerializer,
 )
+from core.permissions import LabRequestPermission, get_user_role, ROLE_INSTRUCTOR
 
 
 class ObservationsViewSet(viewsets.GenericViewSet):
@@ -135,3 +145,24 @@ class BodyTemperatureViewSet(viewsets.ModelViewSet):
     queryset = BodyTemperature.objects.all()
     serializer_class = BodyTemperatureSerializer
     permission_classes = [IsAuthenticated]
+
+
+class LabRequestViewSet(viewsets.ModelViewSet):
+    queryset = LabRequest.objects.all()
+    serializer_class = LabRequestSerializer
+    permission_classes = [LabRequestPermission]
+
+    def get_serializer_class(self):
+        """
+        Return appropriate serializer based on user role and action.
+        Instructors can only update status field when updating.
+        """
+        if self.action in ["update", "partial_update"]:
+            user_role = get_user_role(self.request.user)
+            if user_role == ROLE_INSTRUCTOR:
+                return LabRequestStatusUpdateSerializer
+        return LabRequestSerializer
+
+    def perform_create(self, serializer):
+        """Set the user field to the current authenticated user when creating"""
+        serializer.save(user=self.request.user)
