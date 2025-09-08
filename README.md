@@ -108,6 +108,24 @@ SECRET_KEY=your-secret-key-here
 DATABASE_URL=sqlite:///db.sqlite3
 ```
 
+## Docker Deployment
+
+For production deployment using Docker:
+
+```bash
+docker run -d \
+  --name dmrserver \
+  -p 8000:8000 \
+  -v $(pwd)/media:/app/media \
+  -v $(pwd)/static:/app/static \
+  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
+  -e DJANGO_SETTINGS_MODULE=dmr.settings \
+  -e DJANGO_CONFIGURATION=Production \
+  dmrserver
+```
+
+For detailed Docker setup and configuration, see **[Docker Guide](docs/DOCKER_GUIDE.md)**.
+
 ## Documentation
 
 For comprehensive development guides and documentation, see the [`docs/`](docs/) directory:

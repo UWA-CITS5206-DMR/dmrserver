@@ -12,8 +12,3 @@ dependencies = [
     "sqlalchemy>=2.0.42",
     "drf-nested-routers>=0.94.2",
 ]
-
-[dependency-groups]
-dev = [
-    "ruff>=0.12.12",
-]
