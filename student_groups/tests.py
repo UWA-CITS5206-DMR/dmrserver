@@ -606,14 +606,20 @@ class LabRequestViewSetTest(APITestCase):
         from student_groups.models import LabRequest
 
         LabRequest.objects.create(
-            patient=self.patient, user=self.user, test_type="Blood Test", reason="Routine blood test"
+            patient=self.patient,
+            user=self.user,
+            test_type="Blood Test",
+            reason="Routine blood test",
         )
         # Create a lab request for another user
         other_user = get_user_model().objects.create_user(
             username="student2", password="testpass123"
         )
         LabRequest.objects.create(
-            patient=self.patient, user=other_user, test_type="Urine Test", reason="Routine urine test"
+            patient=self.patient,
+            user=other_user,
+            test_type="Urine Test",
+            reason="Routine urine test",
         )
 
         response = self.client.get("/api/student-groups/lab-requests/")
@@ -626,7 +632,10 @@ class LabRequestViewSetTest(APITestCase):
         from student_groups.models import LabRequest
 
         lab_request = LabRequest.objects.create(
-            patient=self.patient, user=self.user, test_type="Blood Test", reason="Testing update permissions"
+            patient=self.patient,
+            user=self.user,
+            test_type="Blood Test",
+            reason="Testing update permissions",
         )
 
         data = {"status": "completed"}

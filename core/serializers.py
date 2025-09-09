@@ -4,6 +4,16 @@ from django.contrib.auth.models import User
 from .permissions import get_user_role
 
 
+class BaseModelSerializer(serializers.ModelSerializer):
+    """
+    Base serializer with common timestamp fields for all models.
+    Centralizes the handling of created_at and updated_at fields.
+    """
+
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(style={"input_type": "password"})

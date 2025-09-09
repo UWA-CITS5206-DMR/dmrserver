@@ -103,10 +103,10 @@ class LabRequestRBACTest(APITestCase):
         """Test that students can create lab requests"""
         self.client.force_authenticate(user=self.student_user)
         data = {
-            "patient": self.patient.id, 
-            "test_type": "X-Ray", 
+            "patient": self.patient.id,
+            "test_type": "X-Ray",
             "reason": "Patient complaining of chest pain",
-            "status": "pending"
+            "status": "pending",
         }
         response = self.client.post("/api/student-groups/lab-requests/", data)
         if response.status_code != status.HTTP_201_CREATED:

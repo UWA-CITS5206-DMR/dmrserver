@@ -8,6 +8,7 @@ This module defines permissions based on user roles:
 """
 
 from rest_framework.permissions import BasePermission, SAFE_METHODS
+from student_groups.models import ApprovedFile
 
 
 # Role constants
@@ -173,6 +174,53 @@ class InstructorOnlyPermission(BaseRolePermission):
     """
     Permission that allows access only to instructors and admins.
     Used for instructor-specific endpoints and dashboards.
+    """
+
+    role_permissions = {
+        ROLE_INSTRUCTOR: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    }
+
+
+class FileAccessPermission(BaseRolePermission):
+    """
+    Custom permission for file access with role-based and approval-based logic:
+    - Admins and instructors: full access to all files
+    - Students: can only access files from their approved lab requests
+    """
+
+    role_permissions = {
+        ROLE_STUDENT: ["GET", "HEAD", "OPTIONS"],
+        ROLE_INSTRUCTOR: ["GET", "HEAD", "OPTIONS"],
+    }
+
+    def has_object_permission(self, request, view, obj):
+        """Check file access permissions"""
+        user = request.user
+
+        if not user.is_authenticated:
+            return False
+
+        user_role = get_user_role(user)
+        if not user_role:
+            return False
+
+        # Admins and instructors have full access
+        if user_role in [ROLE_ADMIN, ROLE_INSTRUCTOR]:
+            return True
+
+        # Students must have an approved lab request for this file
+        if user_role == ROLE_STUDENT:
+            return ApprovedFile.objects.filter(
+                file=obj, lab_request__user=user, lab_request__status="completed"
+            ).exists()
+
+        return False
+
+
+class FileManagementPermission(BaseRolePermission):
+    """
+    Permission for file management (CRUD operations on files).
+    Only instructors and admins can manage files.
     """
 
     role_permissions = {

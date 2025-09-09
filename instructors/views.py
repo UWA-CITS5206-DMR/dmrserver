@@ -29,6 +29,11 @@ class LabRequestViewSet(
     serializer_class = LabRequestSerializer
     permission_classes = [InstructorOnlyPermission]
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["for_instructor"] = True
+        return context
+
     def get_serializer_class(self):
         if self.action in ["update", "partial_update"]:
             return LabRequestStatusUpdateSerializer

@@ -1,6 +1,15 @@
-from rest_framework import viewsets, status, mixins
-from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from .serializers import (
+    LabRequestSerializer,
+    NoteSerializer,
+    BloodPressureSerializer,
+    HeartRateSerializer,
+    BodyTemperatureSerializer,
+    RespiratoryRateSerializer,
+    BloodSugarSerializer,
+    OxygenSaturationSerializer,
+    ObservationsSerializer,
+    ObservationDataSerializer,
+)
 from .models import (
     Note,
     BloodPressure,
@@ -12,19 +21,10 @@ from .models import (
     ObservationManager,
     LabRequest,
 )
-from .serializers import (
-    NoteSerializer,
-    BloodPressureSerializer,
-    HeartRateSerializer,
-    BodyTemperatureSerializer,
-    RespiratoryRateSerializer,
-    BloodSugarSerializer,
-    OxygenSaturationSerializer,
-    ObservationsSerializer,
-    ObservationDataSerializer,
-    LabRequestSerializer,
-)
 from core.permissions import ObservationPermission, LabRequestPermission
+from rest_framework.response import Response
+from rest_framework import viewsets, status, mixins
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 
 
 class ObservationsViewSet(viewsets.GenericViewSet):
@@ -189,6 +189,14 @@ class LabRequestViewSet(
     queryset = LabRequest.objects.all()
     serializer_class = LabRequestSerializer
     permission_classes = [LabRequestPermission]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action == "create":
+            context["for_student_create"] = True
+        else:
+            context["for_student_read"] = True
+        return context
 
     def get_queryset(self):
         """Students can only see their own requests"""
