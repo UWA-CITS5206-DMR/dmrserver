@@ -6,6 +6,8 @@ from django.db import transaction
 
 
 class Note(models.Model):
+    # Name of the doctor or person writing the note
+    name = models.CharField(max_length=100, verbose_name="Doctor Name")
     patient = models.ForeignKey(
         Patient,
         on_delete=models.CASCADE,
@@ -28,7 +30,7 @@ class Note(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.patient} - {self.content[:50]}... ({self.user.username})"
+        return f"Note for {self.patient} by {self.name} ({self.user.username})"
 
 
 class BloodPressure(models.Model):
@@ -136,6 +138,114 @@ class BodyTemperature(models.Model):
         return f"{self.patient} - {self.temperature}°C ({self.user.username})"
 
 
+class RespiratoryRate(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="respiratory_rates",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="respiratory_rates",
+        verbose_name="User",
+    )
+    respiratory_rate = models.PositiveIntegerField(
+        verbose_name="Respiratory Rate (breaths/min)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+
+    class Meta:
+        verbose_name = "Respiratory Rate"
+        verbose_name_plural = "Respiratory Rates"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        ObservationValidator.validate_respiratory_rate(
+            self.patient, self.user, self.respiratory_rate
+        )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.patient} - {self.respiratory_rate} breaths/min ({self.user.username})"
+
+
+class BloodSugar(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="blood_sugars",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="blood_sugars",
+        verbose_name="User",
+    )
+    sugar_level = models.DecimalField(
+        max_digits=5, decimal_places=1, verbose_name="Blood Sugar Level (mg/dL)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+
+    class Meta:
+        verbose_name = "Blood Sugar"
+        verbose_name_plural = "Blood Sugars"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        ObservationValidator.validate_blood_sugar(
+            self.patient, self.user, self.sugar_level
+        )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.patient} - {self.sugar_level} mg/dL ({self.user.username})"
+
+
+class OxygenSaturation(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="oxygen_saturations",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="oxygen_saturations",
+        verbose_name="User",
+    )
+    saturation_percentage = models.PositiveIntegerField(
+        verbose_name="Oxygen Saturation (%)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+
+    class Meta:
+        verbose_name = "Oxygen Saturation"
+        verbose_name_plural = "Oxygen Saturations"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        ObservationValidator.validate_oxygen_saturation(
+            self.patient, self.user, self.saturation_percentage
+        )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.patient} - {self.saturation_percentage}% ({self.user.username})"
+
+
 class ObservationManager:
     @staticmethod
     def create_observations(validated_data):
@@ -163,6 +273,22 @@ class ObservationManager:
                 created_instances["body_temperature"] = BodyTemperature.objects.create(
                     **bt_data
                 )
+
+            if "respiratory_rate" in validated_data:
+                rr_data = validated_data["respiratory_rate"]
+                created_instances["respiratory_rate"] = RespiratoryRate.objects.create(
+                    **rr_data
+                )
+
+            if "blood_sugar" in validated_data:
+                bs_data = validated_data["blood_sugar"]
+                created_instances["blood_sugar"] = BloodSugar.objects.create(**bs_data)
+
+            if "oxygen_saturation" in validated_data:
+                os_data = validated_data["oxygen_saturation"]
+                created_instances["oxygen_saturation"] = (
+                    OxygenSaturation.objects.create(**os_data)
+                )
         return created_instances
 
     @staticmethod
@@ -175,6 +301,15 @@ class ObservationManager:
                 user_id=user_id, patient_id=patient_id
             ),
             "body_temperatures": BodyTemperature.objects.filter(
+                user_id=user_id, patient_id=patient_id
+            ),
+            "respiratory_rates": RespiratoryRate.objects.filter(
+                user_id=user_id, patient_id=patient_id
+            ),
+            "blood_sugars": BloodSugar.objects.filter(
+                user_id=user_id, patient_id=patient_id
+            ),
+            "oxygen_saturations": OxygenSaturation.objects.filter(
                 user_id=user_id, patient_id=patient_id
             ),
         }
@@ -194,6 +329,7 @@ class LabRequest(models.Model):
         verbose_name="User",
     )
     test_type = models.CharField(max_length=100, verbose_name="Test Type")
+    reason = models.TextField(verbose_name="Reason")
     status = models.CharField(
         max_length=50,
         choices=[("pending", "Pending"), ("completed", "Completed")],

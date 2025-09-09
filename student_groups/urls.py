@@ -6,6 +6,9 @@ from .views import (
     BloodPressureViewSet,
     HeartRateViewSet,
     BodyTemperatureViewSet,
+    RespiratoryRateViewSet,
+    BloodSugarViewSet,
+    OxygenSaturationViewSet,
     ObservationsViewSet,
     LabRequestViewSet,
 )
@@ -20,6 +23,21 @@ router.register(
     r"observations/body-temperatures",
     BodyTemperatureViewSet,
     basename="body-temperature",
+)
+router.register(
+    r"observations/respiratory-rates",
+    RespiratoryRateViewSet,
+    basename="respiratory-rate",
+)
+router.register(
+    r"observations/blood-sugars",
+    BloodSugarViewSet,
+    basename="blood-sugar",
+)
+router.register(
+    r"observations/oxygen-saturations",
+    OxygenSaturationViewSet,
+    basename="oxygen-saturation",
 )
 router.register(r"observations", ObservationsViewSet, basename="observation")
 router.register(r"lab-requests", LabRequestViewSet, basename="lab-request")

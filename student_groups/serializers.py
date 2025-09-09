@@ -4,6 +4,9 @@ from .models import (
     BloodPressure,
     HeartRate,
     BodyTemperature,
+    RespiratoryRate,
+    BloodSugar,
+    OxygenSaturation,
     ObservationManager,
     LabRequest,
 )
@@ -18,7 +21,15 @@ class BaseModelSerializer(serializers.ModelSerializer):
 class NoteSerializer(BaseModelSerializer):
     class Meta:
         model = Note
-        fields = ["id", "patient", "user", "content", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "patient",
+            "user",
+            "name",
+            "content",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
@@ -61,6 +72,45 @@ class BodyTemperatureSerializer(BaseModelSerializer):
         return data
 
 
+class RespiratoryRateSerializer(BaseModelSerializer):
+    class Meta:
+        model = RespiratoryRate
+        fields = ["id", "patient", "user", "respiratory_rate", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate(self, data):
+        ObservationValidator.validate_respiratory_rate(
+            data["patient"], data["user"], data["respiratory_rate"]
+        )
+        return data
+
+
+class BloodSugarSerializer(BaseModelSerializer):
+    class Meta:
+        model = BloodSugar
+        fields = ["id", "patient", "user", "sugar_level", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate(self, data):
+        ObservationValidator.validate_blood_sugar(
+            data["patient"], data["user"], data["sugar_level"]
+        )
+        return data
+
+
+class OxygenSaturationSerializer(BaseModelSerializer):
+    class Meta:
+        model = OxygenSaturation
+        fields = ["id", "patient", "user", "saturation_percentage", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate(self, data):
+        ObservationValidator.validate_oxygen_saturation(
+            data["patient"], data["user"], data["saturation_percentage"]
+        )
+        return data
+
+
 class ObservationsSerializer(serializers.Serializer):
     blood_pressure = BloodPressureSerializer(
         required=False, help_text="Blood pressure data"
@@ -68,6 +118,13 @@ class ObservationsSerializer(serializers.Serializer):
     heart_rate = HeartRateSerializer(required=False, help_text="Heart rate data")
     body_temperature = BodyTemperatureSerializer(
         required=False, help_text="Body temperature data"
+    )
+    respiratory_rate = RespiratoryRateSerializer(
+        required=False, help_text="Respiratory rate data"
+    )
+    blood_sugar = BloodSugarSerializer(required=False, help_text="Blood sugar data")
+    oxygen_saturation = OxygenSaturationSerializer(
+        required=False, help_text="Oxygen saturation data"
     )
 
     def create(self, validated_data):
@@ -85,6 +142,18 @@ class ObservationsSerializer(serializers.Serializer):
         if "body_temperature" in instances:
             created_data["body_temperature"] = BodyTemperatureSerializer(
                 instances["body_temperature"]
+            ).data
+        if "respiratory_rate" in instances:
+            created_data["respiratory_rate"] = RespiratoryRateSerializer(
+                instances["respiratory_rate"]
+            ).data
+        if "blood_sugar" in instances:
+            created_data["blood_sugar"] = BloodSugarSerializer(
+                instances["blood_sugar"]
+            ).data
+        if "oxygen_saturation" in instances:
+            created_data["oxygen_saturation"] = OxygenSaturationSerializer(
+                instances["oxygen_saturation"]
             ).data
 
         return created_data
@@ -112,6 +181,22 @@ class BodyTemperatureOutputSerializer(BaseObservationOutputSerializer):
     )
 
 
+class RespiratoryRateOutputSerializer(BaseObservationOutputSerializer):
+    respiratory_rate = serializers.IntegerField(
+        help_text="Respiratory rate (breaths per minute)"
+    )
+
+
+class BloodSugarOutputSerializer(BaseObservationOutputSerializer):
+    sugar_level = serializers.DecimalField(
+        max_digits=5, decimal_places=1, help_text="Blood sugar level (mg/dL)"
+    )
+
+
+class OxygenSaturationOutputSerializer(BaseObservationOutputSerializer):
+    saturation_percentage = serializers.IntegerField(help_text="Oxygen saturation (%)")
+
+
 class ObservationDataSerializer(serializers.Serializer):
     blood_pressures = serializers.ListField(
         child=BloodPressureOutputSerializer(),
@@ -124,6 +209,18 @@ class ObservationDataSerializer(serializers.Serializer):
         child=BodyTemperatureOutputSerializer(),
         help_text="List of body temperature records",
     )
+    respiratory_rates = serializers.ListField(
+        child=RespiratoryRateOutputSerializer(),
+        help_text="List of respiratory rate records",
+    )
+    blood_sugars = serializers.ListField(
+        child=BloodSugarOutputSerializer(),
+        help_text="List of blood sugar records",
+    )
+    oxygen_saturations = serializers.ListField(
+        child=OxygenSaturationOutputSerializer(),
+        help_text="List of oxygen saturation records",
+    )
 
 
 class LabRequestSerializer(BaseModelSerializer):
@@ -134,6 +231,7 @@ class LabRequestSerializer(BaseModelSerializer):
             "patient",
             "user",
             "test_type",
+            "reason",
             "status",
             "created_at",
             "updated_at",

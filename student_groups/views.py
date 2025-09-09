@@ -7,6 +7,9 @@ from .models import (
     BloodPressure,
     HeartRate,
     BodyTemperature,
+    RespiratoryRate,
+    BloodSugar,
+    OxygenSaturation,
     ObservationManager,
     LabRequest,
 )
@@ -15,6 +18,9 @@ from .serializers import (
     BloodPressureSerializer,
     HeartRateSerializer,
     BodyTemperatureSerializer,
+    RespiratoryRateSerializer,
+    BloodSugarSerializer,
+    OxygenSaturationSerializer,
     ObservationsSerializer,
     ObservationDataSerializer,
     LabRequestSerializer,
@@ -29,7 +35,7 @@ class ObservationsViewSet(viewsets.GenericViewSet):
 
     @extend_schema(
         summary="Create observations",
-        description="Create one or more observation records (blood pressure, heart rate, body temperature)",
+        description="Create one or more observation records (blood pressure, heart rate, body temperature, respiratory rate, blood sugar, oxygen saturation)",
         request=ObservationsSerializer,
         responses={201: ObservationDataSerializer},
         examples=[
@@ -54,6 +60,17 @@ class ObservationsViewSet(viewsets.GenericViewSet):
                         "diastolic": 80,
                     },
                     "heart_rate": {"patient": 1, "user": 1, "heart_rate": 72},
+                    "respiratory_rate": {
+                        "patient": 1,
+                        "user": 1,
+                        "respiratory_rate": 16,
+                    },
+                    "blood_sugar": {"patient": 1, "user": 1, "sugar_level": 120.0},
+                    "oxygen_saturation": {
+                        "patient": 1,
+                        "user": 1,
+                        "saturation_percentage": 98,
+                    },
                 },
             ),
         ],
@@ -144,6 +161,24 @@ class HeartRateViewSet(viewsets.ModelViewSet):
 class BodyTemperatureViewSet(viewsets.ModelViewSet):
     queryset = BodyTemperature.objects.all()
     serializer_class = BodyTemperatureSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class RespiratoryRateViewSet(viewsets.ModelViewSet):
+    queryset = RespiratoryRate.objects.all()
+    serializer_class = RespiratoryRateSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class BloodSugarViewSet(viewsets.ModelViewSet):
+    queryset = BloodSugar.objects.all()
+    serializer_class = BloodSugarSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class OxygenSaturationViewSet(viewsets.ModelViewSet):
+    queryset = OxygenSaturation.objects.all()
+    serializer_class = OxygenSaturationSerializer
     permission_classes = [IsAuthenticated]
 
 
