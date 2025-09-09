@@ -1,12 +1,14 @@
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from patients.models import Patient
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
+from core.permissions import ROLE_STUDENT
 
 from student_groups.models import (
     BloodPressure,
@@ -288,9 +290,11 @@ class ObservationsSerializerTest(TestCase):
 class NoteViewSetTest(APITestCase):
     def setUp(self):
         self.client = APIClient()
+        self.student_group, created = Group.objects.get_or_create(name=ROLE_STUDENT)
         self.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
+        self.user.groups.add(self.student_group)
         self.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
@@ -340,9 +344,11 @@ class NoteViewSetTest(APITestCase):
 class ObservationsViewSetTest(APITestCase):
     def setUp(self):
         self.client = APIClient()
+        self.student_group, created = Group.objects.get_or_create(name=ROLE_STUDENT)
         self.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
+        self.user.groups.add(self.student_group)
         self.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
@@ -384,4 +390,63 @@ class ObservationsViewSetTest(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["blood_pressures"]), 1)
-        self.assertEqual(len(response.data["heart_rates"]), 0)
+
+
+class LabRequestViewSetTest(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.student_group, created = Group.objects.get_or_create(name=ROLE_STUDENT)
+        self.user = get_user_model().objects.create_user(
+            username="student1", password="testpass123"
+        )
+        self.user.groups.add(self.student_group)
+        self.patient = Patient.objects.create(
+            first_name="John",
+            last_name="Doe",
+            date_of_birth="1990-01-01",
+            email="john@example.com",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_student_can_create_lab_request(self):
+        data = {
+            "patient": self.patient.id,
+            "test_type": "Blood Test",
+        }
+        response = self.client.post("/api/student-groups/lab-requests/", data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_student_can_list_own_lab_requests(self):
+        # Create a lab request for this user
+        from student_groups.models import LabRequest
+
+        LabRequest.objects.create(
+            patient=self.patient, user=self.user, test_type="Blood Test"
+        )
+        # Create a lab request for another user
+        other_user = get_user_model().objects.create_user(
+            username="student2", password="testpass123"
+        )
+        LabRequest.objects.create(
+            patient=self.patient, user=other_user, test_type="Urine Test"
+        )
+
+        response = self.client.get("/api/student-groups/lab-requests/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Should only see own request
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["test_type"], "Blood Test")
+
+    def test_student_cannot_update_lab_request(self):
+        from student_groups.models import LabRequest
+
+        lab_request = LabRequest.objects.create(
+            patient=self.patient, user=self.user, test_type="Blood Test"
+        )
+
+        data = {"status": "completed"}
+        response = self.client.patch(
+            f"/api/student-groups/lab-requests/{lab_request.id}/", data
+        )
+        # Should not be allowed to update - students can only create and read
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

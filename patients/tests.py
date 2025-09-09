@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -8,6 +9,7 @@ from rest_framework.test import APITestCase, APIClient
 import tempfile
 import os
 import shutil
+from core.permissions import ROLE_INSTRUCTOR
 
 from .models import Patient, File
 
@@ -16,9 +18,13 @@ from .models import Patient, File
 class PatientApiTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
+        cls.instructor_group, created = Group.objects.get_or_create(
+            name=ROLE_INSTRUCTOR
+        )
         cls.user = get_user_model().objects.create_user(
             username="tester", email="tester@example.com", password="pass1234"
         )
+        cls.user.groups.add(cls.instructor_group)
 
     def setUp(self):
         self.client: APIClient = APIClient()
@@ -64,7 +70,7 @@ class PatientApiTests(APITestCase):
         self.client.force_authenticate(user=None)
         url = reverse("patient-list")
         res = self.client.get(url)
-        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_create_patient(self):
         url = reverse("patient-list")

@@ -3,8 +3,8 @@ Role-based access control (RBAC) permissions for DMR server.
 
 This module defines permissions based on user roles:
 - admin: Full access to all resources and operations
-- instructor: Can read all data, can update LabRequest status from pending to completed
-- student: Can only create LabRequests, can read patient data (view-only)
+- instructor: Can modify patient data and files, approve lab requests, read all observations
+- student: Can create/modify their own observations and notes, read patient data (view-only), create lab requests
 """
 
 from rest_framework.permissions import BasePermission, SAFE_METHODS
@@ -47,15 +47,14 @@ def get_user_role(user):
     return None
 
 
-class LabRequestPermission(BasePermission):
+class BaseRolePermission(BasePermission):
     """
-    Permission class for LabRequest operations based on user roles.
+    Base permission class that handles common role checking logic.
+    Subclasses should override role_permissions dict and optionally has_object_permission.
+    """
 
-    Permission rules:
-    - admin: Full CRUD access
-    - instructor: Can create, read, and update status field only
-    - student: Can only create requests
-    """
+    # Override in subclasses: {role: [allowed_methods]}
+    role_permissions = {}
 
     def has_permission(self, request, view):
         """Check if user has permission to access the endpoint"""
@@ -66,22 +65,47 @@ class LabRequestPermission(BasePermission):
         if not user_role:
             return False
 
-        # Admin has full access
-        if user_role == ROLE_ADMIN:
+        # Admin always has full access unless explicitly restricted
+        if user_role == ROLE_ADMIN and ROLE_ADMIN not in self.role_permissions:
             return True
 
-        # Student can only create (POST)
-        if user_role == ROLE_STUDENT:
-            return request.method == "POST"
-
-        # Instructor can create, read, and update
-        if user_role == ROLE_INSTRUCTOR:
-            return request.method in ["POST", "GET", "HEAD", "OPTIONS", "PATCH", "PUT"]
-
-        return False
+        allowed_methods = self.role_permissions.get(user_role, [])
+        return request.method in allowed_methods
 
     def has_object_permission(self, request, view, obj):
-        """Check if user has permission to access specific object"""
+        """Default object permission - same as has_permission"""
+        return self.has_permission(request, view)
+
+
+class PatientPermission(BaseRolePermission):
+    """
+    Permission for patient data access:
+    - Students: read-only access
+    - Instructors: full CRUD access
+    - Admin: full access (inherited)
+    """
+
+    role_permissions = {
+        ROLE_STUDENT: SAFE_METHODS,
+        ROLE_INSTRUCTOR: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    }
+
+
+class ObservationPermission(BaseRolePermission):
+    """
+    Permission for observation data (notes, blood pressure, etc.):
+    - Students: full CRUD access to their own observations
+    - Instructors: read-only access to all observations
+    - Admin: full access (inherited)
+    """
+
+    role_permissions = {
+        ROLE_STUDENT: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+        ROLE_INSTRUCTOR: SAFE_METHODS,
+    }
+
+    def has_object_permission(self, request, view, obj):
+        """Students can only access their own observations"""
         if not request.user.is_authenticated:
             return False
 
@@ -93,34 +117,64 @@ class LabRequestPermission(BasePermission):
         if user_role == ROLE_ADMIN:
             return True
 
-        # Student cannot access existing objects (per requirements)
-        if user_role == ROLE_STUDENT:
-            return False
-
-        # Instructor can read and update (with field restrictions handled in serializer)
+        # Instructor has read-only access to all observations
         if user_role == ROLE_INSTRUCTOR:
-            return request.method in SAFE_METHODS or request.method in ["PATCH", "PUT"]
+            return request.method in SAFE_METHODS
+
+        # Student can only access their own observations
+        if user_role == ROLE_STUDENT:
+            return hasattr(obj, "user") and obj.user == request.user
 
         return False
 
 
-class IsAdminOrReadOnly(BasePermission):
+class LabRequestPermission(BaseRolePermission):
     """
-    Permission class that allows read access to authenticated users
-    but write access only to admin users.
-
-    Useful for Patient model where students need read access
-    but only admins should modify patient data.
+    Permission for student lab request operations in student_groups app:
+    - Students: can create and read their own lab requests
+    - Instructors: read-only access (full CRUD handled in instructor app)
+    - Admin: full access (inherited)
     """
 
-    def has_permission(self, request, view):
+    role_permissions = {
+        ROLE_STUDENT: ["GET", "POST", "HEAD", "OPTIONS"],
+        ROLE_INSTRUCTOR: SAFE_METHODS,
+    }
+
+    def has_object_permission(self, request, view, obj):
+        """Students can only access their own requests, instructors have read-only access"""
         if not request.user.is_authenticated:
             return False
 
-        # Read permissions for any authenticated user
-        if request.method in SAFE_METHODS:
+        user_role = get_user_role(request.user)
+        if not user_role:
+            return False
+
+        # Admin has full access
+        if user_role == ROLE_ADMIN:
             return True
 
-        # Write permissions only for admin
-        user_role = get_user_role(request.user)
-        return user_role == ROLE_ADMIN
+        # Instructor has read-only access to all lab requests
+        if user_role == ROLE_INSTRUCTOR:
+            return request.method in SAFE_METHODS
+
+        # Student can only access their own lab requests (read-only after creation)
+        if user_role == ROLE_STUDENT:
+            return (
+                hasattr(obj, "user")
+                and obj.user == request.user
+                and request.method in SAFE_METHODS
+            )
+
+        return False
+
+
+class InstructorOnlyPermission(BaseRolePermission):
+    """
+    Permission that allows access only to instructors and admins.
+    Used for instructor-specific endpoints and dashboards.
+    """
+
+    role_permissions = {
+        ROLE_INSTRUCTOR: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    }
