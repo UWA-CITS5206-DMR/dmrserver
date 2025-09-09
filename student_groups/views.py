@@ -35,7 +35,7 @@ class ObservationsViewSet(viewsets.GenericViewSet):
 
     @extend_schema(
         summary="Create observations",
-        description="Create one or more observation records (blood pressure, heart rate, body temperature, respiratory rate, blood glucose, oxygen saturation)",
+        description="Create one or more observation records (blood pressure, heart rate, body temperature, respiratory rate, blood sugar, oxygen saturation)",
         request=ObservationsSerializer,
         responses={201: ObservationDataSerializer},
         examples=[
