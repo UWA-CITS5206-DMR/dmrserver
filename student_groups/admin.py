@@ -1,5 +1,14 @@
 from django.contrib import admin
-from .models import BloodPressure, HeartRate, BodyTemperature, Note, LabRequest
+from .models import (
+    BloodPressure,
+    HeartRate,
+    BodyTemperature,
+    RespiratoryRate,
+    BloodSugar,
+    OxygenSaturation,
+    Note,
+    LabRequest,
+)
 
 
 @admin.register(Note)
@@ -62,6 +71,48 @@ class BodyTemperatureAdmin(admin.ModelAdmin):
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
         ("Temperature Data", {"fields": ("temperature",)}),
+        ("Other Information", {"fields": ("created_at",)}),
+    )
+
+
+@admin.register(RespiratoryRate)
+class RespiratoryRateAdmin(admin.ModelAdmin):
+    list_display = ["patient", "user", "respiratory_rate", "created_at"]
+    list_filter = ["user", "created_at", "respiratory_rate"]
+    search_fields = ["patient__first_name", "patient__last_name", "user__username"]
+    readonly_fields = ["created_at"]
+
+    fieldsets = (
+        ("Patient Information", {"fields": ("patient", "user")}),
+        ("Respiratory Rate Data", {"fields": ("respiratory_rate",)}),
+        ("Other Information", {"fields": ("created_at",)}),
+    )
+
+
+@admin.register(BloodSugar)
+class BloodSugarAdmin(admin.ModelAdmin):
+    list_display = ["patient", "user", "sugar_level", "created_at"]
+    list_filter = ["user", "created_at", "sugar_level"]
+    search_fields = ["patient__first_name", "patient__last_name", "user__username"]
+    readonly_fields = ["created_at"]
+
+    fieldsets = (
+        ("Patient Information", {"fields": ("patient", "user")}),
+        ("Blood Sugar Data", {"fields": ("sugar_level",)}),
+        ("Other Information", {"fields": ("created_at",)}),
+    )
+
+
+@admin.register(OxygenSaturation)
+class OxygenSaturationAdmin(admin.ModelAdmin):
+    list_display = ["patient", "user", "saturation_percentage", "created_at"]
+    list_filter = ["user", "created_at", "saturation_percentage"]
+    search_fields = ["patient__first_name", "patient__last_name", "user__username"]
+    readonly_fields = ["created_at"]
+
+    fieldsets = (
+        ("Patient Information", {"fields": ("patient", "user")}),
+        ("Oxygen Saturation Data", {"fields": ("saturation_percentage",)}),
         ("Other Information", {"fields": ("created_at",)}),
     )
 
