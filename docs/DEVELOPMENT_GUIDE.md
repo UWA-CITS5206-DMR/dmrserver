@@ -1,23 +1,6 @@
 # DMR Project Development Guide
 
-## Project Overview
-
-The Digital Medical Records (DMR) system is a Django REST API backend designed for medical record simulation and
-management. The system provides:
-
-- **Patient Management**: Complete patient information and file management
-- **Medical Observations**: Recording of vital signs (blood pressure, heart rate, body temperature)
-- **Student Groups**: Medical student grouping and management functionality
-- **REST API**: Full RESTful API with automatic documentation
-- **Admin Interface**: Django admin panel for system management
-
-## Code style/formatting
-
-This project uses `ruff` for linting and formatting. To check your code, run:
-
-```bash
-uv run ruff check .
-```
+This guide provides a comprehensive overview of the development workflow for the DMR project, including environment setup, database management, API development, and troubleshooting.
 
 ## Database Setup and Management
 

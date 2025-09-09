@@ -55,6 +55,7 @@ services:
 ## Accessing the Application
 
 Once running, the application will be available at:
-- Main API: http://localhost:8000/
-- Admin Interface: http://localhost:8000/admin/
-- API Documentation: http://localhost:8000/schema/swagger-ui/
+
+- Main API: <http://localhost:8000/>
+- Admin Interface: <http://localhost:8000/admin/>
+- API Documentation: <http://localhost:8000/schema/swagger-ui/>

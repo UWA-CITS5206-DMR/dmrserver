@@ -130,8 +130,11 @@ For detailed Docker setup and configuration, see **[Docker Guide](docs/DOCKER_GU
 
 For comprehensive development guides and documentation, see the [`docs/`](docs/) directory:
 
+- **[Project Summary](docs/PROJECT_SUMMARY.md)** - Overview of the project architecture
+- **[Development Standards](docs/DEVELOPMENT_STANDARDS.md)** - Coding standards and best practices
 - **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** - Complete setup and development workflow
 - **[Testing Guide](docs/TESTING_GUIDE.md)** - Testing strategies and best practices
+- **[Docker Guide](docs/DOCKER_GUIDE.md)** - Instructions for Docker deployment
 
 For detailed troubleshooting, see the [Development Guide](docs/DEVELOPMENT_GUIDE.md#troubleshooting).
 
