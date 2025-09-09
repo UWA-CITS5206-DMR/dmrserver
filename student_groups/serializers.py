@@ -21,7 +21,15 @@ class BaseModelSerializer(serializers.ModelSerializer):
 class NoteSerializer(BaseModelSerializer):
     class Meta:
         model = Note
-        fields = ["id", "patient", "user", "content", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "patient",
+            "user",
+            "name",
+            "content",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
@@ -223,6 +231,7 @@ class LabRequestSerializer(BaseModelSerializer):
             "patient",
             "user",
             "test_type",
+            "reason",
             "status",
             "created_at",
             "updated_at",

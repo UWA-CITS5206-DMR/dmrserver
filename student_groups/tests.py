@@ -37,16 +37,19 @@ class NoteModelTest(TestCase):
 
     def test_create_note(self):
         note = Note.objects.create(
-            patient=self.patient, user=self.user, content="This is a test note."
+            patient=self.patient,
+            user=self.user,
+            name="Dr. Smith",
+            content="This is a test note.",
         )
         self.assertEqual(note.patient, self.patient)
         self.assertEqual(note.user, self.user)
+        self.assertEqual(note.name, "Dr. Smith")
         self.assertEqual(note.content, "This is a test note.")
         self.assertIsNotNone(note.created_at)
         self.assertIsNotNone(note.updated_at)
         self.assertEqual(
-            str(note),
-            f"{self.patient} - This is a test note.... ({self.user.username})",
+            str(note), f"Note for {self.patient} by Dr. Smith ({self.user.username})"
         )
 
 
@@ -278,19 +281,27 @@ class NoteSerializerTest(TestCase):
         cls.note_data = {
             "patient": cls.patient.id,
             "user": cls.user.id,
+            "name": "Dr. Smith",
             "content": "This is a test note.",
         }
 
     def test_note_serializer_valid(self):
         serializer = NoteSerializer(data=self.note_data)
-        self.assertTrue(serializer.is_valid())
+        self.assertTrue(serializer.is_valid(raise_exception=True))
 
-    def test_note_serializer_invalid(self):
+    def test_note_serializer_invalid_no_content(self):
         invalid_data = self.note_data.copy()
         invalid_data["content"] = ""
         serializer = NoteSerializer(data=invalid_data)
         self.assertFalse(serializer.is_valid())
         self.assertIn("content", serializer.errors)
+
+    def test_note_serializer_invalid_no_name(self):
+        invalid_data = self.note_data.copy()
+        invalid_data["name"] = ""
+        serializer = NoteSerializer(data=invalid_data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("name", serializer.errors)
 
 
 class ObservationsSerializerTest(TestCase):
@@ -376,7 +387,7 @@ class NoteViewSetTest(APITestCase):
             email="john.doe@example.com",
         )
         self.note = Note.objects.create(
-            patient=self.patient, user=self.user, content="Test note"
+            patient=self.patient, user=self.user, name="Dr. Smith", content="Test note"
         )
         self.client.force_authenticate(user=self.user)
 
@@ -389,24 +400,28 @@ class NoteViewSetTest(APITestCase):
         data = {
             "patient": self.patient.id,
             "user": self.user.id,
+            "name": "Dr. Jones",
             "content": "New test note",
         }
         response = self.client.post(reverse("note-list"), data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Note.objects.count(), 2)
+        self.assertEqual(response.data["name"], "Dr. Jones")
 
     def test_retrieve_note(self):
         response = self.client.get(reverse("note-detail", args=[self.note.id]))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Dr. Smith")
         self.assertEqual(response.data["content"], "Test note")
 
     def test_update_note(self):
-        data = {"content": "Updated test note"}
+        data = {"name": "Dr. Brown", "content": "Updated test note"}
         response = self.client.patch(
             reverse("note-detail", args=[self.note.id]), data, format="json"
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.note.refresh_from_db()
+        self.assertEqual(self.note.name, "Dr. Brown")
         self.assertEqual(self.note.content, "Updated test note")
 
     def test_delete_note(self):
@@ -570,11 +585,15 @@ class LabRequestModelTest(TestCase):
 
     def test_create_lab_request(self):
         lab_request = LabRequest.objects.create(
-            patient=self.patient, user=self.user, test_type="Blood Test"
+            patient=self.patient,
+            user=self.user,
+            test_type="Blood Test",
+            reason="Routine check-up",
         )
         self.assertEqual(lab_request.patient, self.patient)
         self.assertEqual(lab_request.user, self.user)
         self.assertEqual(lab_request.test_type, "Blood Test")
+        self.assertEqual(lab_request.reason, "Routine check-up")
         self.assertEqual(lab_request.status, "pending")
         self.assertIsNotNone(lab_request.created_at)
         self.assertIsNotNone(lab_request.updated_at)

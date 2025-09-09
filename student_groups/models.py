@@ -6,6 +6,8 @@ from django.db import transaction
 
 
 class Note(models.Model):
+    # Name of the doctor or person writing the note
+    name = models.CharField(max_length=100, verbose_name="Doctor Name")
     patient = models.ForeignKey(
         Patient,
         on_delete=models.CASCADE,
@@ -28,7 +30,7 @@ class Note(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.patient} - {self.content[:50]}... ({self.user.username})"
+        return f"Note for {self.patient} by {self.name} ({self.user.username})"
 
 
 class BloodPressure(models.Model):
@@ -327,6 +329,7 @@ class LabRequest(models.Model):
         verbose_name="User",
     )
     test_type = models.CharField(max_length=100, verbose_name="Test Type")
+    reason = models.TextField(verbose_name="Reason")
     status = models.CharField(
         max_length=50,
         choices=[("pending", "Pending"), ("completed", "Completed")],
