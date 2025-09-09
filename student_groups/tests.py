@@ -12,10 +12,14 @@ from core.permissions import ROLE_STUDENT
 
 from student_groups.models import (
     BloodPressure,
+    BloodSugar,
     BodyTemperature,
     HeartRate,
+    LabRequest,
     Note,
     ObservationManager,
+    OxygenSaturation,
+    RespiratoryRate,
 )
 from student_groups.serializers import NoteSerializer, ObservationsSerializer
 
@@ -35,16 +39,19 @@ class NoteModelTest(TestCase):
 
     def test_create_note(self):
         note = Note.objects.create(
-            patient=self.patient, user=self.user, content="This is a test note."
+            patient=self.patient,
+            user=self.user,
+            name="Dr. Smith",
+            content="This is a test note.",
         )
         self.assertEqual(note.patient, self.patient)
         self.assertEqual(note.user, self.user)
+        self.assertEqual(note.name, "Dr. Smith")
         self.assertEqual(note.content, "This is a test note.")
         self.assertIsNotNone(note.created_at)
         self.assertIsNotNone(note.updated_at)
         self.assertEqual(
-            str(note),
-            f"{self.patient} - This is a test note.... ({self.user.username})",
+            str(note), f"Note for {self.patient} by Dr. Smith ({self.user.username})"
         )
 
 
@@ -152,6 +159,15 @@ class ObservationManagerTest(TestCase):
         BodyTemperature.objects.create(
             patient=cls.patient, user=cls.user, temperature="36.6"
         )
+        RespiratoryRate.objects.create(
+            patient=cls.patient, user=cls.user, respiratory_rate=16
+        )
+        BloodSugar.objects.create(
+            patient=cls.patient, user=cls.user, sugar_level="100.0"
+        )
+        OxygenSaturation.objects.create(
+            patient=cls.patient, user=cls.user, saturation_percentage=98
+        )
 
     def test_get_observations_by_user_and_patient(self):
         observations = ObservationManager.get_observations_by_user_and_patient(
@@ -160,14 +176,27 @@ class ObservationManagerTest(TestCase):
         self.assertIn("blood_pressures", observations)
         self.assertIn("heart_rates", observations)
         self.assertIn("body_temperatures", observations)
+        self.assertIn("respiratory_rates", observations)
+        self.assertIn("blood_sugars", observations)
+        self.assertIn("oxygen_saturations", observations)
 
         self.assertEqual(observations["blood_pressures"].count(), 1)
         self.assertEqual(observations["heart_rates"].count(), 1)
         self.assertEqual(observations["body_temperatures"].count(), 1)
+        self.assertEqual(observations["respiratory_rates"].count(), 1)
+        self.assertEqual(observations["blood_sugars"].count(), 1)
+        self.assertEqual(observations["oxygen_saturations"].count(), 1)
         self.assertEqual(observations["blood_pressures"].first().systolic, 120)
         self.assertEqual(observations["heart_rates"].first().heart_rate, 72)
         self.assertEqual(
             observations["body_temperatures"].first().temperature, Decimal("36.6")
+        )
+        self.assertEqual(observations["respiratory_rates"].first().respiratory_rate, 16)
+        self.assertEqual(
+            observations["blood_sugars"].first().sugar_level, Decimal("100.0")
+        )
+        self.assertEqual(
+            observations["oxygen_saturations"].first().saturation_percentage, 98
         )
 
     def test_create_observations(self):
@@ -183,19 +212,44 @@ class ObservationManagerTest(TestCase):
                 "user": self.user,
                 "heart_rate": 80,
             },
+            "respiratory_rate": {
+                "patient": self.patient,
+                "user": self.user,
+                "respiratory_rate": 18,
+            },
+            "blood_sugar": {
+                "patient": self.patient,
+                "user": self.user,
+                "sugar_level": "110.0",
+            },
+            "oxygen_saturation": {
+                "patient": self.patient,
+                "user": self.user,
+                "saturation_percentage": 97,
+            },
         }
         BloodPressure.objects.all().delete()
         HeartRate.objects.all().delete()
+        BodyTemperature.objects.all().delete()
+        RespiratoryRate.objects.all().delete()
+        BloodSugar.objects.all().delete()
+        OxygenSaturation.objects.all().delete()
 
         created_instances = ObservationManager.create_observations(observation_data)
 
         self.assertEqual(BloodPressure.objects.count(), 1)
         self.assertEqual(HeartRate.objects.count(), 1)
-        self.assertEqual(BodyTemperature.objects.count(), 1)
+        self.assertEqual(BodyTemperature.objects.count(), 0)
+        self.assertEqual(RespiratoryRate.objects.count(), 1)
+        self.assertEqual(BloodSugar.objects.count(), 1)
+        self.assertEqual(OxygenSaturation.objects.count(), 1)
 
         self.assertIn("blood_pressure", created_instances)
         self.assertIn("heart_rate", created_instances)
         self.assertNotIn("body_temperature", created_instances)
+        self.assertIn("respiratory_rate", created_instances)
+        self.assertIn("blood_sugar", created_instances)
+        self.assertIn("oxygen_saturation", created_instances)
 
         bp = BloodPressure.objects.first()
         self.assertEqual(bp.systolic, 130)
@@ -203,6 +257,15 @@ class ObservationManagerTest(TestCase):
 
         hr = HeartRate.objects.first()
         self.assertEqual(hr.heart_rate, 80)
+
+        rr = RespiratoryRate.objects.first()
+        self.assertEqual(rr.respiratory_rate, 18)
+
+        bs = BloodSugar.objects.first()
+        self.assertEqual(bs.sugar_level, Decimal("110.0"))
+
+        os = OxygenSaturation.objects.first()
+        self.assertEqual(os.saturation_percentage, 97)
 
 
 class NoteSerializerTest(TestCase):
@@ -220,19 +283,27 @@ class NoteSerializerTest(TestCase):
         cls.note_data = {
             "patient": cls.patient.id,
             "user": cls.user.id,
+            "name": "Dr. Smith",
             "content": "This is a test note.",
         }
 
     def test_note_serializer_valid(self):
         serializer = NoteSerializer(data=self.note_data)
-        self.assertTrue(serializer.is_valid())
+        self.assertTrue(serializer.is_valid(raise_exception=True))
 
-    def test_note_serializer_invalid(self):
+    def test_note_serializer_invalid_no_content(self):
         invalid_data = self.note_data.copy()
         invalid_data["content"] = ""
         serializer = NoteSerializer(data=invalid_data)
         self.assertFalse(serializer.is_valid())
         self.assertIn("content", serializer.errors)
+
+    def test_note_serializer_invalid_no_name(self):
+        invalid_data = self.note_data.copy()
+        invalid_data["name"] = ""
+        serializer = NoteSerializer(data=invalid_data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("name", serializer.errors)
 
 
 class ObservationsSerializerTest(TestCase):
@@ -264,6 +335,21 @@ class ObservationsSerializerTest(TestCase):
                 "user": cls.user.id,
                 "temperature": "36.6",
             },
+            "respiratory_rate": {
+                "patient": cls.patient.id,
+                "user": cls.user.id,
+                "respiratory_rate": 16,
+            },
+            "blood_sugar": {
+                "patient": cls.patient.id,
+                "user": cls.user.id,
+                "sugar_level": "100.0",
+            },
+            "oxygen_saturation": {
+                "patient": cls.patient.id,
+                "user": cls.user.id,
+                "saturation_percentage": 98,
+            },
         }
 
     def test_observations_serializer_valid(self):
@@ -274,10 +360,13 @@ class ObservationsSerializerTest(TestCase):
         serializer = ObservationsSerializer(data=self.observation_data)
         self.assertTrue(serializer.is_valid(raise_exception=True))
         created_objects = serializer.save()
-        self.assertEqual(len(created_objects), 3)
+        self.assertEqual(len(created_objects), 6)
         self.assertIn("blood_pressure", created_objects)
         self.assertIn("heart_rate", created_objects)
         self.assertIn("body_temperature", created_objects)
+        self.assertIn("respiratory_rate", created_objects)
+        self.assertIn("blood_sugar", created_objects)
+        self.assertIn("oxygen_saturation", created_objects)
 
     def test_observations_serializer_invalid_data(self):
         invalid_data = self.observation_data.copy()
@@ -302,7 +391,7 @@ class NoteViewSetTest(APITestCase):
             email="john.doe@example.com",
         )
         self.note = Note.objects.create(
-            patient=self.patient, user=self.user, content="Test note"
+            patient=self.patient, user=self.user, name="Dr. Smith", content="Test note"
         )
         self.client.force_authenticate(user=self.user)
 
@@ -315,24 +404,28 @@ class NoteViewSetTest(APITestCase):
         data = {
             "patient": self.patient.id,
             "user": self.user.id,
+            "name": "Dr. Jones",
             "content": "New test note",
         }
         response = self.client.post(reverse("note-list"), data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Note.objects.count(), 2)
+        self.assertEqual(response.data["name"], "Dr. Jones")
 
     def test_retrieve_note(self):
         response = self.client.get(reverse("note-detail", args=[self.note.id]))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Dr. Smith")
         self.assertEqual(response.data["content"], "Test note")
 
     def test_update_note(self):
-        data = {"content": "Updated test note"}
+        data = {"name": "Dr. Brown", "content": "Updated test note"}
         response = self.client.patch(
             reverse("note-detail", args=[self.note.id]), data, format="json"
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.note.refresh_from_db()
+        self.assertEqual(self.note.name, "Dr. Brown")
         self.assertEqual(self.note.content, "Updated test note")
 
     def test_delete_note(self):
@@ -368,6 +461,11 @@ class ObservationsViewSetTest(APITestCase):
                 "user": self.user.id,
                 "heart_rate": 72,
             },
+            "respiratory_rate": {
+                "patient": self.patient.id,
+                "user": self.user.id,
+                "respiratory_rate": 16,
+            },
         }
 
     def test_create_observations(self):
@@ -377,12 +475,17 @@ class ObservationsViewSetTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(BloodPressure.objects.count(), 1)
         self.assertEqual(HeartRate.objects.count(), 1)
+        self.assertEqual(RespiratoryRate.objects.count(), 1)
         self.assertIn("blood_pressure", response.data)
         self.assertIn("heart_rate", response.data)
+        self.assertIn("respiratory_rate", response.data)
 
     def test_list_observations(self):
         BloodPressure.objects.create(
             patient=self.patient, user=self.user, systolic=120, diastolic=80
+        )
+        RespiratoryRate.objects.create(
+            patient=self.patient, user=self.user, respiratory_rate=16
         )
         response = self.client.get(
             reverse("observation-list"),
@@ -390,6 +493,87 @@ class ObservationsViewSetTest(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["blood_pressures"]), 1)
+        self.assertEqual(len(response.data["heart_rates"]), 0)
+        self.assertEqual(len(response.data["respiratory_rates"]), 1)
+
+
+class RespiratoryRateModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            username="testuser", password="password"
+        )
+        cls.patient = Patient.objects.create(
+            first_name="John",
+            last_name="Doe",
+            date_of_birth="1990-01-01",
+            email="john.doe@example.com",
+        )
+
+    def test_create_respiratory_rate(self):
+        respiratory_rate = RespiratoryRate.objects.create(
+            patient=self.patient, user=self.user, respiratory_rate=16
+        )
+        self.assertEqual(respiratory_rate.patient, self.patient)
+        self.assertEqual(respiratory_rate.user, self.user)
+        self.assertEqual(respiratory_rate.respiratory_rate, 16)
+        self.assertIsNotNone(respiratory_rate.created_at)
+        self.assertEqual(
+            str(respiratory_rate),
+            f"{self.patient} - 16 breaths/min ({self.user.username})",
+        )
+
+
+class BloodSugarModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            username="testuser", password="password"
+        )
+        cls.patient = Patient.objects.create(
+            first_name="John",
+            last_name="Doe",
+            date_of_birth="1990-01-01",
+            email="john.doe@example.com",
+        )
+
+    def test_create_blood_sugar(self):
+        blood_sugar = BloodSugar.objects.create(
+            patient=self.patient, user=self.user, sugar_level=Decimal("99.5")
+        )
+        self.assertEqual(blood_sugar.patient, self.patient)
+        self.assertEqual(blood_sugar.user, self.user)
+        self.assertEqual(blood_sugar.sugar_level, Decimal("99.5"))
+        self.assertIsNotNone(blood_sugar.created_at)
+        self.assertEqual(
+            str(blood_sugar), f"{self.patient} - 99.5 mg/dL ({self.user.username})"
+        )
+
+
+class OxygenSaturationModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            username="testuser", password="password"
+        )
+        cls.patient = Patient.objects.create(
+            first_name="John",
+            last_name="Doe",
+            date_of_birth="1990-01-01",
+            email="john.doe@example.com",
+        )
+
+    def test_create_oxygen_saturation(self):
+        oxygen_saturation = OxygenSaturation.objects.create(
+            patient=self.patient, user=self.user, saturation_percentage=98
+        )
+        self.assertEqual(oxygen_saturation.patient, self.patient)
+        self.assertEqual(oxygen_saturation.user, self.user)
+        self.assertEqual(oxygen_saturation.saturation_percentage, 98)
+        self.assertIsNotNone(oxygen_saturation.created_at)
+        self.assertEqual(
+            str(oxygen_saturation), f"{self.patient} - 98% ({self.user.username})"
+        )
 
 
 class LabRequestViewSetTest(APITestCase):
@@ -412,6 +596,7 @@ class LabRequestViewSetTest(APITestCase):
         data = {
             "patient": self.patient.id,
             "test_type": "Blood Test",
+            "reason": "Routine check-up for patient symptoms",
         }
         response = self.client.post("/api/student-groups/lab-requests/", data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -421,14 +606,14 @@ class LabRequestViewSetTest(APITestCase):
         from student_groups.models import LabRequest
 
         LabRequest.objects.create(
-            patient=self.patient, user=self.user, test_type="Blood Test"
+            patient=self.patient, user=self.user, test_type="Blood Test", reason="Routine blood test"
         )
         # Create a lab request for another user
         other_user = get_user_model().objects.create_user(
             username="student2", password="testpass123"
         )
         LabRequest.objects.create(
-            patient=self.patient, user=other_user, test_type="Urine Test"
+            patient=self.patient, user=other_user, test_type="Urine Test", reason="Routine urine test"
         )
 
         response = self.client.get("/api/student-groups/lab-requests/")
@@ -441,7 +626,7 @@ class LabRequestViewSetTest(APITestCase):
         from student_groups.models import LabRequest
 
         lab_request = LabRequest.objects.create(
-            patient=self.patient, user=self.user, test_type="Blood Test"
+            patient=self.patient, user=self.user, test_type="Blood Test", reason="Testing update permissions"
         )
 
         data = {"status": "completed"}

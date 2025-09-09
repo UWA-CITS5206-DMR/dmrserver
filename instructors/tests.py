@@ -34,6 +34,7 @@ class InstructorViewSetTestCase(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="Blood Test",
+            reason="Instructor test case setup",
             status="pending",
         )
 

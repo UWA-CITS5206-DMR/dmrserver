@@ -95,13 +95,19 @@ class LabRequestRBACTest(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="Blood Test",
+            reason="Routine blood work",
             status="pending",
         )
 
     def test_student_can_create_lab_request(self):
         """Test that students can create lab requests"""
         self.client.force_authenticate(user=self.student_user)
-        data = {"patient": self.patient.id, "test_type": "X-Ray", "status": "pending"}
+        data = {
+            "patient": self.patient.id, 
+            "test_type": "X-Ray", 
+            "reason": "Patient complaining of chest pain",
+            "status": "pending"
+        }
         response = self.client.post("/api/student-groups/lab-requests/", data)
         if response.status_code != status.HTTP_201_CREATED:
             print(f"Response status: {response.status_code}")
@@ -134,6 +140,7 @@ class LabRequestRBACTest(APITestCase):
             "patient": self.patient.id,
             "user": self.student_user.id,  # Instructor can assign to any user
             "test_type": "MRI",
+            "reason": "Patient needs MRI scan for diagnosis",
             "status": "pending",
         }
         response = self.client.post("/api/instructors/lab-requests/", data)
@@ -156,6 +163,7 @@ class LabRequestRBACTest(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="Test Retrieval",
+            reason="Testing instructor retrieval capabilities",
             status="pending",
         )
         response = self.client.get(f"/api/instructors/lab-requests/{test_request.id}/")
@@ -184,6 +192,7 @@ class LabRequestRBACTest(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="Admin Test",
+            reason="Testing admin access rights",
             status="pending",
         )
 
