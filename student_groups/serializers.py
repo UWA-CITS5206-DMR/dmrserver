@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from core.serializers import BaseModelSerializer
 from .models import (
     Note,
     BloodPressure,
@@ -7,15 +8,161 @@ from .models import (
     RespiratoryRate,
     BloodSugar,
     OxygenSaturation,
-    ObservationManager,
+    PainScore,
     LabRequest,
+    ApprovedFile,
+    ObservationManager,
 )
 from .validators import ObservationValidator
 
 
-class BaseModelSerializer(serializers.ModelSerializer):
-    created_at = serializers.DateTimeField(read_only=True)
-    updated_at = serializers.DateTimeField(read_only=True)
+class ApprovedFileSerializer(serializers.ModelSerializer):
+    """
+    Unified serializer for ApprovedFile with context-aware field selection.
+    Use context={'for_student': True} to get student-friendly view.
+    Use context={'for_instructor': True} to get instructor management view.
+    """
+
+    file_id = serializers.UUIDField(source="file.id")
+    display_name = serializers.CharField(source="file.display_name", read_only=True)
+    requires_pagination = serializers.BooleanField(
+        source="file.requires_pagination", read_only=True
+    )
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ApprovedFile
+        fields = [
+            "id",
+            "file_id",
+            "display_name",
+            "page_range",
+            "requires_pagination",
+            "file_url",
+        ]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        context = self.context or {}
+
+        if context.get("for_student"):
+            # Students don't need file_id, but need file_url
+            fields.pop("file_id", None)
+        elif context.get("for_instructor"):
+            # Instructors don't need file_url, but need file_id
+            fields.pop("file_url", None)
+        else:
+            # Default: include both
+            pass
+
+        return fields
+
+    def get_file_url(self, obj):
+        request = self.context.get("request")
+        if request and self.context.get("for_student"):
+            return request.build_absolute_uri(
+                f"/api/patients/{obj.file.patient.id}/files/{obj.file.id}/view/"
+            )
+        return None
+
+    def validate(self, data):
+        file_id = data.get("file", {}).get("id")
+        page_range = data.get("page_range")
+
+        if file_id:
+            try:
+                from patients.models import File
+
+                file = File.objects.get(id=file_id)
+                if page_range and not file.requires_pagination:
+                    raise serializers.ValidationError(
+                        f"File {file.display_name} does not require pagination, but a page range was provided."
+                    )
+                if file.requires_pagination and not page_range:
+                    raise serializers.ValidationError(
+                        f"File {file.display_name} requires pagination, but no page range was provided."
+                    )
+            except File.DoesNotExist:
+                raise serializers.ValidationError(f"File with id {file_id} not found.")
+
+        return data
+
+
+class LabRequestSerializer(BaseModelSerializer):
+    """
+    Unified LabRequest serializer that adapts based on context.
+    Use context={'for_student_read': True} for student read view
+    Use context={'for_student_create': True} for student create view
+    Use context={'for_instructor': True} for instructor full access
+    """
+
+    approved_files = ApprovedFileSerializer(
+        source="approvedfile_set", many=True, required=False
+    )
+
+    class Meta:
+        model = LabRequest
+        fields = [
+            "id",
+            "patient",
+            "user",
+            "test_type",
+            "reason",
+            "status",
+            "created_at",
+            "updated_at",
+            "approved_files",
+        ]
+
+    def get_fields(self):
+        fields = super().get_fields()
+        context = self.context or {}
+
+        if context.get("for_student_read"):
+            # Students can read all fields but not modify
+            for field_name, field in fields.items():
+                field.read_only = True
+
+        elif context.get("for_student_create"):
+            # Students can only set these fields when creating
+            read_only_fields = [
+                "id",
+                "user",
+                "status",
+                "created_at",
+                "updated_at",
+                "approved_files",
+            ]
+            for field_name in read_only_fields:
+                if field_name in fields:
+                    fields[field_name].read_only = True
+
+        elif context.get("for_instructor"):
+            # Instructors have full access
+            fields["id"].read_only = True
+            fields["created_at"].read_only = True
+            fields["updated_at"].read_only = True
+
+        return fields
+
+    def update(self, instance, validated_data):
+        # Handle approved_files updates for instructors
+        approved_files_data = validated_data.pop("approvedfile_set", None)
+        instance = super().update(instance, validated_data)
+
+        if approved_files_data is not None and self.context.get("for_instructor"):
+            instance.approvedfile_set.all().delete()
+            for approved_file_data in approved_files_data:
+                file_id = approved_file_data.get("file", {}).get("id")
+                page_range = approved_file_data.get("page_range")
+                from patients.models import File
+
+                file = File.objects.get(id=file_id)
+                ApprovedFile.objects.create(
+                    lab_request=instance, file=file, page_range=page_range
+                )
+
+        return instance
 
 
 class NoteSerializer(BaseModelSerializer):
@@ -111,6 +258,19 @@ class OxygenSaturationSerializer(BaseModelSerializer):
         return data
 
 
+class PainScoreSerializer(BaseModelSerializer):
+    class Meta:
+        model = PainScore
+        fields = ["id", "patient", "user", "score", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate(self, data):
+        ObservationValidator.validate_pain_score(
+            data["patient"], data["user"], data["score"]
+        )
+        return data
+
+
 class ObservationsSerializer(serializers.Serializer):
     blood_pressure = BloodPressureSerializer(
         required=False, help_text="Blood pressure data"
@@ -126,6 +286,7 @@ class ObservationsSerializer(serializers.Serializer):
     oxygen_saturation = OxygenSaturationSerializer(
         required=False, help_text="Oxygen saturation data"
     )
+    pain_score = PainScoreSerializer(required=False, help_text="Pain score data")
 
     def create(self, validated_data):
         instances = ObservationManager.create_observations(validated_data)
@@ -154,6 +315,10 @@ class ObservationsSerializer(serializers.Serializer):
         if "oxygen_saturation" in instances:
             created_data["oxygen_saturation"] = OxygenSaturationSerializer(
                 instances["oxygen_saturation"]
+            ).data
+        if "pain_score" in instances:
+            created_data["pain_score"] = PainScoreSerializer(
+                instances["pain_score"]
             ).data
 
         return created_data
@@ -197,6 +362,10 @@ class OxygenSaturationOutputSerializer(BaseObservationOutputSerializer):
     saturation_percentage = serializers.IntegerField(help_text="Oxygen saturation (%)")
 
 
+class PainScoreOutputSerializer(BaseObservationOutputSerializer):
+    score = serializers.IntegerField(help_text="Pain score (0-10)")
+
+
 class ObservationDataSerializer(serializers.Serializer):
     blood_pressures = serializers.ListField(
         child=BloodPressureOutputSerializer(),
@@ -221,42 +390,7 @@ class ObservationDataSerializer(serializers.Serializer):
         child=OxygenSaturationOutputSerializer(),
         help_text="List of oxygen saturation records",
     )
-
-
-class LabRequestSerializer(BaseModelSerializer):
-    class Meta:
-        model = LabRequest
-        fields = [
-            "id",
-            "patient",
-            "user",
-            "test_type",
-            "reason",
-            "status",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = ["id", "created_at", "updated_at", "user"]
-
-
-class LabRequestStatusUpdateSerializer(serializers.ModelSerializer):
-    """
-    Serializer for instructor to update only the status field of LabRequest.
-    Used to enforce that instructors can only change status from pending to completed.
-    """
-
-    class Meta:
-        model = LabRequest
-        fields = ["status"]
-
-    def validate_status(self, value):
-        """Ensure status can only be changed from pending to completed"""
-        if self.instance and self.instance.status == "completed":
-            raise serializers.ValidationError(
-                "Cannot modify status of an already completed request."
-            )
-        if value not in ["pending", "completed"]:
-            raise serializers.ValidationError(
-                "Status must be either 'pending' or 'completed'."
-            )
-        return value
+    pain_scores = serializers.ListField(
+        child=PainScoreOutputSerializer(),
+        help_text="List of pain score records",
+    )

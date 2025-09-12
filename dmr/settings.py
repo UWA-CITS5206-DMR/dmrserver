@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "core",
     "patients",
     "student_groups",
+    "instructors",
 ]
 
 MIDDLEWARE = [

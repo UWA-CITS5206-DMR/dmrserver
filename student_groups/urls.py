@@ -9,6 +9,7 @@ from .views import (
     RespiratoryRateViewSet,
     BloodSugarViewSet,
     OxygenSaturationViewSet,
+    PainScoreViewSet,
     ObservationsViewSet,
     LabRequestViewSet,
 )
@@ -38,6 +39,11 @@ router.register(
     r"observations/oxygen-saturations",
     OxygenSaturationViewSet,
     basename="oxygen-saturation",
+)
+router.register(
+    r"observations/pain-scores",
+    PainScoreViewSet,
+    basename="pain-score",
 )
 router.register(r"observations", ObservationsViewSet, basename="observation")
 router.register(r"lab-requests", LabRequestViewSet, basename="lab-request")

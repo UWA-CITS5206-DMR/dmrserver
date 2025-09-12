@@ -6,6 +6,7 @@ from .models import (
     RespiratoryRate,
     BloodSugar,
     OxygenSaturation,
+    PainScore,
     Note,
     LabRequest,
 )
@@ -113,6 +114,20 @@ class OxygenSaturationAdmin(admin.ModelAdmin):
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
         ("Oxygen Saturation Data", {"fields": ("saturation_percentage",)}),
+        ("Other Information", {"fields": ("created_at",)}),
+    )
+
+
+@admin.register(PainScore)
+class PainScoreAdmin(admin.ModelAdmin):
+    list_display = ["patient", "user", "score", "created_at"]
+    list_filter = ["user", "created_at", "score"]
+    search_fields = ["patient__first_name", "patient__last_name", "user__username"]
+    readonly_fields = ["created_at"]
+
+    fieldsets = (
+        ("Patient Information", {"fields": ("patient", "user")}),
+        ("Pain Score Data", {"fields": ("score",)}),
         ("Other Information", {"fields": ("created_at",)}),
     )
 

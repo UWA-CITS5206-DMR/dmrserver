@@ -1,7 +1,16 @@
-from rest_framework import viewsets, status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from .serializers import (
+    LabRequestSerializer,
+    NoteSerializer,
+    BloodPressureSerializer,
+    HeartRateSerializer,
+    BodyTemperatureSerializer,
+    RespiratoryRateSerializer,
+    BloodSugarSerializer,
+    OxygenSaturationSerializer,
+    PainScoreSerializer,
+    ObservationsSerializer,
+    ObservationDataSerializer,
+)
 from .models import (
     Note,
     BloodPressure,
@@ -10,27 +19,18 @@ from .models import (
     RespiratoryRate,
     BloodSugar,
     OxygenSaturation,
+    PainScore,
     ObservationManager,
     LabRequest,
 )
-from .serializers import (
-    NoteSerializer,
-    BloodPressureSerializer,
-    HeartRateSerializer,
-    BodyTemperatureSerializer,
-    RespiratoryRateSerializer,
-    BloodSugarSerializer,
-    OxygenSaturationSerializer,
-    ObservationsSerializer,
-    ObservationDataSerializer,
-    LabRequestSerializer,
-    LabRequestStatusUpdateSerializer,
-)
-from core.permissions import LabRequestPermission, get_user_role, ROLE_INSTRUCTOR
+from core.permissions import ObservationPermission, LabRequestPermission
+from rest_framework.response import Response
+from rest_framework import viewsets, status, mixins
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 
 
 class ObservationsViewSet(viewsets.GenericViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ObservationPermission]
     serializer_class = ObservationsSerializer
 
     @extend_schema(
@@ -143,60 +143,72 @@ class ObservationsViewSet(viewsets.GenericViewSet):
 class NoteViewSet(viewsets.ModelViewSet):
     queryset = Note.objects.all()
     serializer_class = NoteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ObservationPermission]
 
 
 class BloodPressureViewSet(viewsets.ModelViewSet):
     queryset = BloodPressure.objects.all()
     serializer_class = BloodPressureSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ObservationPermission]
 
 
 class HeartRateViewSet(viewsets.ModelViewSet):
     queryset = HeartRate.objects.all()
     serializer_class = HeartRateSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ObservationPermission]
 
 
 class BodyTemperatureViewSet(viewsets.ModelViewSet):
     queryset = BodyTemperature.objects.all()
     serializer_class = BodyTemperatureSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ObservationPermission]
 
 
 class RespiratoryRateViewSet(viewsets.ModelViewSet):
     queryset = RespiratoryRate.objects.all()
     serializer_class = RespiratoryRateSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ObservationPermission]
 
 
 class BloodSugarViewSet(viewsets.ModelViewSet):
     queryset = BloodSugar.objects.all()
     serializer_class = BloodSugarSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ObservationPermission]
 
 
 class OxygenSaturationViewSet(viewsets.ModelViewSet):
     queryset = OxygenSaturation.objects.all()
     serializer_class = OxygenSaturationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ObservationPermission]
 
 
-class LabRequestViewSet(viewsets.ModelViewSet):
+class PainScoreViewSet(viewsets.ModelViewSet):
+    queryset = PainScore.objects.all()
+    serializer_class = PainScoreSerializer
+    permission_classes = [ObservationPermission]
+
+
+class LabRequestViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
     queryset = LabRequest.objects.all()
     serializer_class = LabRequestSerializer
     permission_classes = [LabRequestPermission]
 
-    def get_serializer_class(self):
-        """
-        Return appropriate serializer based on user role and action.
-        Instructors can only update status field when updating.
-        """
-        if self.action in ["update", "partial_update"]:
-            user_role = get_user_role(self.request.user)
-            if user_role == ROLE_INSTRUCTOR:
-                return LabRequestStatusUpdateSerializer
-        return LabRequestSerializer
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action == "create":
+            context["for_student_create"] = True
+        else:
+            context["for_student_read"] = True
+        return context
+
+    def get_queryset(self):
+        """Students can only see their own requests"""
+        return LabRequest.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         """Set the user field to the current authenticated user when creating"""

@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 from django.conf import settings
 from django.db import models
+from django.core.exceptions import ValidationError
 
 
 class Patient(models.Model):
@@ -25,6 +26,13 @@ class Patient(models.Model):
         return f"{self.first_name} {self.last_name}"
 
 
+def validate_pdf_for_pagination(file, requires_pagination):
+    if requires_pagination:
+        ext = os.path.splitext(file.name)[1]
+        if not ext.lower() == ".pdf":
+            raise ValidationError("Only PDF files can be marked for pagination.")
+
+
 class File(models.Model):
     id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, verbose_name="File ID"
@@ -36,12 +44,21 @@ class File(models.Model):
         max_length=255, editable=False, verbose_name="Display name"
     )
     file = models.FileField(upload_to="upload_to", verbose_name="File")
+    requires_pagination = models.BooleanField(
+        default=False,
+        verbose_name="Requires Pagination",
+        help_text="Only for PDF files. If true, access can be granted by page ranges.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
 
     class Meta:
         verbose_name = "File"
         verbose_name_plural = "Files"
         ordering = ["-created_at"]
+
+    def clean(self):
+        super().clean()
+        validate_pdf_for_pagination(self.file, self.requires_pagination)
 
     @staticmethod
     def upload_to(instance, filename):
