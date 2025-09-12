@@ -7,6 +7,7 @@ from .serializers import (
     RespiratoryRateSerializer,
     BloodSugarSerializer,
     OxygenSaturationSerializer,
+    PainScoreSerializer,
     ObservationsSerializer,
     ObservationDataSerializer,
 )
@@ -18,6 +19,7 @@ from .models import (
     RespiratoryRate,
     BloodSugar,
     OxygenSaturation,
+    PainScore,
     ObservationManager,
     LabRequest,
 )
@@ -177,6 +179,12 @@ class BloodSugarViewSet(viewsets.ModelViewSet):
 class OxygenSaturationViewSet(viewsets.ModelViewSet):
     queryset = OxygenSaturation.objects.all()
     serializer_class = OxygenSaturationSerializer
+    permission_classes = [ObservationPermission]
+
+
+class PainScoreViewSet(viewsets.ModelViewSet):
+    queryset = PainScore.objects.all()
+    serializer_class = PainScoreSerializer
     permission_classes = [ObservationPermission]
 
 

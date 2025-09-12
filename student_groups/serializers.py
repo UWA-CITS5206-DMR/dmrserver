@@ -8,6 +8,7 @@ from .models import (
     RespiratoryRate,
     BloodSugar,
     OxygenSaturation,
+    PainScore,
     LabRequest,
     ApprovedFile,
     ObservationManager,
@@ -257,6 +258,19 @@ class OxygenSaturationSerializer(BaseModelSerializer):
         return data
 
 
+class PainScoreSerializer(BaseModelSerializer):
+    class Meta:
+        model = PainScore
+        fields = ["id", "patient", "user", "score", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate(self, data):
+        ObservationValidator.validate_pain_score(
+            data["patient"], data["user"], data["score"]
+        )
+        return data
+
+
 class ObservationsSerializer(serializers.Serializer):
     blood_pressure = BloodPressureSerializer(
         required=False, help_text="Blood pressure data"
@@ -272,6 +286,7 @@ class ObservationsSerializer(serializers.Serializer):
     oxygen_saturation = OxygenSaturationSerializer(
         required=False, help_text="Oxygen saturation data"
     )
+    pain_score = PainScoreSerializer(required=False, help_text="Pain score data")
 
     def create(self, validated_data):
         instances = ObservationManager.create_observations(validated_data)
@@ -300,6 +315,10 @@ class ObservationsSerializer(serializers.Serializer):
         if "oxygen_saturation" in instances:
             created_data["oxygen_saturation"] = OxygenSaturationSerializer(
                 instances["oxygen_saturation"]
+            ).data
+        if "pain_score" in instances:
+            created_data["pain_score"] = PainScoreSerializer(
+                instances["pain_score"]
             ).data
 
         return created_data
@@ -343,6 +362,10 @@ class OxygenSaturationOutputSerializer(BaseObservationOutputSerializer):
     saturation_percentage = serializers.IntegerField(help_text="Oxygen saturation (%)")
 
 
+class PainScoreOutputSerializer(BaseObservationOutputSerializer):
+    score = serializers.IntegerField(help_text="Pain score (0-10)")
+
+
 class ObservationDataSerializer(serializers.Serializer):
     blood_pressures = serializers.ListField(
         child=BloodPressureOutputSerializer(),
@@ -366,4 +389,8 @@ class ObservationDataSerializer(serializers.Serializer):
     oxygen_saturations = serializers.ListField(
         child=OxygenSaturationOutputSerializer(),
         help_text="List of oxygen saturation records",
+    )
+    pain_scores = serializers.ListField(
+        child=PainScoreOutputSerializer(),
+        help_text="List of pain score records",
     )

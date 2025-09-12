@@ -15,10 +15,10 @@ from student_groups.models import (
     BloodSugar,
     BodyTemperature,
     HeartRate,
-    LabRequest,
     Note,
     ObservationManager,
     OxygenSaturation,
+    PainScore,
     RespiratoryRate,
 )
 from student_groups.serializers import NoteSerializer, ObservationsSerializer
@@ -466,6 +466,11 @@ class ObservationsViewSetTest(APITestCase):
                 "user": self.user.id,
                 "respiratory_rate": 16,
             },
+            "pain_score": {
+                "patient": self.patient.id,
+                "user": self.user.id,
+                "score": 4,
+            },
         }
 
     def test_create_observations(self):
@@ -476,9 +481,11 @@ class ObservationsViewSetTest(APITestCase):
         self.assertEqual(BloodPressure.objects.count(), 1)
         self.assertEqual(HeartRate.objects.count(), 1)
         self.assertEqual(RespiratoryRate.objects.count(), 1)
+        self.assertEqual(PainScore.objects.count(), 1)
         self.assertIn("blood_pressure", response.data)
         self.assertIn("heart_rate", response.data)
         self.assertIn("respiratory_rate", response.data)
+        self.assertIn("pain_score", response.data)
 
     def test_list_observations(self):
         BloodPressure.objects.create(
@@ -576,6 +583,54 @@ class OxygenSaturationModelTest(TestCase):
         )
 
 
+class PainScoreModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            username="testuser", password="password"
+        )
+        cls.patient = Patient.objects.create(
+            first_name="John",
+            last_name="Doe",
+            date_of_birth="1990-01-01",
+            email="john.doe@example.com",
+        )
+
+    def test_create_pain_score(self):
+        pain_score = PainScore.objects.create(
+            patient=self.patient, user=self.user, score=7
+        )
+        self.assertEqual(pain_score.patient, self.patient)
+        self.assertEqual(pain_score.user, self.user)
+        self.assertEqual(pain_score.score, 7)
+        self.assertIsNotNone(pain_score.created_at)
+        self.assertEqual(
+            str(pain_score), f"{self.patient} - Pain 7/10 ({self.user.username})"
+        )
+
+    def test_pain_score_validation_valid_range(self):
+        # Test valid range 0-10
+        for score in [0, 5, 10]:
+            pain_score = PainScore(
+                patient=self.patient, user=self.user, score=score
+            )
+            try:
+                pain_score.clean()
+                pain_score.save()
+                self.assertEqual(pain_score.score, score)
+            except ValidationError:
+                self.fail(f"ValidationError raised for valid score {score}")
+
+    def test_pain_score_validation_invalid_range(self):
+        # Test invalid scores
+        for score in [-1, 11, 15]:
+            pain_score = PainScore(
+                patient=self.patient, user=self.user, score=score
+            )
+            with self.assertRaises(ValidationError):
+                pain_score.clean()
+
+
 class LabRequestViewSetTest(APITestCase):
     def setUp(self):
         self.client = APIClient()
@@ -644,3 +699,64 @@ class LabRequestViewSetTest(APITestCase):
         )
         # Should not be allowed to update - students can only create and read
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class PainScoreViewSetTest(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.student_group, created = Group.objects.get_or_create(name=ROLE_STUDENT)
+        self.user = get_user_model().objects.create_user(
+            username="testuser", password="password"
+        )
+        self.user.groups.add(self.student_group)
+        self.patient = Patient.objects.create(
+            first_name="John",
+            last_name="Doe",
+            date_of_birth="1990-01-01",
+            email="john.doe@example.com",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_create_pain_score(self):
+        data = {
+            "patient": self.patient.id,
+            "user": self.user.id,
+            "score": 6
+        }
+        response = self.client.post(
+            "/api/student-groups/observations/pain-scores/", data
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(PainScore.objects.count(), 1)
+        pain_score = PainScore.objects.first()
+        self.assertEqual(pain_score.score, 6)
+        self.assertEqual(pain_score.patient, self.patient)
+        self.assertEqual(pain_score.user, self.user)
+
+    def test_create_pain_score_invalid_range(self):
+        # Test score above 10
+        data = {
+            "patient": self.patient.id,
+            "user": self.user.id,
+            "score": 15
+        }
+        response = self.client.post(
+            "/api/student-groups/observations/pain-scores/", data
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Test negative score
+        data["score"] = -2
+        response = self.client.post(
+            "/api/student-groups/observations/pain-scores/", data
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_list_pain_scores(self):
+        PainScore.objects.create(
+            patient=self.patient, user=self.user, score=8
+        )
+        response = self.client.get("/api/student-groups/observations/pain-scores/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["score"], 8)

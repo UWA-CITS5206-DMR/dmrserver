@@ -246,6 +246,42 @@ class OxygenSaturation(models.Model):
         return f"{self.patient} - {self.saturation_percentage}% ({self.user.username})"
 
 
+class PainScore(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="pain_scores",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="pain_scores",
+        verbose_name="User",
+    )
+    score = models.PositiveIntegerField(
+        verbose_name="Pain Score (0-10)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+
+    class Meta:
+        verbose_name = "Pain Score"
+        verbose_name_plural = "Pain Scores"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        ObservationValidator.validate_pain_score(
+            self.patient, self.user, self.score
+        )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.patient} - Pain {self.score}/10 ({self.user.username})"
+
+
 class ObservationManager(models.Manager):
     @transaction.atomic
     def create_observations(validated_data):
@@ -291,6 +327,11 @@ class ObservationManager(models.Manager):
                 created_observations["oxygen_saturation"] = (
                     OxygenSaturation.objects.create(**os_data)
                 )
+
+            if "pain_score" in validated_data:
+                ps_data = validated_data["pain_score"]
+                created_observations["pain_score"] = PainScore.objects.create(**ps_data)
+
         return created_observations
 
     @staticmethod
@@ -315,6 +356,9 @@ class ObservationManager(models.Manager):
                 user_id=user_id, patient_id=patient_id
             ),
             "oxygen_saturations": OxygenSaturation.objects.filter(
+                user_id=user_id, patient_id=patient_id
+            ),
+            "pain_scores": PainScore.objects.filter(
                 user_id=user_id, patient_id=patient_id
             ),
         }

@@ -81,3 +81,16 @@ class ObservationValidator:
             raise ValidationError(
                 "Oxygen saturation value out of reasonable range (50-100%)"
             )
+
+    @staticmethod
+    def validate_pain_score(patient, user, score):
+        if not patient:
+            raise ValidationError("Patient is required")
+        if not user:
+            raise ValidationError("User is required")
+        if not isinstance(score, int) or score < 0:
+            raise ValidationError("Pain score must be a non-negative integer")
+        if score < 0 or score > 10:
+            raise ValidationError(
+                "Pain score must be between 0 and 10"
+            )
