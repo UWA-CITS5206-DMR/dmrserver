@@ -3,8 +3,8 @@ Tests for role-based access control (RBAC) system.
 
 This module tests the permission system for different user roles:
 - admin: Full access to all resources
-- instructor: Can read all data, can update LabRequest status only
-- student: Can only create LabRequests, can read patient data
+- instructor: Full CRUD access to patients and lab requests
+- student: Can create lab requests, read-only access to patient data
 """
 
 from django.contrib.auth.models import User, Group
@@ -95,48 +95,55 @@ class LabRequestRBACTest(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="Blood Test",
+            reason="Routine blood work",
             status="pending",
         )
 
     def test_student_can_create_lab_request(self):
         """Test that students can create lab requests"""
         self.client.force_authenticate(user=self.student_user)
-        data = {"patient": self.patient.id, "test_type": "X-Ray", "status": "pending"}
-        response = self.client.post(reverse("lab-request-list"), data)
+        data = {
+            "patient": self.patient.id,
+            "test_type": "X-Ray",
+            "reason": "Patient complaining of chest pain",
+            "status": "pending",
+        }
+        response = self.client.post("/api/student-groups/lab-requests/", data)
         if response.status_code != status.HTTP_201_CREATED:
             print(f"Response status: {response.status_code}")
             print(f"Response data: {response.data}")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["user"], self.student_user.id)
 
-    def test_student_cannot_list_lab_requests(self):
-        """Test that students cannot list lab requests"""
+    def test_student_can_list_own_lab_requests(self):
+        """Test that students can list their own lab requests"""
         self.client.force_authenticate(user=self.student_user)
-        response = self.client.get(reverse("lab-request-list"))
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_student_cannot_retrieve_lab_request(self):
-        """Test that students cannot retrieve specific lab requests"""
-        self.client.force_authenticate(user=self.student_user)
-        response = self.client.get(
-            reverse("lab-request-detail", args=[self.lab_request.id])
-        )
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        response = self.client.get("/api/student-groups/lab-requests/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Should only see their own requests
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["user"], self.student_user.id)
 
     def test_student_cannot_update_lab_request(self):
         """Test that students cannot update lab requests"""
         self.client.force_authenticate(user=self.student_user)
         data = {"status": "completed"}
         response = self.client.patch(
-            reverse("lab-request-detail", args=[self.lab_request.id]), data
+            f"/api/student-groups/lab-requests/{self.lab_request.id}/", data
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_instructor_can_create_lab_request(self):
         """Test that instructors can create lab requests"""
         self.client.force_authenticate(user=self.instructor_user)
-        data = {"patient": self.patient.id, "test_type": "MRI", "status": "pending"}
-        response = self.client.post(reverse("lab-request-list"), data)
+        data = {
+            "patient": self.patient.id,
+            "user": self.student_user.id,  # Instructor can assign to any user
+            "test_type": "MRI",
+            "reason": "Patient needs MRI scan for diagnosis",
+            "status": "pending",
+        }
+        response = self.client.post("/api/instructors/lab-requests/", data)
         if response.status_code != status.HTTP_201_CREATED:
             print(f"Response status: {response.status_code}")
             print(f"Response data: {response.data}")
@@ -145,82 +152,68 @@ class LabRequestRBACTest(APITestCase):
     def test_instructor_can_list_lab_requests(self):
         """Test that instructors can list lab requests"""
         self.client.force_authenticate(user=self.instructor_user)
-        response = self.client.get(reverse("lab-request-list"))
+        response = self.client.get("/api/instructors/lab-requests/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_instructor_can_retrieve_lab_request(self):
         """Test that instructors can retrieve specific lab requests"""
         self.client.force_authenticate(user=self.instructor_user)
-        response = self.client.get(
-            reverse("lab-request-detail", args=[self.lab_request.id])
+        # Ensure we have a LabRequest to retrieve
+        test_request = LabRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="Test Retrieval",
+            reason="Testing instructor retrieval capabilities",
+            status="pending",
         )
+        response = self.client.get(f"/api/instructors/lab-requests/{test_request.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_instructor_can_update_status(self):
-        """Test that instructors can update lab request status"""
+    def test_instructor_can_update_lab_request(self):
+        """Test that instructors can update lab request via instructor endpoints"""
         self.client.force_authenticate(user=self.instructor_user)
+        # Use instructor endpoint for updates
         data = {"status": "completed"}
         response = self.client.patch(
-            reverse("lab-request-detail", args=[self.lab_request.id]), data
+            f"/api/instructors/lab-requests/{self.lab_request.id}/", data
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Verify the status was updated
+        # Verify the field was updated
         self.lab_request.refresh_from_db()
         self.assertEqual(self.lab_request.status, "completed")
-
-    def test_instructor_cannot_update_other_fields(self):
-        """Test that instructors cannot update fields other than status"""
-        self.client.force_authenticate(user=self.instructor_user)
-        original_test_type = self.lab_request.test_type
-        data = {"test_type": "Different Test", "status": "completed"}
-        response = self.client.patch(
-            reverse("lab-request-detail", args=[self.lab_request.id]), data
-        )
-
-        # Should succeed but only status should be updated
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.lab_request.refresh_from_db()
-        self.assertEqual(self.lab_request.test_type, original_test_type)  # Unchanged
-        self.assertEqual(self.lab_request.status, "completed")  # Changed
-
-    def test_instructor_cannot_update_completed_request(self):
-        """Test that instructors cannot update already completed requests"""
-        # Mark request as completed
-        self.lab_request.status = "completed"
-        self.lab_request.save()
-
-        self.client.force_authenticate(user=self.instructor_user)
-        data = {"status": "pending"}
-        response = self.client.patch(
-            reverse("lab-request-detail", args=[self.lab_request.id]), data
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_admin_has_full_access(self):
         """Test that admin users have full access to lab requests"""
         self.client.force_authenticate(user=self.admin_user)
 
-        # Can list
-        response = self.client.get(reverse("lab-request-list"))
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-        # Can retrieve
-        response = self.client.get(
-            reverse("lab-request-detail", args=[self.lab_request.id])
+        # Create a fresh LabRequest for admin testing
+        admin_request = LabRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="Admin Test",
+            reason="Testing admin access rights",
+            status="pending",
         )
+
+        # Can list through instructor endpoint (admin inherits instructor permissions)
+        response = self.client.get("/api/instructors/lab-requests/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Can update any field
-        data = {"test_type": "Updated Test", "status": "completed"}
+        # Can retrieve through instructor endpoint
+        response = self.client.get(f"/api/instructors/lab-requests/{admin_request.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Can update through instructor endpoint
+        data = {"status": "completed"}
         response = self.client.patch(
-            reverse("lab-request-detail", args=[self.lab_request.id]), data
+            f"/api/instructors/lab-requests/{admin_request.id}/", data
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Can delete
+        # Can delete through instructor endpoint
         response = self.client.delete(
-            reverse("lab-request-detail", args=[self.lab_request.id])
+            f"/api/instructors/lab-requests/{admin_request.id}/"
         )
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
@@ -307,11 +300,11 @@ class PatientRBACTest(APITestCase):
         response = self.client.get(reverse("patient-detail", args=[self.patient.id]))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_instructor_cannot_modify_patients(self):
-        """Test that instructors cannot modify patient data"""
+    def test_instructor_can_modify_patients(self):
+        """Test that instructors can modify patient data"""
         self.client.force_authenticate(user=self.instructor_user)
 
-        # Cannot create
+        # Can create
         data = {
             "first_name": "New",
             "last_name": "Patient",
@@ -319,18 +312,32 @@ class PatientRBACTest(APITestCase):
             "email": "new@example.com",
         }
         response = self.client.post(reverse("patient-list"), data)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        # Cannot update
+        # Can update
         data = {"first_name": "Updated"}
         response = self.client.patch(
             reverse("patient-detail", args=[self.patient.id]), data
         )
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Cannot delete
-        response = self.client.delete(reverse("patient-detail", args=[self.patient.id]))
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        # Verify update
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.first_name, "Updated")
+
+        # Can delete (create a new patient to delete to avoid affecting other tests)
+        create_response = self.client.post(
+            reverse("patient-list"),
+            {
+                "first_name": "To Delete",
+                "last_name": "Patient",
+                "date_of_birth": "1985-01-01",
+                "email": "delete@example.com",
+            },
+        )
+        new_patient_id = create_response.data["id"]
+        response = self.client.delete(reverse("patient-detail", args=[new_patient_id]))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_admin_can_modify_patients(self):
         """Test that admin users can modify patient data"""

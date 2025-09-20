@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-from patients.models import Patient
+from patients.models import Patient, File
 from .validators import ObservationValidator
 from django.db import transaction
 
@@ -246,8 +246,44 @@ class OxygenSaturation(models.Model):
         return f"{self.patient} - {self.saturation_percentage}% ({self.user.username})"
 
 
-class ObservationManager:
-    @staticmethod
+class PainScore(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="pain_scores",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="pain_scores",
+        verbose_name="User",
+    )
+    score = models.PositiveIntegerField(
+        verbose_name="Pain Score (0-10)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+
+    class Meta:
+        verbose_name = "Pain Score"
+        verbose_name_plural = "Pain Scores"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        ObservationValidator.validate_pain_score(
+            self.patient, self.user, self.score
+        )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.patient} - Pain {self.score}/10 ({self.user.username})"
+
+
+class ObservationManager(models.Manager):
+    @transaction.atomic
     def create_observations(validated_data):
         """
         Create observation records in a single transaction.
@@ -256,43 +292,53 @@ class ObservationManager:
                                e.g., {'blood_pressure': {...}, 'heart_rate': {...}}
         :return: A dictionary of created observation instances.
         """
-        created_instances = {}
+        created_observations = {}
         with transaction.atomic():
             if "blood_pressure" in validated_data:
                 bp_data = validated_data["blood_pressure"]
-                created_instances["blood_pressure"] = BloodPressure.objects.create(
+                created_observations["blood_pressure"] = BloodPressure.objects.create(
                     **bp_data
                 )
 
             if "heart_rate" in validated_data:
                 hr_data = validated_data["heart_rate"]
-                created_instances["heart_rate"] = HeartRate.objects.create(**hr_data)
+                created_observations["heart_rate"] = HeartRate.objects.create(**hr_data)
 
             if "body_temperature" in validated_data:
                 bt_data = validated_data["body_temperature"]
-                created_instances["body_temperature"] = BodyTemperature.objects.create(
-                    **bt_data
+                created_observations["body_temperature"] = (
+                    BodyTemperature.objects.create(**bt_data)
                 )
 
             if "respiratory_rate" in validated_data:
                 rr_data = validated_data["respiratory_rate"]
-                created_instances["respiratory_rate"] = RespiratoryRate.objects.create(
-                    **rr_data
+                created_observations["respiratory_rate"] = (
+                    RespiratoryRate.objects.create(**rr_data)
                 )
 
             if "blood_sugar" in validated_data:
                 bs_data = validated_data["blood_sugar"]
-                created_instances["blood_sugar"] = BloodSugar.objects.create(**bs_data)
+                created_observations["blood_sugar"] = BloodSugar.objects.create(
+                    **bs_data
+                )
 
             if "oxygen_saturation" in validated_data:
                 os_data = validated_data["oxygen_saturation"]
-                created_instances["oxygen_saturation"] = (
+                created_observations["oxygen_saturation"] = (
                     OxygenSaturation.objects.create(**os_data)
                 )
-        return created_instances
+
+            if "pain_score" in validated_data:
+                ps_data = validated_data["pain_score"]
+                created_observations["pain_score"] = PainScore.objects.create(**ps_data)
+
+        return created_observations
 
     @staticmethod
     def get_observations_by_user_and_patient(user_id, patient_id):
+        """
+        Get all observations for a specific user and patient.
+        """
         return {
             "blood_pressures": BloodPressure.objects.filter(
                 user_id=user_id, patient_id=patient_id
@@ -312,10 +358,18 @@ class ObservationManager:
             "oxygen_saturations": OxygenSaturation.objects.filter(
                 user_id=user_id, patient_id=patient_id
             ),
+            "pain_scores": PainScore.objects.filter(
+                user_id=user_id, patient_id=patient_id
+            ),
         }
 
 
 class LabRequest(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+    ]
+
     patient = models.ForeignKey(
         Patient,
         on_delete=models.CASCADE,
@@ -329,15 +383,18 @@ class LabRequest(models.Model):
         verbose_name="User",
     )
     test_type = models.CharField(max_length=100, verbose_name="Test Type")
-    reason = models.TextField(verbose_name="Reason")
+    reason = models.TextField(verbose_name="Reason for Request")
     status = models.CharField(
-        max_length=50,
-        choices=[("pending", "Pending"), ("completed", "Completed")],
-        default="pending",
-        verbose_name="Status",
+        max_length=10, choices=STATUS_CHOICES, default="pending", verbose_name="Status"
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
+    approved_files = models.ManyToManyField(
+        File,
+        through="ApprovedFile",
+        related_name="lab_requests",
+        verbose_name="Approved Files",
+    )
 
     class Meta:
         verbose_name = "Lab Request"
@@ -345,6 +402,23 @@ class LabRequest(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return (
-            f"{self.patient} - {self.test_type} ({self.status}) by {self.user.username}"
-        )
+        return f"Lab request for {self.patient} by {self.user.username} ({self.status})"
+
+
+class ApprovedFile(models.Model):
+    lab_request = models.ForeignKey(LabRequest, on_delete=models.CASCADE)
+    file = models.ForeignKey(File, on_delete=models.CASCADE)
+    page_range = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="e.g., '1-5', '7', '10-12'. Only for paginated files.",
+    )
+
+    class Meta:
+        verbose_name = "Approved File"
+        verbose_name_plural = "Approved Files"
+        unique_together = ("lab_request", "file")
+
+    def __str__(self):
+        return f"File {self.file.id} for request {self.lab_request.id}"
