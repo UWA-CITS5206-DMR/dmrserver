@@ -17,7 +17,7 @@ COPY . .
 
 # Create directories for persistent data (media, static, and database)
 RUN mkdir -p /app/media /app/static
-VOLUME ["/app/media", "/app/static", "/app/db.sqlite3"]
+VOLUME ["/app/data"]
 
 # Collect static files for Django admin and other static assets
 RUN uv run python manage.py collectstatic --noinput
