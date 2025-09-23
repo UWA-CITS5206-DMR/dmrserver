@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -17,16 +18,40 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 
 
+# Helper function to parse database URL
+def parse_database_url(database_url):
+    """Parse database URL into Django database configuration."""
+    if database_url.startswith("sqlite://"):
+        db_path = database_url.replace("sqlite://", "")
+        if db_path.startswith("/"):
+            db_file = Path(db_path)
+        else:
+            db_file = DATA_DIR / db_path
+        return {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": db_file,
+        }
+    # Add other database types as needed (PostgreSQL, MySQL, etc.)
+    else:
+        # Default to SQLite if URL format is not recognized
+        return {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": DATA_DIR / "db.sqlite3",
+        }
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-e$&e#zss4*+53a*_%)_5%&l%*4$(zadnz6t23#pio8q&51zxz^"
+SECRET_KEY = os.getenv(
+    "SECRET_KEY", "django-insecure-e$&e#zss4*+53a*_%)_5%&l%*4$(zadnz6t23#pio8q&51zxz^"
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes", "on")
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
 
 # Application definition
@@ -84,12 +109,8 @@ ASGI_APPLICATION = "dmr.asgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": DATA_DIR / "db.sqlite3",
-    }
-}
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite://db.sqlite3")
+DATABASES = {"default": parse_database_url(DATABASE_URL)}
 
 
 # Password validation
@@ -154,6 +175,11 @@ REST_FRAMEWORK = {
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = "*"
+
+# CSRF Configuration
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    "CSRF_TRUSTED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
+).split(",")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "DMR API",
