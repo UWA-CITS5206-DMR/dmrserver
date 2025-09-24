@@ -51,7 +51,13 @@ SECRET_KEY = os.getenv(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes", "on")
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
+_raw_allowed_hosts = os.getenv("ALLOWED_HOSTS", "*").strip()
+if not _raw_allowed_hosts or _raw_allowed_hosts == "":
+    ALLOWED_HOSTS = []
+elif _raw_allowed_hosts == "*":
+    ALLOWED_HOSTS = ["*"]
+else:
+    ALLOWED_HOSTS = [h.strip() for h in _raw_allowed_hosts.split(",") if h.strip()]
 
 
 # Application definition
