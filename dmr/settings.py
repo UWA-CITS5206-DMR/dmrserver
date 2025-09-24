@@ -44,9 +44,9 @@ def parse_database_url(database_url):
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv(
-    "SECRET_KEY", "django-insecure-e$&e#zss4*+53a*_%)_5%&l%*4$(zadnz6t23#pio8q&51zxz^"
-)
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("The SECRET_KEY environment variable is not set!")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes", "on")
@@ -184,9 +184,11 @@ CORS_ALLOW_HEADERS = "*"
 
 # CSRF Configuration
 CSRF_TRUSTED_ORIGINS = [
-    origin for origin in os.getenv(
+    origin
+    for origin in os.getenv(
         "CSRF_TRUSTED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
-    ).split(",") if origin.strip()
+    ).split(",")
+    if origin.strip()
 ]
 
 SPECTACULAR_SETTINGS = {
