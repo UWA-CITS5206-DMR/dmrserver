@@ -56,9 +56,12 @@ Suggested internal application structure (if new modules are needed):
   - Transactions: All-or-nothing scenarios for `ObservationManager.create_observations`.
   - File Pagination: Denial of unauthorized page numbers and correct output for authorized page numbers.
 
-## 6. Code Style
+## 6. Code Style and Tooling
 
 - Formatting: Use `uv run ruff format .` to auto-format code.
+- Linting: Use `uv run ruff check .` to check for code quality issues.
+- Running commands: Use `uv run <command>` to run commands within the project's virtual environment (e.g., `uv run python manage.py runserver`).
+- Managing dependencies: Use `uv pip install` or `uv sync` to install dependencies from `pyproject.toml`. Use `uv pip install <package>` or `uv add <package>` to add new dependencies.
 - Naming: Variables/functions `snake_case`; classes `PascalCase`; constants `UPPER_SNAKE_CASE`; private `_leading_underscore`.
 - Structure: Smaller functions, clear responsibilities; extract common logic to utilities/base classes; avoid code duplication.
 - Imports: Group by standard library, third-party, and project-internal; remove unused imports.

@@ -11,16 +11,19 @@ from rest_framework import status
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from patients.models import Patient, File
-from student_groups.models import LabRequest, ApprovedFile
+from student_groups.models import ImagingRequest, ApprovedFile
+from core.context import Role
 
 
 class FileAccessIntegrationTest(TestCase):
     def setUp(self):
         """Set up test data"""
         # Get or create groups
-        self.admin_group, _ = Group.objects.get_or_create(name="admin")
-        self.instructor_group, _ = Group.objects.get_or_create(name="instructor")
-        self.student_group, _ = Group.objects.get_or_create(name="student")
+        self.admin_group, _ = Group.objects.get_or_create(name=Role.ADMIN.value)
+        self.instructor_group, _ = Group.objects.get_or_create(
+            name=Role.INSTRUCTOR.value
+        )
+        self.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
 
         # Create users
         self.student = User.objects.create_user("student1", "student@test.com", "pass")
@@ -53,14 +56,20 @@ class FileAccessIntegrationTest(TestCase):
             requires_pagination=False,  # Use simple non-paginated file for testing
         )
 
-        # Create lab request
-        self.lab_request = LabRequest.objects.create(
-            user=self.student, patient=self.patient, status="completed"
+        # Create imaging request
+        self.imaging_request = ImagingRequest.objects.create(
+            user=self.student,
+            patient=self.patient,
+            test_type=ImagingRequest.TestType.X_RAY,
+            reason="Test imaging request for file integration test",
+            name="Dr. Test",
+            role="Doctor",
+            status="completed",
         )
 
         # Create approved file
         self.approved_file = ApprovedFile.objects.create(
-            lab_request=self.lab_request, file=self.file, page_range="1-3"
+            imaging_request=self.imaging_request, file=self.file, page_range="1-3"
         )
 
         self.client = APIClient()

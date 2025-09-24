@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase, APIClient
 import tempfile
 import os
 import shutil
-from core.permissions import ROLE_INSTRUCTOR
+from core.context import Role
 
 from .models import Patient, File
 
@@ -19,7 +19,7 @@ class PatientApiTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.instructor_group, created = Group.objects.get_or_create(
-            name=ROLE_INSTRUCTOR
+            name=Role.INSTRUCTOR.value
         )
         cls.user = get_user_model().objects.create_user(
             username="tester", email="tester@example.com", password="pass1234"

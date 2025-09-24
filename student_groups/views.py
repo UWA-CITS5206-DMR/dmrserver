@@ -1,5 +1,8 @@
 from .serializers import (
-    LabRequestSerializer,
+    ImagingRequestSerializer,
+    BloodTestRequestSerializer,
+    MedicationOrderSerializer,
+    DischargeSummarySerializer,
     NoteSerializer,
     BloodPressureSerializer,
     HeartRateSerializer,
@@ -21,9 +24,13 @@ from .models import (
     OxygenSaturation,
     PainScore,
     ObservationManager,
-    LabRequest,
+    ImagingRequest,
+    BloodTestRequest,
+    MedicationOrder,
+    DischargeSummary,
 )
-from core.permissions import ObservationPermission, LabRequestPermission
+from core.permissions import ObservationPermission, IsStudent
+from core.context import ViewContext
 from rest_framework.response import Response
 from rest_framework import viewsets, status, mixins
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
@@ -145,6 +152,9 @@ class NoteViewSet(viewsets.ModelViewSet):
     serializer_class = NoteSerializer
     permission_classes = [ObservationPermission]
 
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
 
 class BloodPressureViewSet(viewsets.ModelViewSet):
     queryset = BloodPressure.objects.all()
@@ -188,28 +198,81 @@ class PainScoreViewSet(viewsets.ModelViewSet):
     permission_classes = [ObservationPermission]
 
 
-class LabRequestViewSet(
+class ImagingRequestViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
     mixins.ListModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = LabRequest.objects.all()
-    serializer_class = LabRequestSerializer
-    permission_classes = [LabRequestPermission]
+    queryset = ImagingRequest.objects.all()
+    serializer_class = ImagingRequestSerializer
+    permission_classes = [IsStudent]
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
         if self.action == "create":
-            context["for_student_create"] = True
+            context[ViewContext.STUDENT_CREATE.value] = True
         else:
-            context["for_student_read"] = True
+            context[ViewContext.STUDENT_READ.value] = True
         return context
 
     def get_queryset(self):
         """Students can only see their own requests"""
-        return LabRequest.objects.filter(user=self.request.user)
+        return ImagingRequest.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        """Set the user field to the current authenticated user when creating"""
+        serializer.save(user=self.request.user)
+
+
+class BloodTestRequestViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = BloodTestRequest.objects.all()
+    serializer_class = BloodTestRequestSerializer
+    permission_classes = [IsStudent]
+
+    def get_queryset(self):
+        """Students can only see their own requests"""
+        return BloodTestRequest.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class MedicationOrderViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = MedicationOrder.objects.all()
+    serializer_class = MedicationOrderSerializer
+    permission_classes = [IsStudent]
+
+    def get_queryset(self):
+        """Students can only see their own requests"""
+        return MedicationOrder.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class DischargeSummaryViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = DischargeSummary.objects.all()
+    serializer_class = DischargeSummarySerializer
+    permission_classes = [IsStudent]
+
+    def get_queryset(self):
+        """Students can only see their own requests"""
+        return DischargeSummary.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
         serializer.save(user=self.request.user)

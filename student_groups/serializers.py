@@ -9,11 +9,15 @@ from .models import (
     BloodSugar,
     OxygenSaturation,
     PainScore,
-    LabRequest,
+    ImagingRequest,
+    BloodTestRequest,
+    MedicationOrder,
+    DischargeSummary,
     ApprovedFile,
     ObservationManager,
 )
 from .validators import ObservationValidator
+from core.context import ViewContext
 
 
 class ApprovedFileSerializer(serializers.ModelSerializer):
@@ -45,10 +49,10 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
         fields = super().get_fields()
         context = self.context or {}
 
-        if context.get("for_student"):
+        if context.get(ViewContext.STUDENT_READ.value):
             # Students don't need file_id, but need file_url
             fields.pop("file_id", None)
-        elif context.get("for_instructor"):
+        elif context.get(ViewContext.INSTRUCTOR_READ.value):
             # Instructors don't need file_url, but need file_id
             fields.pop("file_url", None)
         else:
@@ -59,7 +63,7 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
 
     def get_file_url(self, obj):
         request = self.context.get("request")
-        if request and self.context.get("for_student"):
+        if request and self.context.get(ViewContext.STUDENT_READ.value):
             return request.build_absolute_uri(
                 f"/api/patients/{obj.file.patient.id}/files/{obj.file.id}/view/"
             )
@@ -88,9 +92,9 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
         return data
 
 
-class LabRequestSerializer(BaseModelSerializer):
+class ImagingRequestSerializer(BaseModelSerializer):
     """
-    Unified LabRequest serializer that adapts based on context.
+    Unified ImagingRequest serializer that adapts based on context.
     Use context={'for_student_read': True} for student read view
     Use context={'for_student_create': True} for student create view
     Use context={'for_instructor': True} for instructor full access
@@ -101,13 +105,23 @@ class LabRequestSerializer(BaseModelSerializer):
     )
 
     class Meta:
-        model = LabRequest
+        model = ImagingRequest
         fields = [
             "id",
             "patient",
             "user",
             "test_type",
             "reason",
+            "status",
+            "name",
+            "role",
+            "created_at",
+            "updated_at",
+            "approved_files",
+        ]
+        read_only_fields = [
+            "id",
+            "user",
             "status",
             "created_at",
             "updated_at",
@@ -118,51 +132,36 @@ class LabRequestSerializer(BaseModelSerializer):
         fields = super().get_fields()
         context = self.context or {}
 
-        if context.get("for_student_read"):
-            # Students can read all fields but not modify
-            for field_name, field in fields.items():
-                field.read_only = True
+        # Student read view: user is implicit, hide it.
+        if context.get(ViewContext.STUDENT_READ.value):
+            fields.pop("user", None)
 
-        elif context.get("for_student_create"):
-            # Students can only set these fields when creating
-            read_only_fields = [
-                "id",
-                "user",
-                "status",
-                "created_at",
-                "updated_at",
-                "approved_files",
-            ]
-            for field_name in read_only_fields:
-                if field_name in fields:
-                    fields[field_name].read_only = True
+        # Student create view: user is implicit, hide it.
+        if context.get(ViewContext.STUDENT_CREATE.value):
+            fields.pop("user", None)
+            fields.pop("status", None)
+            fields.pop("approved_files", None)
 
-        elif context.get("for_instructor"):
-            # Instructors have full access
-            fields["id"].read_only = True
-            fields["created_at"].read_only = True
-            fields["updated_at"].read_only = True
+        # Instructor view: full access, no changes needed.
+        if context.get(ViewContext.INSTRUCTOR_READ.value):
+            # Add a field for managing approved files by their IDs
+            fields["approved_file_ids"] = serializers.ListField(
+                child=serializers.UUIDField(), write_only=True, required=False
+            )
 
         return fields
 
-    def update(self, instance, validated_data):
-        # Handle approved_files updates for instructors
-        approved_files_data = validated_data.pop("approvedfile_set", None)
-        instance = super().update(instance, validated_data)
+    def to_representation(self, instance):
+        # Customize representation for student read view
+        context = self.context or {}
+        if context.get(ViewContext.STUDENT_READ.value):
+            self.context[ViewContext.STUDENT_READ.value] = (
+                True  # For nested ApprovedFileSerializer
+            )
+        elif context.get(ViewContext.INSTRUCTOR_READ.value):
+            self.context[ViewContext.INSTRUCTOR_READ.value] = True
 
-        if approved_files_data is not None and self.context.get("for_instructor"):
-            instance.approvedfile_set.all().delete()
-            for approved_file_data in approved_files_data:
-                file_id = approved_file_data.get("file", {}).get("id")
-                page_range = approved_file_data.get("page_range")
-                from patients.models import File
-
-                file = File.objects.get(id=file_id)
-                ApprovedFile.objects.create(
-                    lab_request=instance, file=file, page_range=page_range
-                )
-
-        return instance
+        return super().to_representation(instance)
 
 
 class NoteSerializer(BaseModelSerializer):
@@ -173,11 +172,12 @@ class NoteSerializer(BaseModelSerializer):
             "patient",
             "user",
             "name",
+            "role",
             "content",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "user", "created_at", "updated_at"]
 
 
 class BloodPressureSerializer(BaseModelSerializer):
@@ -269,6 +269,50 @@ class PainScoreSerializer(BaseModelSerializer):
             data["patient"], data["user"], data["score"]
         )
         return data
+
+
+class BloodTestRequestSerializer(BaseModelSerializer):
+    approved_files = ApprovedFileSerializer(
+        source="approvedfile_set", many=True, required=False
+    )
+
+    class Meta:
+        model = BloodTestRequest
+        fields = [
+            "id",
+            "patient",
+            "user",
+            "test_type",
+            "reason",
+            "status",
+            "name",
+            "role",
+            "created_at",
+            "updated_at",
+            "approved_files",
+        ]
+        read_only_fields = [
+            "id",
+            "user",
+            "status",
+            "created_at",
+            "updated_at",
+            "approved_files",
+        ]
+
+
+class MedicationOrderSerializer(BaseModelSerializer):
+    class Meta:
+        model = MedicationOrder
+        fields = "__all__"
+        read_only_fields = ["id", "user", "created_at", "updated_at"]
+
+
+class DischargeSummarySerializer(BaseModelSerializer):
+    class Meta:
+        model = DischargeSummary
+        fields = "__all__"
+        read_only_fields = ["id", "user", "created_at", "updated_at"]
 
 
 class ObservationsSerializer(serializers.Serializer):

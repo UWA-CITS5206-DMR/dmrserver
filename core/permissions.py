@@ -9,12 +9,7 @@ This module defines permissions based on user roles:
 
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 from student_groups.models import ApprovedFile
-
-
-# Role constants
-ROLE_ADMIN = "admin"
-ROLE_INSTRUCTOR = "instructor"
-ROLE_STUDENT = "student"
+from .context import Role
 
 
 def get_user_role(user):
@@ -34,16 +29,16 @@ def get_user_role(user):
         return None
 
     # Check for admin role (superuser or admin group)
-    if user.is_superuser or user.groups.filter(name=ROLE_ADMIN).exists():
-        return ROLE_ADMIN
+    if user.is_superuser or user.groups.filter(name=Role.ADMIN.value).exists():
+        return Role.ADMIN.value
 
     # Check for instructor role
-    if user.groups.filter(name=ROLE_INSTRUCTOR).exists():
-        return ROLE_INSTRUCTOR
+    if user.groups.filter(name=Role.INSTRUCTOR.value).exists():
+        return Role.INSTRUCTOR.value
 
     # Check for student role
-    if user.groups.filter(name=ROLE_STUDENT).exists():
-        return ROLE_STUDENT
+    if user.groups.filter(name=Role.STUDENT.value).exists():
+        return Role.STUDENT.value
 
     return None
 
@@ -67,7 +62,10 @@ class BaseRolePermission(BasePermission):
             return False
 
         # Admin always has full access unless explicitly restricted
-        if user_role == ROLE_ADMIN and ROLE_ADMIN not in self.role_permissions:
+        if (
+            user_role == Role.ADMIN.value
+            and Role.ADMIN.value not in self.role_permissions
+        ):
             return True
 
         allowed_methods = self.role_permissions.get(user_role, [])
@@ -76,6 +74,33 @@ class BaseRolePermission(BasePermission):
     def has_object_permission(self, request, view, obj):
         """Default object permission - same as has_permission"""
         return self.has_permission(request, view)
+
+
+class IsAdmin(BasePermission):
+    """
+    Custom permission to only allow admin users.
+    """
+
+    def has_permission(self, request, view):
+        return get_user_role(request.user) == Role.ADMIN.value
+
+
+class IsInstructor(BasePermission):
+    """
+    Custom permission to only allow instructor users.
+    """
+
+    def has_permission(self, request, view):
+        return get_user_role(request.user) == Role.INSTRUCTOR.value
+
+
+class IsStudent(BasePermission):
+    """
+    Custom permission to only allow student users.
+    """
+
+    def has_permission(self, request, view):
+        return get_user_role(request.user) == Role.STUDENT.value
 
 
 class PatientPermission(BaseRolePermission):
@@ -87,8 +112,16 @@ class PatientPermission(BaseRolePermission):
     """
 
     role_permissions = {
-        ROLE_STUDENT: SAFE_METHODS,
-        ROLE_INSTRUCTOR: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+        Role.STUDENT.value: SAFE_METHODS,
+        Role.INSTRUCTOR.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
     }
 
 
@@ -101,8 +134,16 @@ class ObservationPermission(BaseRolePermission):
     """
 
     role_permissions = {
-        ROLE_STUDENT: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-        ROLE_INSTRUCTOR: SAFE_METHODS,
+        Role.STUDENT.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
+        Role.INSTRUCTOR.value: SAFE_METHODS,
     }
 
     def has_object_permission(self, request, view, obj):
@@ -115,35 +156,35 @@ class ObservationPermission(BaseRolePermission):
             return False
 
         # Admin has full access
-        if user_role == ROLE_ADMIN:
+        if user_role == Role.ADMIN.value:
             return True
 
         # Instructor has read-only access to all observations
-        if user_role == ROLE_INSTRUCTOR:
+        if user_role == Role.INSTRUCTOR.value:
             return request.method in SAFE_METHODS
 
         # Student can only access their own observations
-        if user_role == ROLE_STUDENT:
+        if user_role == Role.STUDENT.value:
             return hasattr(obj, "user") and obj.user == request.user
 
         return False
 
 
-class LabRequestPermission(BaseRolePermission):
+class RequestPermission(BaseRolePermission):
     """
-    Permission for student lab request operations in student_groups app:
-    - Students: can create and read their own lab requests
-    - Instructors: read-only access (full CRUD handled in instructor app)
-    - Admin: full access (inherited)
+    Permission for student request operations (Imaging, Blood Test, etc.).
+    - Students: can create and read their own requests.
+    - Instructors: read-only access (full CRUD is handled in the instructors app).
+    - Admin: full access (inherited).
     """
 
     role_permissions = {
-        ROLE_STUDENT: ["GET", "POST", "HEAD", "OPTIONS"],
-        ROLE_INSTRUCTOR: SAFE_METHODS,
+        Role.STUDENT.value: ["GET", "POST", "HEAD", "OPTIONS"],
+        Role.INSTRUCTOR.value: SAFE_METHODS,
     }
 
     def has_object_permission(self, request, view, obj):
-        """Students can only access their own requests, instructors have read-only access"""
+        """Students can only access their own requests; instructors have read-only access."""
         if not request.user.is_authenticated:
             return False
 
@@ -152,33 +193,18 @@ class LabRequestPermission(BaseRolePermission):
             return False
 
         # Admin has full access
-        if user_role == ROLE_ADMIN:
+        if user_role == Role.ADMIN.value:
             return True
 
-        # Instructor has read-only access to all lab requests
-        if user_role == ROLE_INSTRUCTOR:
+        # Instructor has read-only access to all requests
+        if user_role == Role.INSTRUCTOR.value:
             return request.method in SAFE_METHODS
 
-        # Student can only access their own lab requests (read-only after creation)
-        if user_role == ROLE_STUDENT:
-            return (
-                hasattr(obj, "user")
-                and obj.user == request.user
-                and request.method in SAFE_METHODS
-            )
+        # Student can only access their own requests
+        if user_role == Role.STUDENT.value:
+            return hasattr(obj, "user") and obj.user == request.user
 
         return False
-
-
-class InstructorOnlyPermission(BaseRolePermission):
-    """
-    Permission that allows access only to instructors and admins.
-    Used for instructor-specific endpoints and dashboards.
-    """
-
-    role_permissions = {
-        ROLE_INSTRUCTOR: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-    }
 
 
 class FileAccessPermission(BaseRolePermission):
@@ -189,8 +215,8 @@ class FileAccessPermission(BaseRolePermission):
     """
 
     role_permissions = {
-        ROLE_STUDENT: ["GET", "HEAD", "OPTIONS"],
-        ROLE_INSTRUCTOR: ["GET", "HEAD", "OPTIONS"],
+        Role.STUDENT.value: ["GET", "HEAD", "OPTIONS"],
+        Role.INSTRUCTOR.value: ["GET", "HEAD", "OPTIONS"],
     }
 
     def has_object_permission(self, request, view, obj):
@@ -205,14 +231,23 @@ class FileAccessPermission(BaseRolePermission):
             return False
 
         # Admins and instructors have full access
-        if user_role in [ROLE_ADMIN, ROLE_INSTRUCTOR]:
+        if user_role in [Role.ADMIN.value, Role.INSTRUCTOR.value]:
             return True
 
         # Students must have an approved lab request for this file
-        if user_role == ROLE_STUDENT:
-            return ApprovedFile.objects.filter(
-                file=obj, lab_request__user=user, lab_request__status="completed"
+        if user_role == Role.STUDENT.value:
+            # Check across all request types that can approve files
+            imaging_request_exists = ApprovedFile.objects.filter(
+                file=obj,
+                imaging_request__user=user,
+                imaging_request__status="completed",
             ).exists()
+            # Extend this logic if other request types can approve files
+            # For example:
+            # blood_test_request_exists = ApprovedFile.objects.filter(
+            #     file=obj, blood_test_request__user=user, blood_test_request__status="completed"
+            # ).exists()
+            return imaging_request_exists  # or blood_test_request_exists
 
         return False
 
@@ -224,5 +259,13 @@ class FileManagementPermission(BaseRolePermission):
     """
 
     role_permissions = {
-        ROLE_INSTRUCTOR: ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+        Role.INSTRUCTOR.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
     }

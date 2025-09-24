@@ -8,7 +8,10 @@ from .models import (
     OxygenSaturation,
     PainScore,
     Note,
-    LabRequest,
+    ImagingRequest,
+    BloodTestRequest,
+    MedicationOrder,
+    DischargeSummary,
 )
 
 
@@ -132,8 +135,8 @@ class PainScoreAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(LabRequest)
-class LabRequestAdmin(admin.ModelAdmin):
+@admin.register(ImagingRequest)
+class ImagingRequestAdmin(admin.ModelAdmin):
     list_display = [
         "patient",
         "user",
@@ -153,9 +156,33 @@ class LabRequestAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
-        ("Lab Test", {"fields": ("test_type", "status")}),
+        ("Imaging Test", {"fields": ("test_type", "status")}),
         (
             "Timestamps",
             {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
         ),
     )
+
+
+@admin.register(BloodTestRequest)
+class BloodTestRequestAdmin(admin.ModelAdmin):
+    list_display = ["patient", "user", "status", "created_at", "updated_at"]
+    list_filter = ["user", "status", "created_at", "updated_at"]
+    search_fields = ["patient__first_name", "patient__last_name", "user__username"]
+    readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(MedicationOrder)
+class MedicationOrderAdmin(admin.ModelAdmin):
+    list_display = ["patient", "user", "created_at", "updated_at"]
+    list_filter = ["user", "created_at", "updated_at"]
+    search_fields = ["patient__first_name", "patient__last_name", "user__username"]
+    readonly_fields = ["created_at", "updated_at"]
+
+
+@admin.register(DischargeSummary)
+class DischargeSummaryAdmin(admin.ModelAdmin):
+    list_display = ["patient", "user", "created_at", "updated_at"]
+    list_filter = ["user", "created_at", "updated_at"]
+    search_fields = ["patient__first_name", "patient__last_name", "user__username"]
+    readonly_fields = ["created_at", "updated_at"]

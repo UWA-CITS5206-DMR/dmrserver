@@ -34,6 +34,14 @@ def validate_pdf_for_pagination(file, requires_pagination):
 
 
 class File(models.Model):
+    class Category(models.TextChoices):
+        ADMISSION = "Admission", "Admission"
+        PATHOLOGY = "Pathology", "Pathology"
+        IMAGING = "Imaging", "Imaging"
+        DIAGNOSTICS = "Diagnostics", "Diagnostics"
+        LAB_RESULTS = "Lab Results", "Lab Results"
+        OTHER = "Other", "Other"
+
     id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, verbose_name="File ID"
     )
@@ -42,6 +50,12 @@ class File(models.Model):
     )
     display_name = models.CharField(
         max_length=255, editable=False, verbose_name="Display name"
+    )
+    category = models.CharField(
+        max_length=20,
+        choices=Category.choices,
+        default=Category.OTHER,
+        verbose_name="Category",
     )
     file = models.FileField(upload_to="upload_to", verbose_name="File")
     requires_pagination = models.BooleanField(
