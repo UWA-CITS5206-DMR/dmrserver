@@ -19,12 +19,6 @@ COPY . .
 RUN mkdir -p /app/data/media /app/data/static
 VOLUME ["/app/data"]
 
-# Collect static files for Django admin and other static assets
-RUN uv run python manage.py collectstatic --noinput
-
-# Migrate the database
-RUN uv run python manage.py migrate --noinput
-
 # Set environment variables
 ENV DJANGO_SETTINGS_MODULE=dmr.settings
 ENV DJANGO_CONFIGURATION=Production
