@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from corsheaders.defaults import default_methods, default_headers
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -182,13 +183,9 @@ REST_FRAMEWORK = {
     ],
 }
 
-# CORS Configuration - configurable via environment variables
-CORS_ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "True").lower() in (
-    "true",
-    "1",
-    "yes",
-    "on",
-)
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = default_headers
+CORS_ALLOWED_METHODS = default_methods
 
 # Parse CORS allowed origins from environment
 _cors_allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
@@ -213,52 +210,6 @@ else:
             "http://127.0.0.1:3000",
             "http://127.0.0.1:8000",
         ]
-
-# Parse CORS allowed headers from environment
-_cors_allowed_headers = os.getenv("CORS_ALLOWED_HEADERS", "").strip()
-if _cors_allowed_headers == "*":
-    CORS_ALLOW_HEADERS = "*"
-elif _cors_allowed_headers:
-    CORS_ALLOW_HEADERS = [
-        header.strip() for header in _cors_allowed_headers.split(",") if header.strip()
-    ]
-else:
-    # Default headers
-    CORS_ALLOW_HEADERS = [
-        "accept",
-        "accept-encoding",
-        "authorization",
-        "content-type",
-        "dnt",
-        "origin",
-        "user-agent",
-        "x-csrftoken",
-        "x-requested-with",
-    ]
-
-# Parse CORS allowed methods from environment
-_cors_allowed_methods = os.getenv("CORS_ALLOWED_METHODS", "").strip()
-if _cors_allowed_methods:
-    CORS_ALLOWED_METHODS = [
-        method.strip().upper()
-        for method in _cors_allowed_methods.split(",")
-        if method.strip()
-    ]
-else:
-    # Default methods
-    CORS_ALLOWED_METHODS = [
-        "DELETE",
-        "GET",
-        "OPTIONS",
-        "PATCH",
-        "POST",
-        "PUT",
-    ]
-
-# CORS preflight max age (in seconds)
-CORS_PREFLIGHT_MAX_AGE = int(
-    os.getenv("CORS_PREFLIGHT_MAX_AGE", "86400")
-)  # 24 hours default
 
 # CSRF Configuration
 CSRF_TRUSTED_ORIGINS = [
