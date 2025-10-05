@@ -182,9 +182,83 @@ REST_FRAMEWORK = {
     ],
 }
 
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_HEADERS = "*"
+# CORS Configuration - configurable via environment variables
+CORS_ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "True").lower() in (
+    "true",
+    "1",
+    "yes",
+    "on",
+)
+
+# Parse CORS allowed origins from environment
+_cors_allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+if _cors_allowed_origins == "*" or os.getenv(
+    "CORS_ALLOW_ALL_ORIGINS", "True"
+).lower() in ("true", "1", "yes", "on"):
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGINS = []
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
+    if _cors_allowed_origins:
+        CORS_ALLOWED_ORIGINS = [
+            origin.strip()
+            for origin in _cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
+    else:
+        # Default origins for development
+        CORS_ALLOWED_ORIGINS = [
+            "http://localhost:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:8000",
+        ]
+
+# Parse CORS allowed headers from environment
+_cors_allowed_headers = os.getenv("CORS_ALLOWED_HEADERS", "").strip()
+if _cors_allowed_headers == "*":
+    CORS_ALLOW_HEADERS = "*"
+elif _cors_allowed_headers:
+    CORS_ALLOW_HEADERS = [
+        header.strip() for header in _cors_allowed_headers.split(",") if header.strip()
+    ]
+else:
+    # Default headers
+    CORS_ALLOW_HEADERS = [
+        "accept",
+        "accept-encoding",
+        "authorization",
+        "content-type",
+        "dnt",
+        "origin",
+        "user-agent",
+        "x-csrftoken",
+        "x-requested-with",
+    ]
+
+# Parse CORS allowed methods from environment
+_cors_allowed_methods = os.getenv("CORS_ALLOWED_METHODS", "").strip()
+if _cors_allowed_methods:
+    CORS_ALLOWED_METHODS = [
+        method.strip().upper()
+        for method in _cors_allowed_methods.split(",")
+        if method.strip()
+    ]
+else:
+    # Default methods
+    CORS_ALLOWED_METHODS = [
+        "DELETE",
+        "GET",
+        "OPTIONS",
+        "PATCH",
+        "POST",
+        "PUT",
+    ]
+
+# CORS preflight max age (in seconds)
+CORS_PREFLIGHT_MAX_AGE = int(
+    os.getenv("CORS_PREFLIGHT_MAX_AGE", "86400")
+)  # 24 hours default
 
 # CSRF Configuration
 CSRF_TRUSTED_ORIGINS = [
