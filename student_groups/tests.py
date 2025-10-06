@@ -42,11 +42,13 @@ class NoteModelTest(TestCase):
             patient=self.patient,
             user=self.user,
             name="Dr. Smith",
+            role="Doctor",
             content="This is a test note.",
         )
         self.assertEqual(note.patient, self.patient)
         self.assertEqual(note.user, self.user)
         self.assertEqual(note.name, "Dr. Smith")
+        self.assertEqual(note.role, "Doctor")
         self.assertEqual(note.content, "This is a test note.")
         self.assertIsNotNone(note.created_at)
         self.assertIsNotNone(note.updated_at)
@@ -505,12 +507,18 @@ class ObservationsViewSetTest(APITestCase):
         )
         response = self.client.get(
             reverse("observation-list"),
-            {"patient": self.patient.id},
+            {"patient_id": self.patient.id},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["blood_pressures"]), 1)
-        self.assertEqual(len(response.data["heart_rates"]), 0)
-        self.assertEqual(len(response.data["respiratory_rates"]), 1)
+        # Check pagination format
+        self.assertIn("count", response.data)
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("results", response.data)
+        # Check observation data is in results
+        self.assertEqual(len(response.data["results"]["blood_pressures"]), 1)
+        self.assertEqual(len(response.data["results"]["heart_rates"]), 0)
+        self.assertEqual(len(response.data["results"]["respiratory_rates"]), 1)
 
     def test_list_observations_with_pagination(self):
         """Test that page_size parameter limits results for each observation type"""
@@ -526,20 +534,25 @@ class ObservationsViewSetTest(APITestCase):
         # Test with page_size=2
         response = self.client.get(
             reverse("observation-list"),
-            {"patient": self.patient.id, "page_size": 2},
+            {"patient_id": self.patient.id, "page_size": 2},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["blood_pressures"]), 2)
-        self.assertEqual(len(response.data["heart_rates"]), 2)
+        # Check pagination format
+        self.assertIn("count", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(len(response.data["results"]["blood_pressures"]), 2)
+        self.assertEqual(len(response.data["results"]["heart_rates"]), 2)
         
         # Test with page_size=1
         response = self.client.get(
             reverse("observation-list"),
-            {"patient": self.patient.id, "page_size": 1},
+            {"patient_id": self.patient.id, "page_size": 1},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["blood_pressures"]), 1)
-        self.assertEqual(len(response.data["heart_rates"]), 1)
+        self.assertIn("count", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(len(response.data["results"]["blood_pressures"]), 1)
+        self.assertEqual(len(response.data["results"]["heart_rates"]), 1)
 
     def test_list_observations_with_ordering(self):
         """Test that ordering parameter sorts results correctly"""
@@ -556,18 +569,20 @@ class ObservationsViewSetTest(APITestCase):
         # Test descending order (newest first) - default
         response = self.client.get(
             reverse("observation-list"),
-            {"patient": self.patient.id, "ordering": "-created_at"},
+            {"patient_id": self.patient.id, "ordering": "-created_at"},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["blood_pressures"][0]["systolic"], 130)  # Newest first
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["results"]["blood_pressures"][0]["systolic"], 130)  # Newest first
         
         # Test ascending order (oldest first)
         response = self.client.get(
             reverse("observation-list"),
-            {"patient": self.patient.id, "ordering": "created_at"},
+            {"patient_id": self.patient.id, "ordering": "created_at"},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["blood_pressures"][0]["systolic"], 120)  # Oldest first
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["results"]["blood_pressures"][0]["systolic"], 120)  # Oldest first
 
 
 class RespiratoryRateModelTest(TestCase):
@@ -712,30 +727,31 @@ class ImagingRequestViewSetTest(APITestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_student_can_create_imaging_request(self):
+        """Test that students can create imaging requests"""
         data = {
             "patient": self.patient.id,
-            "test_type": "X_RAY",
+            "test_type": "X-ray",
             "reason": "Routine check-up for patient symptoms",
             "name": "Test X-Ray Request",
+            "role": "Student",
         }
-        # This test might fail if URLs don't exist yet - that's expected
-        try:
-            response = self.client.post("/api/student-groups/imaging-requests/", data)
-            if response.status_code == status.HTTP_201_CREATED:
-                self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        except Exception:
-            self.skipTest("Imaging request endpoints not yet implemented")
+        response = self.client.post("/api/student-groups/imaging-requests/", data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["test_type"], "X-ray")
+        self.assertEqual(response.data["reason"], "Routine check-up for patient symptoms")
+        self.assertEqual(response.data["role"], "Student")
 
     def test_student_can_list_own_imaging_requests(self):
-        # Create an imaging request for this user using the model directly
+        """Test that students can only see their own imaging requests"""
         from student_groups.models import ImagingRequest
 
         ImagingRequest.objects.create(
             patient=self.patient,
             user=self.user,
-            test_type="X_RAY",
+            test_type="X-ray",
             reason="Routine X-ray test",
             name="Test X-Ray",
+            role="Medical Student",
         )
         # Create an imaging request for another user
         other_user = get_user_model().objects.create_user(
@@ -744,42 +760,38 @@ class ImagingRequestViewSetTest(APITestCase):
         ImagingRequest.objects.create(
             patient=self.patient,
             user=other_user,
-            test_type="CT_SCAN",
+            test_type="CT scan",
             reason="Routine CT scan test",
             name="Test CT Scan",
+            role="Medical Student",
         )
 
-        # This test might fail if URLs don't exist yet - that's expected
-        try:
-            response = self.client.get("/api/student-groups/imaging-requests/")
-            if response.status_code == status.HTTP_200_OK:
-                # Should only see own request
-                self.assertEqual(len(response.data["results"]), 1)
-                self.assertEqual(response.data["results"][0]["test_type"], "X_RAY")
-        except Exception:
-            self.skipTest("Imaging request endpoints not yet implemented")
+        # Students should only see their own imaging requests
+        response = self.client.get("/api/student-groups/imaging-requests/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["test_type"], "X-ray")
+        # Note: 'user' field is hidden in student read view by the serializer
 
     def test_student_cannot_update_imaging_request(self):
+        """Test that students cannot update imaging requests (only create and read)"""
         from student_groups.models import ImagingRequest
 
         imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=self.user,
-            test_type="X_RAY",
+            test_type="X-ray",
             reason="Testing update permissions",
             name="Test Update Request",
+            role="Medical Student",
         )
 
         data = {"status": "completed"}
-        # This test might fail if URLs don't exist yet - that's expected
-        try:
-            response = self.client.patch(
-                f"/api/student-groups/imaging-requests/{imaging_request.id}/", data
-            )
-            # Should not be allowed to update - students can only create and read
-            self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        except Exception:
-            self.skipTest("Imaging request endpoints not yet implemented")
+        response = self.client.patch(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/", data
+        )
+        # ImagingRequestViewSet doesn't include UpdateModelMixin, so PATCH returns 405
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 class PainScoreViewSetTest(APITestCase):

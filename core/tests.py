@@ -482,20 +482,15 @@ class RequestRBACTest(APITestCase):
         self.client.force_authenticate(user=self.student_user)
         data = {
             "patient": self.patient.id,
-            "test_type": "X_RAY",
+            "test_type": "X-ray",
             "reason": "Patient complaining of chest pain",
-            "status": "pending",
             "name": "Test Request",
+            "role": "Student",
         }
-
-        # This might fail if the URL doesn't exist yet - that's expected for now
-        try:
-            response = self.client.post("/api/student-groups/imaging-requests/", data)
-            if response.status_code == status.HTTP_201_CREATED:
-                self.assertEqual(response.data["user"], self.student_user.id)
-        except Exception:
-            # URL pattern might not exist yet - skip this test for now
-            self.skipTest("Imaging request endpoints not yet implemented")
+        response = self.client.post("/api/student-groups/imaging-requests/", data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["test_type"], "X-ray")
+        self.assertEqual(response.data["name"], "Test Request")
 
     def test_instructor_can_manage_imaging_requests(self):
         """Test that instructors can manage imaging requests"""
@@ -505,21 +500,16 @@ class RequestRBACTest(APITestCase):
         ImagingRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
-            test_type="MRI_SCAN",
+            test_type="MRI scan",
             reason="Patient needs MRI scan for diagnosis",
             status="pending",
             name="Test MRI Request",
+            role="Medical Student",
         )
 
-        # This might fail if the URL doesn't exist yet - that's expected for now
-        try:
-            response = self.client.get("/api/instructors/imaging-requests/")
-            self.assertIn(
-                response.status_code, [status.HTTP_200_OK, status.HTTP_404_NOT_FOUND]
-            )
-        except Exception:
-            # URL pattern might not exist yet - skip this test for now
-            self.skipTest("Instructor imaging request endpoints not yet implemented")
+        response = self.client.get("/api/instructors/imaging-requests/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
     def test_admin_has_full_access_to_requests(self):
         """Test that admin users have full access to all request types"""
@@ -529,10 +519,11 @@ class RequestRBACTest(APITestCase):
         imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
-            test_type="X_RAY",
+            test_type="X-ray",
             reason="Testing admin access rights",
             status="pending",
             name="Admin Test Request",
+            role="Doctor",
         )
 
         # Admin should be able to access through any endpoint that exists

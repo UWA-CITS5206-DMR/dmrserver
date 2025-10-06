@@ -29,6 +29,7 @@ from .models import (
     MedicationOrder,
     DischargeSummary,
 )
+from .pagination import ObservationsPagination
 from core.permissions import ObservationPermission, IsStudent
 from core.context import ViewContext
 from rest_framework.response import Response
@@ -145,59 +146,103 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         ],
         responses={200: ObservationDataSerializer},
     )
-    def list(self, request):
+    def list(self, request, *args, **kwargs):
         """
-        List all observation types for a patient.
-        
-        Note: This endpoint uses manual pagination with page_size parameter instead of
-        standard DRF pagination because it returns a dictionary of multiple heterogeneous
-        observation types. Standard DRF pagination is designed for single querysets.
-        
-        For proper paginated access to individual observation types, use:
-        - GET /api/student-groups/observations/blood-pressures/
-        - GET /api/student-groups/observations/heart-rates/
-        etc. These endpoints support full DRF pagination.
-        """
-        # Automatically use the authenticated user
-        user_id = request.user.id
-        patient_id = request.query_params.get("patient")
-        ordering = request.query_params.get("ordering", "-created_at")
-        page_size = request.query_params.get("page_size")
+        Retrieve all observations for a specific patient.
 
+        This endpoint returns observations of various types (blood pressure,
+        heart rate, body temperature, respiratory rate, blood sugar, oxygen
+        saturation, pain score) for the specified patient.
+
+        The authenticated user making the request is automatically extracted from
+        the authentication token, and only observations recorded by that user are
+        returned to ensure data privacy and isolation.
+
+        Filtering and Pagination:
+        - The results can be filtered by observation type using the `types` query
+          parameter.
+        - The number of results per page can be controlled using the `page_size`
+          query parameter. By default, this is set to 10. The maximum allowed page
+          size is 100.
+        - Results are ordered by created_at in descending order (most recent first)
+          by default. The ordering can be changed using the `ordering` query
+          parameter. Supported values are `created_at` (ascending) and `-created_at`
+          (descending).
+
+        Query Parameters:
+        - `patient_id`: (required) The ID of the patient whose observations are
+          being requested.
+        - `types`: (optional) A comma-separated list of observation types to
+          filter by. Valid types are: blood_pressure, heart_rate, body_temperature,
+          respiratory_rate, blood_sugar, oxygen_saturation, pain_score.
+        - `page_size`: (optional) The number of results to return per page.
+          Default is 10, maximum is 100.
+        - `ordering`: (optional) The field to order results by. Supported values
+          are `created_at` (ascending) and `-created_at` (descending). Default is
+          `-created_at`.
+
+        Returns:
+        - `200 OK`: A paginated response with observation data following DRF
+          standard pagination format:
+          {
+              "count": <total number of observation records across all types>,
+              "next": null,
+              "previous": null,
+              "results": {
+                  "blood_pressure": [...],
+                  "heart_rate": [...],
+                  ...
+              }
+          }
+        - `400 Bad Request`: If the patient_id parameter is missing or invalid.
+        - `403 Forbidden`: If the user does not have permission to view this
+          patient's observations.
+
+        Note:
+        The `next` and `previous` fields are currently set to null because
+        pagination across multiple observation types is complex. For full
+        pagination support, use the individual observation type endpoints
+        (e.g., /api/student-groups/blood-pressure/).
+        """
+        patient_id = request.query_params.get("patient_id")
         if not patient_id:
             return Response(
-                {"error": "Patient parameter is required"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"error": "patient_id is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Get page_size parameter with validation
         try:
-            # Get observations with ordering
-            observations = ObservationManager.get_observations_by_user_and_patient(
-                user_id, patient_id, ordering=ordering
-            )
+            page_size = int(request.query_params.get("page_size", 10))
+            # Limit maximum page_size to prevent excessive data retrieval
+            page_size = min(max(page_size, 1), 100)  # Between 1 and 100
+        except (ValueError, TypeError):
+            page_size = 10  # Default to 10 if invalid value provided
 
-            # Apply page_size limit if specified
-            # Note: This is manual slicing, not standard DRF pagination
-            if page_size:
-                try:
-                    page_size = int(page_size)
-                    for key in observations:
-                        observations[key] = observations[key][:page_size]
-                except (ValueError, TypeError):
-                    return Response(
-                        {"error": "Invalid page_size parameter"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+        # Get ordering parameter (default to -created_at for most recent first)
+        ordering = request.query_params.get("ordering", "-created_at")
+        # Validate ordering parameter
+        if ordering not in ["created_at", "-created_at"]:
+            ordering = "-created_at"  # Default to descending if invalid value
 
-            result_serializer = ObservationDataSerializer(instance=observations)
+        # Get observations with ordering
+        observations = ObservationManager.get_observations_by_user_and_patient(
+            request.user.id, patient_id, ordering=ordering
+        )
 
-            return Response(result_serializer.data, status=status.HTTP_200_OK)
+        # Apply pagination (slicing) to each observation type
+        paginated_observations = {}
+        for obs_type, obs_list in observations.items():
+            paginated_observations[obs_type] = obs_list[:page_size]
 
-        except Exception as e:
-            return Response(
-                {"error": "Error occurred during query", "detail": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        # Serialize the data using ObservationDataSerializer (designed for list output)
+        serializer = ObservationDataSerializer(paginated_observations)
+
+        # Use custom pagination class to wrap in standard DRF format
+        paginator = ObservationsPagination()
+        # Calculate total count across all observation types
+        total_count = sum(len(obs_list) for obs_list in observations.values())
+        paginator.total_count = total_count
+        return paginator.get_paginated_response(serializer.data)
 
 
 class NoteViewSet(viewsets.ModelViewSet):
