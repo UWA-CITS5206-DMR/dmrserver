@@ -505,12 +505,69 @@ class ObservationsViewSetTest(APITestCase):
         )
         response = self.client.get(
             reverse("observation-list"),
-            {"user": self.user.id, "patient": self.patient.id},
+            {"patient": self.patient.id},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["blood_pressures"]), 1)
         self.assertEqual(len(response.data["heart_rates"]), 0)
         self.assertEqual(len(response.data["respiratory_rates"]), 1)
+
+    def test_list_observations_with_pagination(self):
+        """Test that page_size parameter limits results for each observation type"""
+        # Create multiple observations
+        for i in range(5):
+            BloodPressure.objects.create(
+                patient=self.patient, user=self.user, systolic=120 + i, diastolic=80 + i
+            )
+            HeartRate.objects.create(
+                patient=self.patient, user=self.user, heart_rate=70 + i
+            )
+        
+        # Test with page_size=2
+        response = self.client.get(
+            reverse("observation-list"),
+            {"patient": self.patient.id, "page_size": 2},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["blood_pressures"]), 2)
+        self.assertEqual(len(response.data["heart_rates"]), 2)
+        
+        # Test with page_size=1
+        response = self.client.get(
+            reverse("observation-list"),
+            {"patient": self.patient.id, "page_size": 1},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["blood_pressures"]), 1)
+        self.assertEqual(len(response.data["heart_rates"]), 1)
+
+    def test_list_observations_with_ordering(self):
+        """Test that ordering parameter sorts results correctly"""
+        import time
+        # Create observations with slight time differences
+        BloodPressure.objects.create(
+            patient=self.patient, user=self.user, systolic=120, diastolic=80
+        )
+        time.sleep(0.01)  # Ensure different timestamps
+        BloodPressure.objects.create(
+            patient=self.patient, user=self.user, systolic=130, diastolic=85
+        )
+        
+        # Test descending order (newest first) - default
+        response = self.client.get(
+            reverse("observation-list"),
+            {"patient": self.patient.id, "ordering": "-created_at"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["blood_pressures"][0]["systolic"], 130)  # Newest first
+        
+        # Test ascending order (oldest first)
+        response = self.client.get(
+            reverse("observation-list"),
+            {"patient": self.patient.id, "ordering": "created_at"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["blood_pressures"][0]["systolic"], 120)  # Oldest first
 
 
 class RespiratoryRateModelTest(TestCase):

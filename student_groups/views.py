@@ -112,7 +112,14 @@ class ObservationsViewSet(viewsets.GenericViewSet):
 
     @extend_schema(
         summary="List observations",
-        description="Retrieve observations for the authenticated user and a specific patient",
+        description=(
+            "Retrieve observations for the authenticated user and a specific patient. "
+            "Supports ordering and basic pagination via page_size parameter. "
+            "\n\nNote: This endpoint returns multiple heterogeneous observation types in a single response, "
+            "which doesn't support standard DRF pagination (page numbers, next/previous links). "
+            "For full pagination support with individual observation types, use the specific endpoints: "
+            "/observations/blood-pressures/, /observations/heart-rates/, etc."
+        ),
         parameters=[
             OpenApiParameter(
                 name="patient",
@@ -121,13 +128,41 @@ class ObservationsViewSet(viewsets.GenericViewSet):
                 required=True,
                 description="Patient ID",
             ),
+            OpenApiParameter(
+                name="ordering",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Order by field (e.g., 'created_at' or '-created_at' for descending). Default: '-created_at'",
+            ),
+            OpenApiParameter(
+                name="page_size",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Limit number of records returned for each observation type. Does not support page navigation.",
+            ),
         ],
         responses={200: ObservationDataSerializer},
     )
     def list(self, request):
+        """
+        List all observation types for a patient.
+        
+        Note: This endpoint uses manual pagination with page_size parameter instead of
+        standard DRF pagination because it returns a dictionary of multiple heterogeneous
+        observation types. Standard DRF pagination is designed for single querysets.
+        
+        For proper paginated access to individual observation types, use:
+        - GET /api/student-groups/observations/blood-pressures/
+        - GET /api/student-groups/observations/heart-rates/
+        etc. These endpoints support full DRF pagination.
+        """
         # Automatically use the authenticated user
         user_id = request.user.id
         patient_id = request.query_params.get("patient")
+        ordering = request.query_params.get("ordering", "-created_at")
+        page_size = request.query_params.get("page_size")
 
         if not patient_id:
             return Response(
@@ -136,9 +171,23 @@ class ObservationsViewSet(viewsets.GenericViewSet):
             )
 
         try:
+            # Get observations with ordering
             observations = ObservationManager.get_observations_by_user_and_patient(
-                user_id, patient_id
+                user_id, patient_id, ordering=ordering
             )
+
+            # Apply page_size limit if specified
+            # Note: This is manual slicing, not standard DRF pagination
+            if page_size:
+                try:
+                    page_size = int(page_size)
+                    for key in observations:
+                        observations[key] = observations[key][:page_size]
+                except (ValueError, TypeError):
+                    return Response(
+                        {"error": "Invalid page_size parameter"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             result_serializer = ObservationDataSerializer(instance=observations)
 
@@ -156,6 +205,10 @@ class NoteViewSet(viewsets.ModelViewSet):
     serializer_class = NoteSerializer
     permission_classes = [ObservationPermission]
 
+    def get_queryset(self):
+        """Filter observations by authenticated user"""
+        return Note.objects.filter(user=self.request.user)
+
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
@@ -165,11 +218,25 @@ class BloodPressureViewSet(viewsets.ModelViewSet):
     serializer_class = BloodPressureSerializer
     permission_classes = [ObservationPermission]
 
+    def get_queryset(self):
+        """Filter observations by authenticated user"""
+        return BloodPressure.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
 
 class HeartRateViewSet(viewsets.ModelViewSet):
     queryset = HeartRate.objects.all()
     serializer_class = HeartRateSerializer
     permission_classes = [ObservationPermission]
+
+    def get_queryset(self):
+        """Filter observations by authenticated user"""
+        return HeartRate.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class BodyTemperatureViewSet(viewsets.ModelViewSet):
@@ -177,11 +244,25 @@ class BodyTemperatureViewSet(viewsets.ModelViewSet):
     serializer_class = BodyTemperatureSerializer
     permission_classes = [ObservationPermission]
 
+    def get_queryset(self):
+        """Filter observations by authenticated user"""
+        return BodyTemperature.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
 
 class RespiratoryRateViewSet(viewsets.ModelViewSet):
     queryset = RespiratoryRate.objects.all()
     serializer_class = RespiratoryRateSerializer
     permission_classes = [ObservationPermission]
+
+    def get_queryset(self):
+        """Filter observations by authenticated user"""
+        return RespiratoryRate.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class BloodSugarViewSet(viewsets.ModelViewSet):
@@ -189,17 +270,38 @@ class BloodSugarViewSet(viewsets.ModelViewSet):
     serializer_class = BloodSugarSerializer
     permission_classes = [ObservationPermission]
 
+    def get_queryset(self):
+        """Filter observations by authenticated user"""
+        return BloodSugar.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
 
 class OxygenSaturationViewSet(viewsets.ModelViewSet):
     queryset = OxygenSaturation.objects.all()
     serializer_class = OxygenSaturationSerializer
     permission_classes = [ObservationPermission]
 
+    def get_queryset(self):
+        """Filter observations by authenticated user"""
+        return OxygenSaturation.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
 
 class PainScoreViewSet(viewsets.ModelViewSet):
     queryset = PainScore.objects.all()
     serializer_class = PainScoreSerializer
     permission_classes = [ObservationPermission]
+
+    def get_queryset(self):
+        """Filter observations by authenticated user"""
+        return PainScore.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class ImagingRequestViewSet(
