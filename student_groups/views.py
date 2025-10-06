@@ -42,7 +42,7 @@ class ObservationsViewSet(viewsets.GenericViewSet):
 
     @extend_schema(
         summary="Create observations",
-        description="Create one or more observation records (blood pressure, heart rate, body temperature, respiratory rate, blood sugar, oxygen saturation)",
+        description="Create one or more observation records. The user is automatically set to the authenticated user.",
         request=ObservationsSerializer,
         responses={201: ObservationDataSerializer},
         examples=[
@@ -51,7 +51,6 @@ class ObservationsViewSet(viewsets.GenericViewSet):
                 value={
                     "blood_pressure": {
                         "patient": 1,
-                        "user": 1,
                         "systolic": 120,
                         "diastolic": 80,
                     }
@@ -62,20 +61,17 @@ class ObservationsViewSet(viewsets.GenericViewSet):
                 value={
                     "blood_pressure": {
                         "patient": 1,
-                        "user": 1,
                         "systolic": 120,
                         "diastolic": 80,
                     },
-                    "heart_rate": {"patient": 1, "user": 1, "heart_rate": 72},
+                    "heart_rate": {"patient": 1, "heart_rate": 72},
                     "respiratory_rate": {
                         "patient": 1,
-                        "user": 1,
                         "respiratory_rate": 16,
                     },
-                    "blood_sugar": {"patient": 1, "user": 1, "sugar_level": 120.0},
+                    "blood_sugar": {"patient": 1, "sugar_level": 120.0},
                     "oxygen_saturation": {
                         "patient": 1,
-                        "user": 1,
                         "saturation_percentage": 98,
                     },
                 },
@@ -83,7 +79,21 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         ],
     )
     def create(self, request):
-        serializer = ObservationsSerializer(data=request.data)
+        # Inject the authenticated user into each observation type
+        data = request.data.copy()
+        for observation_type in [
+            "blood_pressure",
+            "heart_rate",
+            "body_temperature",
+            "respiratory_rate",
+            "blood_sugar",
+            "oxygen_saturation",
+            "pain_score",
+        ]:
+            if observation_type in data and data[observation_type]:
+                data[observation_type]["user"] = request.user.id
+
+        serializer = ObservationsSerializer(data=data)
 
         if serializer.is_valid():
             try:
@@ -102,15 +112,8 @@ class ObservationsViewSet(viewsets.GenericViewSet):
 
     @extend_schema(
         summary="List observations",
-        description="Retrieve observations for a specific user and patient",
+        description="Retrieve observations for the authenticated user and a specific patient",
         parameters=[
-            OpenApiParameter(
-                name="user",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=True,
-                description="User ID",
-            ),
             OpenApiParameter(
                 name="patient",
                 type=int,
@@ -122,12 +125,13 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         responses={200: ObservationDataSerializer},
     )
     def list(self, request):
-        user_id = request.query_params.get("user")
+        # Automatically use the authenticated user
+        user_id = request.user.id
         patient_id = request.query_params.get("patient")
 
-        if not user_id or not patient_id:
+        if not patient_id:
             return Response(
-                {"error": "Both user and patient parameters are required"},
+                {"error": "Patient parameter is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

@@ -74,6 +74,16 @@ class File(models.Model):
         super().clean()
         validate_pdf_for_pagination(self.file, self.requires_pagination)
 
+    def save(self, *args, **kwargs):
+        """
+        Override save method to automatically set display_name.
+        If display_name is not set and file is uploaded, extract filename.
+        """
+        if not self.display_name and self.file:
+            # Extract original filename from file path
+            self.display_name = os.path.basename(self.file.name)
+        super().save(*args, **kwargs)
+
     @staticmethod
     def upload_to(instance, filename):
         today = datetime.today().strftime("%Y/%m/%d")
