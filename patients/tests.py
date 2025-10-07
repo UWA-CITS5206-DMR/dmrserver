@@ -190,3 +190,421 @@ class PatientApiTests(APITestCase):
 
         # Verify display_name remains as the custom value
         self.assertEqual(file_obj.display_name, "Custom Display Name")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class FileManagementTestCase(APITestCase):
+    """
+    Unit tests for file management operations focusing on:
+    - requires_pagination field
+    - Permission enforcement for instructors/admins/students
+    - File category handling
+    - File CRUD operations
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test users with different roles."""
+        # Create groups
+        cls.admin_group = Group.objects.get_or_create(name=Role.ADMIN.value)[0]
+        cls.instructor_group = Group.objects.get_or_create(name=Role.INSTRUCTOR.value)[0]
+        cls.student_group = Group.objects.get_or_create(name=Role.STUDENT.value)[0]
+
+        # Create admin user
+        cls.admin_user = get_user_model().objects.create_user(
+            username="admin_user",
+            email="admin@example.com",
+            password="admin123",
+            is_superuser=True,
+        )
+
+        # Create instructor user
+        cls.instructor_user = get_user_model().objects.create_user(
+            username="instructor_user",
+            email="instructor@example.com",
+            password="instructor123",
+        )
+        cls.instructor_user.groups.add(cls.instructor_group)
+
+        # Create student user
+        cls.student_user = get_user_model().objects.create_user(
+            username="student_user",
+            email="student@example.com",
+            password="student123",
+        )
+        cls.student_user.groups.add(cls.student_group)
+
+        # Create a test patient
+        cls.patient = Patient.objects.create(
+            first_name="Test",
+            last_name="Patient",
+            date_of_birth="1990-01-01",
+            email="patient@example.com",
+            phone_number="+1234567890",
+        )
+
+    def setUp(self):
+        """Set up test client for each test."""
+        self.client: APIClient = APIClient()
+        self.media_root = settings.MEDIA_ROOT
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up media files after all tests."""
+        try:
+            if os.path.isdir(settings.MEDIA_ROOT):
+                shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        finally:
+            super().tearDownClass()
+
+    def _create_test_pdf(self, filename="test.pdf"):
+        """Create a simple test PDF file."""
+        # Minimal PDF structure
+        pdf_content = b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000115 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF"
+        return SimpleUploadedFile(filename, pdf_content, content_type="application/pdf")
+
+    def _create_test_txt(self, filename="test.txt", content=b"Test content"):
+        """Create a simple test text file."""
+        return SimpleUploadedFile(filename, content, content_type="text/plain")
+
+    def _get_file_list_url(self):
+        """Get URL for file list endpoint."""
+        return reverse("file-list", kwargs={"patient_pk": self.patient.id})
+
+    def _get_file_detail_url(self, file_id):
+        """Get URL for file detail endpoint."""
+        return reverse("file-detail", kwargs={"patient_pk": self.patient.id, "pk": str(file_id)})
+
+    # ==================== Permission Tests ====================
+
+    def test_instructor_can_upload_file(self):
+        """Test that instructor can upload files."""
+        self.client.force_authenticate(user=self.instructor_user)
+        url = self._get_file_list_url()
+
+        pdf_file = self._create_test_pdf()
+        data = {
+            "file": pdf_file,
+            "category": File.Category.IMAGING,
+            "requires_pagination": False,
+        }
+
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(File.objects.count(), 1)
+
+    def test_admin_can_upload_file(self):
+        """Test that admin can upload files."""
+        self.client.force_authenticate(user=self.admin_user)
+        url = self._get_file_list_url()
+
+        pdf_file = self._create_test_pdf()
+        data = {
+            "file": pdf_file,
+            "category": File.Category.PATHOLOGY,
+            "requires_pagination": False,
+        }
+
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_student_cannot_upload_file(self):
+        """Test that student cannot upload files."""
+        self.client.force_authenticate(user=self.student_user)
+        url = self._get_file_list_url()
+
+        pdf_file = self._create_test_pdf()
+        data = {
+            "file": pdf_file,
+            "category": File.Category.IMAGING,
+            "requires_pagination": False,
+        }
+
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(File.objects.count(), 0)
+
+    def test_unauthenticated_cannot_upload_file(self):
+        """Test that unauthenticated users cannot upload files."""
+        url = self._get_file_list_url()
+
+        pdf_file = self._create_test_pdf()
+        data = {
+            "file": pdf_file,
+            "category": File.Category.IMAGING,
+        }
+
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_instructor_can_delete_file(self):
+        """Test that instructor can delete files."""
+        self.client.force_authenticate(user=self.instructor_user)
+        
+        # Create a file first
+        file_obj = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="test.pdf",
+            category=File.Category.IMAGING,
+        )
+
+        url = self._get_file_detail_url(file_obj.id)
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(File.objects.count(), 0)
+
+    def test_student_cannot_delete_file(self):
+        """Test that student cannot delete files."""
+        self.client.force_authenticate(user=self.student_user)
+        
+        # Create a file first
+        file_obj = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="test.pdf",
+            category=File.Category.IMAGING,
+        )
+
+        url = self._get_file_detail_url(file_obj.id)
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(File.objects.count(), 1)
+
+    def test_instructor_can_update_file_metadata(self):
+        """Test that instructor can update file metadata."""
+        self.client.force_authenticate(user=self.instructor_user)
+        
+        # Create a file first
+        file_obj = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="test.pdf",
+            category=File.Category.IMAGING,
+            requires_pagination=False,
+        )
+
+        url = self._get_file_detail_url(file_obj.id)
+        data = {
+            "category": File.Category.PATHOLOGY,
+            "requires_pagination": True,
+        }
+
+        response = self.client.patch(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        file_obj.refresh_from_db()
+        self.assertEqual(file_obj.category, File.Category.PATHOLOGY)
+        self.assertTrue(file_obj.requires_pagination)
+
+    def test_student_cannot_update_file(self):
+        """Test that student cannot update file metadata."""
+        self.client.force_authenticate(user=self.student_user)
+        
+        # Create a file first
+        file_obj = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="test.pdf",
+            category=File.Category.IMAGING,
+        )
+
+        url = self._get_file_detail_url(file_obj.id)
+        data = {"category": File.Category.PATHOLOGY}
+
+        response = self.client.patch(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    # ==================== requires_pagination Field Tests ====================
+
+    def test_upload_pdf_with_pagination_enabled(self):
+        """Test uploading a PDF with requires_pagination=True."""
+        self.client.force_authenticate(user=self.instructor_user)
+        url = self._get_file_list_url()
+
+        pdf_file = self._create_test_pdf("paginated.pdf")
+        data = {
+            "file": pdf_file,
+            "category": File.Category.IMAGING,
+            "requires_pagination": True,
+        }
+
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        file_obj = File.objects.first()
+        self.assertTrue(file_obj.requires_pagination)
+        self.assertEqual(file_obj.category, File.Category.IMAGING)
+
+    def test_upload_non_pdf_with_pagination_fails(self):
+        """Test that non-PDF files cannot have requires_pagination=True."""
+        self.client.force_authenticate(user=self.instructor_user)
+        url = self._get_file_list_url()
+
+        txt_file = self._create_test_txt("document.txt")
+        data = {
+            "file": txt_file,
+            "category": File.Category.OTHER,
+            "requires_pagination": True,
+        }
+
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("requires_pagination", response.data)
+        self.assertEqual(File.objects.count(), 0)
+
+    def test_upload_pdf_without_pagination(self):
+        """Test uploading a PDF with requires_pagination=False."""
+        self.client.force_authenticate(user=self.instructor_user)
+        url = self._get_file_list_url()
+
+        pdf_file = self._create_test_pdf("non_paginated.pdf")
+        data = {
+            "file": pdf_file,
+            "category": File.Category.PATHOLOGY,
+            "requires_pagination": False,
+        }
+
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        file_obj = File.objects.first()
+        self.assertFalse(file_obj.requires_pagination)
+
+    def test_update_pagination_to_true_for_pdf(self):
+        """Test updating requires_pagination to True for an existing PDF."""
+        self.client.force_authenticate(user=self.instructor_user)
+        
+        # Create PDF file with pagination disabled
+        file_obj = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="test.pdf",
+            category=File.Category.IMAGING,
+            requires_pagination=False,
+        )
+
+        url = self._get_file_detail_url(file_obj.id)
+        data = {"requires_pagination": True}
+
+        response = self.client.patch(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        file_obj.refresh_from_db()
+        self.assertTrue(file_obj.requires_pagination)
+
+    # ==================== Category Tests ====================
+
+    def test_upload_file_with_different_categories(self):
+        """Test uploading files with different category values."""
+        self.client.force_authenticate(user=self.instructor_user)
+        url = self._get_file_list_url()
+
+        categories = [
+            File.Category.ADMISSION,
+            File.Category.PATHOLOGY,
+            File.Category.IMAGING,
+            File.Category.DIAGNOSTICS,
+            File.Category.LAB_RESULTS,
+            File.Category.OTHER,
+        ]
+
+        for i, category in enumerate(categories):
+            pdf_file = self._create_test_pdf(f"test_{i}.pdf")
+            data = {
+                "file": pdf_file,
+                "category": category,
+                "requires_pagination": False,
+            }
+
+            response = self.client.post(url, data, format="multipart")
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(response.data["category"], category)
+
+        self.assertEqual(File.objects.count(), len(categories))
+
+    def test_default_category_is_other(self):
+        """Test that default category is OTHER when not specified."""
+        self.client.force_authenticate(user=self.instructor_user)
+        url = self._get_file_list_url()
+
+        pdf_file = self._create_test_pdf()
+        data = {"file": pdf_file}
+
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["category"], File.Category.OTHER)
+
+    # ==================== Display Name Tests ====================
+
+    def test_file_upload_display_name_auto_generated(self):
+        """Test that display_name is automatically generated from filename."""
+        self.client.force_authenticate(user=self.instructor_user)
+        url = self._get_file_list_url()
+
+        pdf_file = self._create_test_pdf("my_report.pdf")
+        data = {
+            "file": pdf_file,
+            "category": File.Category.PATHOLOGY,
+        }
+
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["display_name"], "my_report.pdf")
+
+    # ==================== List and Retrieve Tests ====================
+
+    def test_instructor_can_list_files(self):
+        """Test that instructor can list all files for a patient."""
+        self.client.force_authenticate(user=self.instructor_user)
+        
+        # Create multiple files
+        for i in range(3):
+            File.objects.create(
+                patient=self.patient,
+                file=self._create_test_pdf(f"test_{i}.pdf"),
+                display_name=f"test_{i}.pdf",
+                category=File.Category.IMAGING,
+            )
+
+        url = self._get_file_list_url()
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 3)
+
+    def test_instructor_can_retrieve_file_details(self):
+        """Test that instructor can retrieve file details."""
+        self.client.force_authenticate(user=self.instructor_user)
+        
+        file_obj = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="test.pdf",
+            category=File.Category.PATHOLOGY,
+            requires_pagination=True,
+        )
+
+        url = self._get_file_detail_url(file_obj.id)
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], str(file_obj.id))
+        self.assertEqual(response.data["category"], File.Category.PATHOLOGY)
+        self.assertTrue(response.data["requires_pagination"])
+
+    def test_student_cannot_list_files(self):
+        """Test that student cannot list files directly."""
+        self.client.force_authenticate(user=self.student_user)
+        
+        File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="test.pdf",
+            category=File.Category.IMAGING,
+        )
+
+        url = self._get_file_list_url()
+        response = self.client.get(url)
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

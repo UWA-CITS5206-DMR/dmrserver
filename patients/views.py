@@ -5,7 +5,7 @@ from django.http import Http404, HttpResponse, HttpResponseForbidden
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiExample
 from PyPDF2 import PdfReader, PdfWriter
 
 from core.permissions import (
@@ -18,12 +18,53 @@ from .serializers import PatientSerializer, FileSerializer
 
 
 class PatientViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing patient records.
+    
+    Provides CRUD operations for patients.
+    - Students: read-only access
+    - Instructors/Admins: full CRUD access
+    """
     queryset = Patient.objects.all()
     serializer_class = PatientSerializer
     permission_classes = [PatientPermission]
 
+    @extend_schema(
+        summary="Upload file for patient (Legacy)",
+        description="Legacy endpoint for uploading files to a patient. "
+                    "Consider using POST /api/patients/{patient_pk}/files/ instead for better REST compliance. "
+                    "This endpoint supports file upload with category and pagination settings.",
+        request=FileSerializer,
+        responses={201: FileSerializer},
+        examples=[
+            OpenApiExample(
+                "Upload PDF with pagination",
+                value={
+                    "file": "file.pdf",
+                    "category": "Imaging",
+                    "requires_pagination": True
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Upload regular file",
+                value={
+                    "file": "document.txt",
+                    "category": "Other",
+                    "requires_pagination": False
+                },
+                request_only=True,
+            ),
+        ],
+    )
     @action(detail=True, methods=["post"], serializer_class=FileSerializer)
     def upload_file(self, request, pk=None):
+        """
+        Upload a file for a specific patient.
+        
+        Note: This is a legacy endpoint. For new implementations,
+        prefer using FileViewSet.create (POST /api/patients/{patient_pk}/files/).
+        """
         patient = self.get_object()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -37,12 +78,128 @@ class PatientViewSet(viewsets.ModelViewSet):
 
 
 class FileViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing patient files.
+    
+    Provides full CRUD operations for file management:
+    - List files for a specific patient
+    - Create/upload new files with category and pagination settings
+    - Retrieve file details
+    - Update file metadata (category, pagination settings)
+    - Delete files (removes from disk)
+    - View file content with optional PDF pagination
+    
+    Permissions:
+    - Instructors/Admins: Full CRUD access (via FileManagementPermission)
+    - Students: No direct CRUD access
+    - File viewing (view action) uses separate FileAccessPermission
+    
+    File Categories:
+    - Admission: Admission documents
+    - Pathology: Pathology reports
+    - Imaging: Imaging results (X-rays, CT scans, etc.)
+    - Diagnostics: Diagnostic test results
+    - Lab Results: Laboratory test results
+    - Other: Miscellaneous files
+    """
     queryset = File.objects.all()
     serializer_class = FileSerializer
     permission_classes = [FileManagementPermission]
 
     def get_queryset(self):
+        """Filter files by patient_pk from the nested route."""
         return File.objects.filter(patient_id=self.kwargs["patient_pk"])
+
+    @extend_schema(
+        summary="List files for a patient",
+        description="Returns all files associated with a specific patient. "
+                    "Only accessible by instructors and admins.",
+        responses={200: FileSerializer(many=True)},
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Upload a new file",
+        description="Upload a new file for a patient. "
+                    "The file can be categorized using the 'category' field. "
+                    "For PDF files, set 'requires_pagination' to true to enable page-based authorization. "
+                    "Only accessible by instructors and admins.",
+        request=FileSerializer,
+        responses={201: FileSerializer},
+        examples=[
+            OpenApiExample(
+                "Upload PDF with pagination enabled",
+                value={
+                    "file": "(binary data)",
+                    "category": "Imaging",
+                    "requires_pagination": True
+                },
+                request_only=True,
+                description="Upload a PDF file with pagination enabled for granular access control"
+            ),
+            OpenApiExample(
+                "Upload pathology report",
+                value={
+                    "file": "(binary data)",
+                    "category": "Pathology",
+                    "requires_pagination": False
+                },
+                request_only=True,
+                description="Upload a regular pathology report without pagination"
+            ),
+        ],
+    )
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Retrieve file details",
+        description="Get metadata for a specific file including category, pagination status, and creation date. "
+                    "Only accessible by instructors and admins.",
+        responses={200: FileSerializer},
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Update file metadata",
+        description="Update file metadata such as category or pagination settings. "
+                    "Note: The actual file content cannot be updated - delete and recreate instead. "
+                    "Only accessible by instructors and admins.",
+        request=FileSerializer,
+        responses={200: FileSerializer},
+    )
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Partially update file metadata",
+        description="Partially update file metadata such as category or pagination settings. "
+                    "Only accessible by instructors and admins.",
+        request=FileSerializer,
+        responses={200: FileSerializer},
+    )
+    def partial_update(self, request, *args, **kwargs):
+        return super().partial_update(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Delete a file",
+        description="Delete a file and remove it from disk. "
+                    "This will also remove any approved file associations. "
+                    "Only accessible by instructors and admins.",
+        responses={204: None},
+    )
+    def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        """
+        Override perform_create to automatically set the patient from the URL.
+        The patient_pk comes from the nested route.
+        """
+        patient_id = self.kwargs.get('patient_pk')
+        serializer.save(patient_id=patient_id)
 
     @extend_schema(
         summary="View a specific file",
