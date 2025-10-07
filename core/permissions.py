@@ -236,18 +236,20 @@ class FileAccessPermission(BaseRolePermission):
 
         # Students must have an approved lab request for this file
         if user_role == Role.STUDENT.value:
-            # Check across all request types that can approve files
+            # Check if file is approved in any completed lab request for this student
             imaging_request_exists = ApprovedFile.objects.filter(
                 file=obj,
                 imaging_request__user=user,
                 imaging_request__status="completed",
             ).exists()
-            # Extend this logic if other request types can approve files
-            # For example:
-            # blood_test_request_exists = ApprovedFile.objects.filter(
-            #     file=obj, blood_test_request__user=user, blood_test_request__status="completed"
-            # ).exists()
-            return imaging_request_exists  # or blood_test_request_exists
+
+            blood_test_request_exists = ApprovedFile.objects.filter(
+                file=obj,
+                blood_test_request__user=user,
+                blood_test_request__status="completed",
+            ).exists()
+
+            return imaging_request_exists or blood_test_request_exists
 
         return False
 

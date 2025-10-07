@@ -9,7 +9,7 @@ class ImagingRequestSerializer(BaseModelSerializer):
     """
     Serializer for instructors to create/manage imaging requests.
     Allows instructors to set the user field when creating requests.
-    
+
     Returns full user and patient details on read operations,
     while accepting IDs for write operations.
     """
@@ -54,7 +54,7 @@ class ImagingRequestSerializer(BaseModelSerializer):
                 # The ApprovedFileSerializer.validate() now returns a File instance
                 file = approved_file_data.get("file")
                 page_range = approved_file_data.get("page_range")
-                
+
                 if file:
                     ApprovedFile.objects.create(
                         imaging_request=instance, file=file, page_range=page_range
@@ -105,7 +105,7 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
                 # The ApprovedFileSerializer.validate() now returns a File instance
                 file = approved_file_data.get("file")
                 page_range = approved_file_data.get("page_range")
-                
+
                 if file:
                     ApprovedFile.objects.create(
                         imaging_request=instance,
@@ -123,7 +123,7 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
 class BloodTestRequestSerializer(BaseModelSerializer):
     """
     Serializer for instructors to create/manage blood test requests.
-    
+
     Returns full user and patient details on read operations,
     while accepting IDs for write operations.
     """

@@ -71,7 +71,7 @@ class FileSerializer(serializers.ModelSerializer):
 class PatientSerializer(serializers.ModelSerializer):
     """
     Serializer for Patient model.
-    
+
     Files are managed separately through the File API endpoints.
     Students access files through approved_files in completed lab requests.
     Instructors access files through the dedicated File management endpoints.

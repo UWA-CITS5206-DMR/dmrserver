@@ -25,7 +25,7 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
     Unified serializer for ApprovedFile with context-aware field selection.
     Use context={'for_student': True} to get student-friendly view.
     Use context={'for_instructor': True} to get instructor management view.
-    
+
     Accepts both flat and nested file_id structures:
     - Flat: {"file_id": "uuid", "page_range": "1-5"}
     - Nested: {"file": {"id": "uuid"}, "page_range": "1-5"}
@@ -52,13 +52,13 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "file": {"write_only": True},
         }
-    
+
     def to_representation(self, instance):
         """
         Override to include file_id in read operations.
         """
         representation = super().to_representation(instance)
-        representation['file_id'] = str(instance.file.id)
+        representation["file_id"] = str(instance.file.id)
         return representation
 
     def get_fields(self):
@@ -90,13 +90,13 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
         Handle flat file_id structure by treating it as the file field.
         """
         # Make a copy to avoid mutating the original data
-        data = data.copy() if hasattr(data, 'copy') else dict(data)
-        
+        data = data.copy() if hasattr(data, "copy") else dict(data)
+
         # Check if file_id is provided at the top level (flat structure)
-        if 'file_id' in data and 'file' not in data:
+        if "file_id" in data and "file" not in data:
             # Set file_id as the file field value - DRF will handle the lookup
-            data['file'] = data.pop('file_id')
-        
+            data["file"] = data.pop("file_id")
+
         return super().to_internal_value(data)
 
     def validate(self, data):
@@ -104,7 +104,7 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
         Validate that the file exists and pagination requirements are met.
         """
         from patients.models import File
-        
+
         # Get the file instance
         file_instance = data.get("file")
         page_range = data.get("page_range")

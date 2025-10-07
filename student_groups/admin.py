@@ -186,6 +186,7 @@ class ImagingRequestAdmin(admin.ModelAdmin):
 
 class ApprovedFileBloodTestInline(admin.TabularInline):
     """Inline admin for approved files in blood test requests."""
+
     model = ApprovedFile
     fk_name = "blood_test_request"
     extra = 1

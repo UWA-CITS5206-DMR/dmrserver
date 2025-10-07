@@ -426,6 +426,7 @@ class ApprovedFile(models.Model):
     Approved file with page range support for both ImagingRequest and BloodTestRequest.
     Each ApprovedFile must be associated with either an ImagingRequest OR a BloodTestRequest.
     """
+
     imaging_request = models.ForeignKey(
         ImagingRequest,
         on_delete=models.CASCADE,
@@ -454,8 +455,12 @@ class ApprovedFile(models.Model):
         constraints = [
             models.CheckConstraint(
                 check=(
-                    models.Q(imaging_request__isnull=False, blood_test_request__isnull=True)
-                    | models.Q(imaging_request__isnull=True, blood_test_request__isnull=False)
+                    models.Q(
+                        imaging_request__isnull=False, blood_test_request__isnull=True
+                    )
+                    | models.Q(
+                        imaging_request__isnull=True, blood_test_request__isnull=False
+                    )
                 ),
                 name="approved_file_single_request_type",
             ),
@@ -466,7 +471,7 @@ class ApprovedFile(models.Model):
         Validate that exactly one request type is set.
         """
         from django.core.exceptions import ValidationError
-        
+
         if not self.imaging_request and not self.blood_test_request:
             raise ValidationError(
                 "ApprovedFile must be associated with either an ImagingRequest or a BloodTestRequest."

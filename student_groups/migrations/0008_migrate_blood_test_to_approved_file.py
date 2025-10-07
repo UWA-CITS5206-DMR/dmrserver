@@ -8,12 +8,12 @@ def migrate_blood_test_approved_files(apps, schema_editor):
     """
     Migrate existing BloodTestRequest.approved_files relationships to use ApprovedFile through table.
     """
-    BloodTestRequest = apps.get_model('student_groups', 'BloodTestRequest')
-    ApprovedFile = apps.get_model('student_groups', 'ApprovedFile')
-    
+    BloodTestRequest = apps.get_model("student_groups", "BloodTestRequest")
+    ApprovedFile = apps.get_model("student_groups", "ApprovedFile")
+
     # Get the through model for the old M2M relationship
     ThroughModel = BloodTestRequest.approved_files.through
-    
+
     # Migrate all existing relationships
     for relationship in ThroughModel.objects.all():
         ApprovedFile.objects.create(
@@ -27,12 +27,12 @@ def reverse_migration(apps, schema_editor):
     """
     Reverse the migration by moving ApprovedFile records back to direct M2M.
     """
-    BloodTestRequest = apps.get_model('student_groups', 'BloodTestRequest')
-    ApprovedFile = apps.get_model('student_groups', 'ApprovedFile')
-    
+    BloodTestRequest = apps.get_model("student_groups", "BloodTestRequest")
+    ApprovedFile = apps.get_model("student_groups", "ApprovedFile")
+
     # Get the through model
     ThroughModel = BloodTestRequest.approved_files.through
-    
+
     # Move ApprovedFile records back to direct M2M
     for approved_file in ApprovedFile.objects.filter(blood_test_request__isnull=False):
         ThroughModel.objects.get_or_create(
@@ -44,40 +44,39 @@ def reverse_migration(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('patients', '0004_file_category'),
-        ('student_groups', '0007_note_role_bloodtestrequest_dischargesummary_and_more'),
+        ("patients", "0004_file_category"),
+        ("student_groups", "0007_note_role_bloodtestrequest_dischargesummary_and_more"),
     ]
 
     operations = [
         # Step 1: Remove unique_together constraint from ApprovedFile
         migrations.AlterUniqueTogether(
-            name='approvedfile',
+            name="approvedfile",
             unique_together=set(),
         ),
         # Step 2: Add blood_test_request field to ApprovedFile (nullable for now)
         migrations.AddField(
-            model_name='approvedfile',
-            name='blood_test_request',
+            model_name="approvedfile",
+            name="blood_test_request",
             field=models.ForeignKey(
                 blank=True,
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
-                related_name='approved_files_through',
-                to='student_groups.bloodtestrequest'
+                related_name="approved_files_through",
+                to="student_groups.bloodtestrequest",
             ),
         ),
         # Step 3: Make imaging_request nullable
         migrations.AlterField(
-            model_name='approvedfile',
-            name='imaging_request',
+            model_name="approvedfile",
+            name="imaging_request",
             field=models.ForeignKey(
                 blank=True,
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
-                related_name='approved_files_through',
-                to='student_groups.imagingrequest'
+                related_name="approved_files_through",
+                to="student_groups.imagingrequest",
             ),
         ),
         # Step 4: Migrate existing BloodTestRequest.approved_files data
@@ -87,30 +86,36 @@ class Migration(migrations.Migration):
         ),
         # Step 5: Remove the old M2M field from BloodTestRequest
         migrations.RemoveField(
-            model_name='bloodtestrequest',
-            name='approved_files',
+            model_name="bloodtestrequest",
+            name="approved_files",
         ),
         # Step 6: Add the new M2M field with through table
         migrations.AddField(
-            model_name='bloodtestrequest',
-            name='approved_files',
+            model_name="bloodtestrequest",
+            name="approved_files",
             field=models.ManyToManyField(
-                related_name='blood_test_requests',
-                through='student_groups.ApprovedFile',
-                to='patients.file',
-                verbose_name='Approved Files'
+                related_name="blood_test_requests",
+                through="student_groups.ApprovedFile",
+                to="patients.file",
+                verbose_name="Approved Files",
             ),
         ),
         # Step 7: Add constraint to ensure only one request type per ApprovedFile
         migrations.AddConstraint(
-            model_name='approvedfile',
+            model_name="approvedfile",
             constraint=models.CheckConstraint(
                 check=models.Q(
-                    models.Q(('imaging_request__isnull', False), ('blood_test_request__isnull', True)),
-                    models.Q(('imaging_request__isnull', True), ('blood_test_request__isnull', False)),
-                    _connector='OR'
+                    models.Q(
+                        ("imaging_request__isnull", False),
+                        ("blood_test_request__isnull", True),
+                    ),
+                    models.Q(
+                        ("imaging_request__isnull", True),
+                        ("blood_test_request__isnull", False),
+                    ),
+                    _connector="OR",
                 ),
-                name='approved_file_single_request_type'
+                name="approved_file_single_request_type",
             ),
         ),
     ]

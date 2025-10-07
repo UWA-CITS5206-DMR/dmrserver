@@ -111,7 +111,7 @@ class InstructorViewSetTestCase(APITestCase):
             f"/api/instructors/imaging-requests/{self.imaging_request.id}/"
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         # Verify user is a full object with expected fields
         self.assertIn("user", response.data)
         self.assertIsInstance(response.data["user"], dict)
@@ -119,7 +119,7 @@ class InstructorViewSetTestCase(APITestCase):
         self.assertIn("username", response.data["user"])
         self.assertIn("email", response.data["user"])
         self.assertEqual(response.data["user"]["username"], "student1")
-        
+
         # Verify patient is a full object with expected fields
         self.assertIn("patient", response.data)
         self.assertIsInstance(response.data["patient"], dict)
@@ -137,14 +137,14 @@ class InstructorViewSetTestCase(APITestCase):
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get("/api/instructors/imaging-requests/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         first_item = response.data["results"][0]
-        
+
         # Verify user is a full object
         self.assertIsInstance(first_item["user"], dict)
         self.assertIn("username", first_item["user"])
         self.assertEqual(first_item["user"]["username"], "student1")
-        
+
         # Verify patient is a full object
         self.assertIsInstance(first_item["patient"], dict)
         self.assertIn("first_name", first_item["patient"])
