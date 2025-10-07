@@ -100,7 +100,7 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
         instance = super().update(instance, validated_data)
 
         if approved_files_data:
-            instance.approvedfile_set.all().delete()
+            instance.approved_files_through.all().delete()
             for approved_file_data in approved_files_data:
                 # The ApprovedFileSerializer.validate() now returns a File instance
                 file = approved_file_data.get("file")
@@ -115,7 +115,7 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
         elif (
             "approved_files" in self.initial_data
         ):  # If an empty list is passed, clear the files
-            instance.approvedfile_set.all().delete()
+            instance.approved_files_through.all().delete()
 
         return instance
 
@@ -187,23 +187,24 @@ class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
-        # BloodTestRequest uses a direct ManyToManyField, not through ApprovedFile
-        # So we need different handling than ImagingRequest
+        # BloodTestRequest now uses through="ApprovedFile" like ImagingRequest
         approved_files_data = validated_data.pop("approvedfile_set", [])
 
         instance = super().update(instance, validated_data)
 
         if approved_files_data:
             # Clear existing approved files
-            instance.approved_files.clear()
-            # Add new approved files from the validated data
+            instance.approved_files_through.all().delete()
+            # Create new ApprovedFile objects with blood_test_request FK
             for approved_file_data in approved_files_data:
                 file = approved_file_data.get("file")
+                page_range = approved_file_data.get("page_range", "")
                 if file:
-                    # Note: page_range is ignored for BloodTestRequest as it uses direct M2M
-                    instance.approved_files.add(file)
+                    ApprovedFile.objects.create(
+                        blood_test_request=instance, file=file, page_range=page_range
+                    )
         elif "approved_files" in self.initial_data:
             # If an empty list is passed, clear the files
-            instance.approved_files.clear()
+            instance.approved_files_through.all().delete()
 
         return instance

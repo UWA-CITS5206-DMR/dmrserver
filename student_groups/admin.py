@@ -184,6 +184,14 @@ class ImagingRequestAdmin(admin.ModelAdmin):
     )
 
 
+class ApprovedFileBloodTestInline(admin.TabularInline):
+    """Inline admin for approved files in blood test requests."""
+    model = ApprovedFile
+    fk_name = "blood_test_request"
+    extra = 1
+    autocomplete_fields = ["file"]
+
+
 @admin.register(BloodTestRequest)
 class BloodTestRequestAdmin(admin.ModelAdmin):
     """Admin for blood test requests."""
@@ -207,7 +215,7 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
     ]
     autocomplete_fields = ["patient", "user"]
     readonly_fields = ["created_at", "updated_at"]
-    filter_horizontal = ["approved_files"]
+    inlines = [ApprovedFileBloodTestInline]
 
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
@@ -220,7 +228,6 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
                     "test_type",
                     "reason",
                     "status",
-                    "approved_files",
                 )
             },
         ),
