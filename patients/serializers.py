@@ -69,7 +69,13 @@ class FileSerializer(serializers.ModelSerializer):
 
 
 class PatientSerializer(serializers.ModelSerializer):
-    files = FileSerializer(many=True, read_only=True)
+    """
+    Serializer for Patient model.
+    
+    Files are managed separately through the File API endpoints.
+    Students access files through approved_files in completed lab requests.
+    Instructors access files through the dedicated File management endpoints.
+    """
 
     class Meta:
         model = Patient
@@ -82,7 +88,6 @@ class PatientSerializer(serializers.ModelSerializer):
             "phone_number",
             "created_at",
             "updated_at",
-            "files",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 

@@ -15,7 +15,7 @@ class ImagingRequestSerializer(BaseModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approvedfile_set", many=True, required=False
+        source="approved_files_through", many=True, required=False
     )
 
     class Meta:
@@ -45,11 +45,11 @@ class ImagingRequestSerializer(BaseModelSerializer):
         return representation
 
     def update(self, instance, validated_data):
-        approved_files_data = validated_data.pop("approvedfile_set", None)
+        approved_files_data = validated_data.pop("approved_files_through", None)
         instance = super().update(instance, validated_data)
 
         if approved_files_data is not None:
-            instance.approvedfile_set.all().delete()
+            instance.approved_files_through.all().delete()
             for approved_file_data in approved_files_data:
                 # The ApprovedFileSerializer.validate() now returns a File instance
                 file = approved_file_data.get("file")
@@ -70,7 +70,7 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approvedfile_set", many=True, required=False
+        source="approved_files_through", many=True, required=False
     )
 
     class Meta:
@@ -95,7 +95,7 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
-        approved_files_data = validated_data.pop("approvedfile_set", [])
+        approved_files_data = validated_data.pop("approved_files_through", [])
 
         instance = super().update(instance, validated_data)
 
@@ -129,7 +129,7 @@ class BloodTestRequestSerializer(BaseModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approvedfile_set", many=True, required=False
+        source="approved_files_through", many=True, required=False
     )
 
     class Meta:
@@ -165,7 +165,7 @@ class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approvedfile_set", many=True, required=False
+        source="approved_files_through", many=True, required=False
     )
 
     class Meta:
@@ -188,7 +188,7 @@ class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         # BloodTestRequest now uses through="ApprovedFile" like ImagingRequest
-        approved_files_data = validated_data.pop("approvedfile_set", [])
+        approved_files_data = validated_data.pop("approved_files_through", [])
 
         instance = super().update(instance, validated_data)
 

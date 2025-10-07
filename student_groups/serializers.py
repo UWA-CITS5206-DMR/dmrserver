@@ -136,7 +136,7 @@ class ImagingRequestSerializer(BaseModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approvedfile_set", many=True, required=False
+        source="approved_files_through", many=True, required=False
     )
 
     class Meta:
@@ -308,7 +308,7 @@ class PainScoreSerializer(BaseModelSerializer):
 
 class BloodTestRequestSerializer(BaseModelSerializer):
     approved_files = ApprovedFileSerializer(
-        source="approvedfile_set", many=True, required=False
+        source="approved_files_through", many=True, required=False
     )
 
     class Meta:
