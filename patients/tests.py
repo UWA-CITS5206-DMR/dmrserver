@@ -608,3 +608,260 @@ class FileManagementTestCase(APITestCase):
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class FileUploadMultipartParserTests(APITestCase):
+    """
+    Test file upload functionality with multipart/form-data parser.
+    
+    These tests verify that the MultiPartParser is properly configured
+    to handle binary file content (including non-UTF-8 bytes) without
+    attempting to decode them as UTF-8 JSON.
+    
+    Related Issue: Fixed JSON parse error when uploading PDF files
+    with binary content containing bytes like 0xe2.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for all tests in this class."""
+        cls.instructor_group, _ = Group.objects.get_or_create(
+            name=Role.INSTRUCTOR.value
+        )
+        cls.instructor_user = get_user_model().objects.create_user(
+            username="test_instructor",
+            email="instructor@test.com",
+            password="testpass123",
+        )
+        cls.instructor_user.groups.add(cls.instructor_group)
+
+    def setUp(self):
+        """Set up test fixtures for each test method."""
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.instructor_user)
+        self.media_root = settings.MEDIA_ROOT
+        
+        # Create test patient
+        self.patient = Patient.objects.create(
+            first_name="Test",
+            last_name="Patient",
+            date_of_birth="1990-01-01",
+            email="test@example.com",
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up after all tests in this class."""
+        try:
+            if os.path.isdir(settings.MEDIA_ROOT):
+                shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        finally:
+            super().tearDownClass()
+
+    def _create_pdf_with_binary_content(self, filename="test.pdf"):
+        """
+        Create a PDF file with binary content that includes non-UTF-8 bytes.
+        
+        This simulates real PDF files which contain binary data that cannot
+        be decoded as UTF-8. The byte sequence 0xe2 was specifically causing
+        errors before the parser fix.
+        """
+        # Create PDF with binary content including problematic bytes
+        pdf_content = b'%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n'
+        pdf_content += b'\xe2\x80\x99'  # Non-UTF-8 byte sequence (right single quotation mark)
+        pdf_content += b'\n2 0 obj\n<<\n/Type /Pages\n>>\nendobj\n'
+        pdf_content += b'%%EOF'
+        
+        return SimpleUploadedFile(
+            name=filename,
+            content=pdf_content,
+            content_type="application/pdf"
+        )
+
+    def test_upload_pdf_with_binary_content(self):
+        """
+        Test uploading a PDF file with binary content via multipart/form-data.
+        
+        This test verifies that:
+        1. Binary PDF content with non-UTF-8 bytes is properly handled
+        2. MultiPartParser correctly parses the multipart request
+        3. No UTF-8 decode errors occur
+        4. File is saved correctly to disk
+        5. Database record is created with correct metadata
+        """
+        url = reverse("file-list", kwargs={"patient_pk": self.patient.id})
+        
+        pdf_file = self._create_pdf_with_binary_content("Admission Proforma Toni Baxter.pdf")
+        data = {
+            "file": pdf_file,
+            "category": File.Category.ADMISSION,
+            "requires_pagination": False,
+        }
+        
+        response = self.client.post(url, data, format="multipart")
+        
+        # Verify successful upload
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("id", response.data)
+        self.assertEqual(response.data["category"], File.Category.ADMISSION)
+        self.assertFalse(response.data["requires_pagination"])
+        self.assertEqual(response.data["display_name"], "Admission Proforma Toni Baxter.pdf")
+        
+        # Verify file was created in database
+        file_obj = File.objects.get(id=response.data["id"])
+        self.assertEqual(file_obj.patient, self.patient)
+        self.assertEqual(file_obj.category, File.Category.ADMISSION)
+        self.assertFalse(file_obj.requires_pagination)
+        
+        # Verify file was saved to disk
+        self.assertTrue(os.path.exists(file_obj.file.path))
+
+    def test_upload_pdf_with_binary_content_and_pagination(self):
+        """
+        Test uploading a PDF with binary content and requires_pagination=True.
+        
+        This ensures that the multipart parser works correctly with both
+        binary file data and boolean form fields.
+        """
+        url = reverse("file-list", kwargs={"patient_pk": self.patient.id})
+        
+        pdf_file = self._create_pdf_with_binary_content("imaging_report.pdf")
+        data = {
+            "file": pdf_file,
+            "category": File.Category.IMAGING,
+            "requires_pagination": True,
+        }
+        
+        response = self.client.post(url, data, format="multipart")
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["requires_pagination"])
+        self.assertEqual(response.data["category"], File.Category.IMAGING)
+        
+        file_obj = File.objects.get(id=response.data["id"])
+        self.assertTrue(file_obj.requires_pagination)
+
+    def test_upload_multiple_pdfs_with_binary_content(self):
+        """
+        Test uploading multiple PDF files with binary content sequentially.
+        
+        This verifies that the parser configuration works consistently
+        across multiple requests.
+        """
+        url = reverse("file-list", kwargs={"patient_pk": self.patient.id})
+        
+        categories = [
+            File.Category.ADMISSION,
+            File.Category.PATHOLOGY,
+            File.Category.IMAGING,
+        ]
+        
+        for i, category in enumerate(categories):
+            pdf_file = self._create_pdf_with_binary_content(f"test_{i}.pdf")
+            data = {
+                "file": pdf_file,
+                "category": category,
+                "requires_pagination": False,
+            }
+            
+            response = self.client.post(url, data, format="multipart")
+            
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(response.data["category"], category)
+        
+        # Verify all files were created
+        self.assertEqual(File.objects.filter(patient=self.patient).count(), 3)
+
+    def test_upload_pdf_via_legacy_endpoint(self):
+        """
+        Test uploading PDF with binary content via legacy upload_file endpoint.
+        
+        This ensures the legacy PatientViewSet.upload_file action also works
+        with the multipart parser configuration.
+        """
+        url = reverse("patient-upload-file", args=[self.patient.id])
+        
+        pdf_file = self._create_pdf_with_binary_content("legacy_upload.pdf")
+        data = {
+            "file": pdf_file,
+            "category": File.Category.LAB_RESULTS,
+            "requires_pagination": False,
+        }
+        
+        response = self.client.post(url, data, format="multipart")
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["category"], File.Category.LAB_RESULTS)
+        
+        # Verify file was created
+        file_obj = File.objects.filter(patient=self.patient).first()
+        self.assertIsNotNone(file_obj)
+        self.assertEqual(file_obj.display_name, "legacy_upload.pdf")
+
+    def test_multipart_parser_with_mixed_content_types(self):
+        """
+        Test that multipart parser correctly handles requests with mixed content.
+        
+        This test verifies that the parser can handle both:
+        - Binary file data (PDF with non-UTF-8 bytes)
+        - Text form fields (category, requires_pagination)
+        """
+        url = reverse("file-list", kwargs={"patient_pk": self.patient.id})
+        
+        # Create PDF with various binary sequences
+        pdf_content = b'%PDF-1.4\n'
+        pdf_content += b'\x00\x01\x02\x03'  # Binary bytes
+        pdf_content += b'\xe2\x80\x93'  # En dash (UTF-8 multi-byte)
+        pdf_content += b'\xff\xfe'  # BOM marker
+        pdf_content += b'%%EOF'
+        
+        pdf_file = SimpleUploadedFile(
+            name="mixed_content.pdf",
+            content=pdf_content,
+            content_type="application/pdf"
+        )
+        
+        data = {
+            "file": pdf_file,
+            "category": File.Category.DIAGNOSTICS,
+            "requires_pagination": True,
+        }
+        
+        response = self.client.post(url, data, format="multipart")
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["category"], File.Category.DIAGNOSTICS)
+        self.assertTrue(response.data["requires_pagination"])
+
+    def test_parser_preserves_binary_file_integrity(self):
+        """
+        Test that binary file content is preserved during upload.
+        
+        This verifies that the multipart parser does not corrupt or alter
+        the binary content of uploaded files.
+        """
+        url = reverse("file-list", kwargs={"patient_pk": self.patient.id})
+        
+        # Create specific binary content to verify
+        original_content = b'%PDF-1.4\n\xe2\x80\x99\xff\xfe\x00\x01%%EOF'
+        pdf_file = SimpleUploadedFile(
+            name="integrity_test.pdf",
+            content=original_content,
+            content_type="application/pdf"
+        )
+        
+        data = {
+            "file": pdf_file,
+            "category": File.Category.OTHER,
+        }
+        
+        response = self.client.post(url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # Read the saved file and verify content matches
+        file_obj = File.objects.get(id=response.data["id"])
+        with open(file_obj.file.path, 'rb') as f:
+            saved_content = f.read()
+        
+        self.assertEqual(saved_content, original_content)
