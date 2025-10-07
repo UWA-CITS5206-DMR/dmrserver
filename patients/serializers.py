@@ -7,12 +7,13 @@ from .models import Patient, File
 class FileSerializer(serializers.ModelSerializer):
     """
     Serializer for File model.
-    
+
     Handles file uploads with validation for:
     - Category selection
     - PDF pagination requirement (only PDFs can have requires_pagination=True)
     - Automatic display_name generation from uploaded filename
     """
+
     file = serializers.FileField(
         max_length=None,
         use_url=True,
@@ -41,17 +42,21 @@ class FileSerializer(serializers.ModelSerializer):
         Validate that requires_pagination can only be True for PDF files.
         This validation runs before model.clean() to provide clear API error messages.
         """
-        file_obj = attrs.get('file')
-        requires_pagination = attrs.get('requires_pagination', False)
-        
+        file_obj = attrs.get("file")
+        requires_pagination = attrs.get("requires_pagination", False)
+
         if requires_pagination and file_obj:
             filename = file_obj.name
             ext = os.path.splitext(filename)[1].lower()
-            if ext != '.pdf':
-                raise serializers.ValidationError({
-                    'requires_pagination': 'Only PDF files can be marked for pagination. Current file type: {}'.format(ext or 'unknown')
-                })
-        
+            if ext != ".pdf":
+                raise serializers.ValidationError(
+                    {
+                        "requires_pagination": "Only PDF files can be marked for pagination. Current file type: {}".format(
+                            ext or "unknown"
+                        )
+                    }
+                )
+
         return attrs
 
     def create(self, validated_data):

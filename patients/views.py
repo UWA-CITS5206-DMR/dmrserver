@@ -12,7 +12,10 @@ from core.permissions import (
     PatientPermission,
     FileAccessPermission,
     FileManagementPermission,
+    get_user_role,
 )
+from core.context import Role
+from student_groups.models import ApprovedFile
 from .models import Patient, File
 from .serializers import PatientSerializer, FileSerializer
 
@@ -20,11 +23,12 @@ from .serializers import PatientSerializer, FileSerializer
 class PatientViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing patient records.
-    
+
     Provides CRUD operations for patients.
     - Students: read-only access
     - Instructors/Admins: full CRUD access
     """
+
     queryset = Patient.objects.all()
     serializer_class = PatientSerializer
     permission_classes = [PatientPermission]
@@ -32,8 +36,8 @@ class PatientViewSet(viewsets.ModelViewSet):
     @extend_schema(
         summary="Upload file for patient (Legacy)",
         description="Legacy endpoint for uploading files to a patient. "
-                    "Consider using POST /api/patients/{patient_pk}/files/ instead for better REST compliance. "
-                    "This endpoint supports file upload with category and pagination settings.",
+        "Consider using POST /api/patients/{patient_pk}/files/ instead for better REST compliance. "
+        "This endpoint supports file upload with category and pagination settings.",
         request=FileSerializer,
         responses={201: FileSerializer},
         examples=[
@@ -42,7 +46,7 @@ class PatientViewSet(viewsets.ModelViewSet):
                 value={
                     "file": "file.pdf",
                     "category": "Imaging",
-                    "requires_pagination": True
+                    "requires_pagination": True,
                 },
                 request_only=True,
             ),
@@ -51,7 +55,7 @@ class PatientViewSet(viewsets.ModelViewSet):
                 value={
                     "file": "document.txt",
                     "category": "Other",
-                    "requires_pagination": False
+                    "requires_pagination": False,
                 },
                 request_only=True,
             ),
@@ -61,7 +65,7 @@ class PatientViewSet(viewsets.ModelViewSet):
     def upload_file(self, request, pk=None):
         """
         Upload a file for a specific patient.
-        
+
         Note: This is a legacy endpoint. For new implementations,
         prefer using FileViewSet.create (POST /api/patients/{patient_pk}/files/).
         """
@@ -80,7 +84,7 @@ class PatientViewSet(viewsets.ModelViewSet):
 class FileViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing patient files.
-    
+
     Provides full CRUD operations for file management:
     - List files for a specific patient
     - Create/upload new files with category and pagination settings
@@ -88,12 +92,12 @@ class FileViewSet(viewsets.ModelViewSet):
     - Update file metadata (category, pagination settings)
     - Delete files (removes from disk)
     - View file content with optional PDF pagination
-    
+
     Permissions:
     - Instructors/Admins: Full CRUD access (via FileManagementPermission)
     - Students: No direct CRUD access
     - File viewing (view action) uses separate FileAccessPermission
-    
+
     File Categories:
     - Admission: Admission documents
     - Pathology: Pathology reports
@@ -102,6 +106,7 @@ class FileViewSet(viewsets.ModelViewSet):
     - Lab Results: Laboratory test results
     - Other: Miscellaneous files
     """
+
     queryset = File.objects.all()
     serializer_class = FileSerializer
     permission_classes = [FileManagementPermission]
@@ -113,7 +118,7 @@ class FileViewSet(viewsets.ModelViewSet):
     @extend_schema(
         summary="List files for a patient",
         description="Returns all files associated with a specific patient. "
-                    "Only accessible by instructors and admins.",
+        "Only accessible by instructors and admins.",
         responses={200: FileSerializer(many=True)},
     )
     def list(self, request, *args, **kwargs):
@@ -122,9 +127,9 @@ class FileViewSet(viewsets.ModelViewSet):
     @extend_schema(
         summary="Upload a new file",
         description="Upload a new file for a patient. "
-                    "The file can be categorized using the 'category' field. "
-                    "For PDF files, set 'requires_pagination' to true to enable page-based authorization. "
-                    "Only accessible by instructors and admins.",
+        "The file can be categorized using the 'category' field. "
+        "For PDF files, set 'requires_pagination' to true to enable page-based authorization. "
+        "Only accessible by instructors and admins.",
         request=FileSerializer,
         responses={201: FileSerializer},
         examples=[
@@ -133,20 +138,20 @@ class FileViewSet(viewsets.ModelViewSet):
                 value={
                     "file": "(binary data)",
                     "category": "Imaging",
-                    "requires_pagination": True
+                    "requires_pagination": True,
                 },
                 request_only=True,
-                description="Upload a PDF file with pagination enabled for granular access control"
+                description="Upload a PDF file with pagination enabled for granular access control",
             ),
             OpenApiExample(
                 "Upload pathology report",
                 value={
                     "file": "(binary data)",
                     "category": "Pathology",
-                    "requires_pagination": False
+                    "requires_pagination": False,
                 },
                 request_only=True,
-                description="Upload a regular pathology report without pagination"
+                description="Upload a regular pathology report without pagination",
             ),
         ],
     )
@@ -156,7 +161,7 @@ class FileViewSet(viewsets.ModelViewSet):
     @extend_schema(
         summary="Retrieve file details",
         description="Get metadata for a specific file including category, pagination status, and creation date. "
-                    "Only accessible by instructors and admins.",
+        "Only accessible by instructors and admins.",
         responses={200: FileSerializer},
     )
     def retrieve(self, request, *args, **kwargs):
@@ -165,8 +170,8 @@ class FileViewSet(viewsets.ModelViewSet):
     @extend_schema(
         summary="Update file metadata",
         description="Update file metadata such as category or pagination settings. "
-                    "Note: The actual file content cannot be updated - delete and recreate instead. "
-                    "Only accessible by instructors and admins.",
+        "Note: The actual file content cannot be updated - delete and recreate instead. "
+        "Only accessible by instructors and admins.",
         request=FileSerializer,
         responses={200: FileSerializer},
     )
@@ -176,7 +181,7 @@ class FileViewSet(viewsets.ModelViewSet):
     @extend_schema(
         summary="Partially update file metadata",
         description="Partially update file metadata such as category or pagination settings. "
-                    "Only accessible by instructors and admins.",
+        "Only accessible by instructors and admins.",
         request=FileSerializer,
         responses={200: FileSerializer},
     )
@@ -186,8 +191,8 @@ class FileViewSet(viewsets.ModelViewSet):
     @extend_schema(
         summary="Delete a file",
         description="Delete a file and remove it from disk. "
-                    "This will also remove any approved file associations. "
-                    "Only accessible by instructors and admins.",
+        "This will also remove any approved file associations. "
+        "Only accessible by instructors and admins.",
         responses={204: None},
     )
     def destroy(self, request, *args, **kwargs):
@@ -198,38 +203,71 @@ class FileViewSet(viewsets.ModelViewSet):
         Override perform_create to automatically set the patient from the URL.
         The patient_pk comes from the nested route.
         """
-        patient_id = self.kwargs.get('patient_pk')
+        patient_id = self.kwargs.get("patient_pk")
         serializer.save(patient_id=patient_id)
 
     @extend_schema(
         summary="View a specific file",
-        description="Allows users with permission to view a file's content. For paginated PDFs, a 'page' or 'range' query parameter can be used.",
+        description=(
+            "View file content with role-based access control.\n\n"
+            "**For non-paginated files:** Returns the entire file.\n\n"
+            "**For paginated PDFs (requires_pagination=True):**\n"
+            "- **Instructors/Admins:** Can view any page range by specifying `?page_range` parameter:\n"
+            "  - `?page_range=5` - View a single page\n"
+            "  - `?page_range=1-5` - View a range of pages\n"
+            "  - `?page_range=1-5,7,10-12` - View multiple pages/ranges\n"
+            "- **Students:** Can only view pages from approved lab requests (ApprovedFile.page_range).\n"
+            "  Students can optionally specify pages within their approved range.\n\n"
+            "**Authorization:**\n"
+            "- Students: Must have a completed lab request with an ApprovedFile for this file\n"
+            "- Instructors/Admins: Full access to all files and pages"
+        ),
     )
     @action(detail=True, methods=["get"], permission_classes=[FileAccessPermission])
     def view(self, request, pk=None, patient_pk=None):
+        """
+        View file content with pagination support for PDFs.
+
+        This action enforces role-based access:
+        - Instructors/Admins: Can specify custom page ranges for any file
+        - Students: Restricted to approved page ranges from completed lab requests
+        """
         file_instance = self.get_object()
 
         if not request.user.is_authenticated:
             return HttpResponseForbidden("Authentication required.")
 
-        page_query = request.query_params.get("page")
-        range_query = request.query_params.get("range")
+        page_range_query = request.query_params.get("page_range")
 
         if file_instance.requires_pagination:
             return self._serve_paginated_pdf(
-                file_instance, request.user, page_query, range_query
+                file_instance, request.user, page_range_query
             )
 
         # For non-paginated files, serve the whole file
         return self._serve_whole_file(file_instance)
 
     def _get_authorized_page_range(self, file_instance, user):
-        """Get the authorized page range for a user from approved imaging requests"""
-        from student_groups.models import ApprovedFile
+        """
+        Get the authorized page range for a user from approved imaging requests.
 
-        if user.is_staff:
-            return None  # Staff can access all pages
+        Args:
+            file_instance: The File object being accessed
+            user: The requesting user
 
+        Returns:
+            str or None:
+                - None for instructors/admins (unrestricted access to all pages)
+                - page_range string for students with approved access
+                - None for students without approved access (will be denied)
+        """
+        user_role = get_user_role(user)
+
+        # Instructors and admins have unrestricted access to all pages
+        if user_role in [Role.ADMIN.value, Role.INSTRUCTOR.value]:
+            return None
+
+        # Students must have an approved lab request for this file
         approved_file = ApprovedFile.objects.filter(
             file=file_instance,
             imaging_request__user=user,
@@ -253,31 +291,62 @@ class FileViewSet(viewsets.ModelViewSet):
                 pages.append(int(part))
         return pages
 
-    def _serve_paginated_pdf(self, file_instance, user, page_query, range_query):
-        """Serve specific pages of a PDF file based on authorization"""
+    def _serve_paginated_pdf(self, file_instance, user, page_range_query):
+        """
+        Serve specific pages of a PDF file based on authorization.
+
+        Authorization rules:
+        - Instructors/Admins: Can specify any page range via query parameters
+        - Students: Must have an ApprovedFile with authorized page_range from completed lab request
+
+        Query parameters:
+        - page_range: Page range string supporting single page or ranges
+          Examples: ?page_range=5 (single page)
+                   ?page_range=1-5 (range)
+                   ?page_range=1-5,7,10-12 (multiple ranges)
+
+        Args:
+            file_instance: The File object to serve
+            user: The requesting user
+            page_range_query: Page range string from query params
+
+        Returns:
+            HttpResponse with PDF content or HttpResponseForbidden
+        """
         try:
+            user_role = get_user_role(user)
             authorized_range = self._get_authorized_page_range(file_instance, user)
 
-            if not authorized_range and not user.is_staff:
+            # Check if user has any access to this file
+            # For instructors/admins, authorized_range is None (unrestricted)
+            # For students without approved access, authorized_range is also None (denied)
+            if authorized_range is None and user_role == Role.STUDENT.value:
                 return HttpResponseForbidden(
                     "No authorized page range found for this file."
                 )
 
             # Determine which pages to extract
-            if page_query:
-                requested_pages = [int(page_query)]
-            elif range_query:
-                requested_pages = self._parse_page_range(range_query)
+            # Instructors/admins can specify custom ranges via query parameters
+            if page_range_query:
+                requested_pages = self._parse_page_range(page_range_query)
             elif authorized_range:
+                # Students without query params get their approved range
                 requested_pages = self._parse_page_range(authorized_range)
             else:
-                return HttpResponseForbidden("No page range specified.")
+                # Instructors/admins must specify page_range in query params
+                return HttpResponseForbidden(
+                    "Please specify page range (e.g., ?page_range=1 or ?page_range=1-5)."
+                )
 
-            # For non-staff users, verify requested pages are within authorized range
-            if not user.is_staff and authorized_range:
+            # For students, verify requested pages are within authorized range
+            if user_role == Role.STUDENT.value and authorized_range:
                 authorized_pages = self._parse_page_range(authorized_range)
                 if not all(page in authorized_pages for page in requested_pages):
-                    return HttpResponseForbidden("Requested pages are not authorized.")
+                    return HttpResponseForbidden(
+                        "Requested pages are not authorized. Your approved range is: {}".format(
+                            authorized_range
+                        )
+                    )
 
             # Extract pages from PDF
             with file_instance.file.open("rb") as pdf_file:

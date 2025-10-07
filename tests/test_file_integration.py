@@ -281,7 +281,7 @@ startxref
             "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
         )
 
-        response = self.client.get(url, {"page": "4"})
+        response = self.client.get(url, {"page_range": "4"})
 
         # Should be forbidden
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -299,7 +299,7 @@ startxref
             "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
         )
 
-        response = self.client.get(url, {"page": "2"})
+        response = self.client.get(url, {"page_range": "2"})
 
         # Should be successful
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -326,3 +326,97 @@ startxref
 
         # Should be successful
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_instructor_custom_page_range_access(self):
+        """
+        Test that instructors can specify custom page ranges for paginated files.
+
+        This verifies that instructors have unrestricted access and can view
+        any page range they specify via query parameters, regardless of
+        ApprovedFile settings.
+        """
+        # Enable pagination for the file
+        self.file.requires_pagination = True
+        self.file.save()
+
+        self.client.force_authenticate(user=self.instructor)
+        url = reverse(
+            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+        )
+
+        # Test 1: Instructor can access a single page using page_range
+        response = self.client.get(url, {"page_range": "5"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+        # Test 2: Instructor can access a custom range using page_range parameter
+        response = self.client.get(url, {"page_range": "1-5"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+        # Test 3: Instructor can access pages outside student's approved range
+        # Student approved range is "1-3", instructor should access page 4
+        response = self.client.get(url, {"page_range": "4"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+        # Test 4: Instructor can access complex ranges
+        response = self.client.get(url, {"page_range": "1-2,4-5"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+    def test_admin_custom_page_range_access(self):
+        """
+        Test that admins can specify custom page ranges for paginated files.
+
+        Similar to instructors, admins should have unrestricted access.
+        """
+        # Enable pagination for the file
+        self.file.requires_pagination = True
+        self.file.save()
+
+        self.client.force_authenticate(user=self.admin)
+        url = reverse(
+            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+        )
+
+        # Admin can access any single page using page_range
+        response = self.client.get(url, {"page_range": "5"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+        # Admin can access any range using page_range parameter
+        response = self.client.get(url, {"page_range": "1-5"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+    def test_student_cannot_access_pages_outside_approved_range(self):
+        """
+        Test that students are restricted to their approved page range.
+
+        This ensures the security model is maintained - students cannot
+        bypass ApprovedFile restrictions.
+        """
+        # Enable pagination for the file
+        self.file.requires_pagination = True
+        self.file.save()
+
+        self.client.force_authenticate(user=self.student)
+        url = reverse(
+            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+        )
+
+        # Student approved range is "1-3"
+        # Test 1: Access within approved range should succeed
+        response = self.client.get(url, {"page_range": "2"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Test 2: Access outside approved range should fail
+        response = self.client.get(url, {"page_range": "4"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("not authorized", response.content.decode().lower())
+
+        # Test 3: Range partially outside approved range should fail
+        response = self.client.get(url, {"page_range": "2-5"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("not authorized", response.content.decode().lower())
