@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from student_groups.models import ImagingRequest, BloodTestRequest, ApprovedFile
 from patients.models import File
-from core.serializers import BaseModelSerializer
+from core.serializers import BaseModelSerializer, UserSerializer
+from patients.serializers import PatientSerializer
 from student_groups.serializers import ApprovedFileSerializer
 
 
@@ -9,6 +10,9 @@ class ImagingRequestSerializer(BaseModelSerializer):
     """
     Serializer for instructors to create/manage imaging requests.
     Allows instructors to set the user field when creating requests.
+    
+    Returns full user and patient details on read operations,
+    while accepting IDs for write operations.
     """
 
     approved_files = ApprovedFileSerializer(
@@ -31,6 +35,15 @@ class ImagingRequestSerializer(BaseModelSerializer):
             "approved_files",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def to_representation(self, instance):
+        """
+        Override to return full user and patient details instead of just IDs.
+        """
+        representation = super().to_representation(instance)
+        representation["user"] = UserSerializer(instance.user).data
+        representation["patient"] = PatientSerializer(instance.patient).data
+        return representation
 
     def update(self, instance, validated_data):
         approved_files_data = validated_data.pop("approvedfile_set", None)
@@ -106,6 +119,9 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
 class BloodTestRequestSerializer(BaseModelSerializer):
     """
     Serializer for instructors to create/manage blood test requests.
+    
+    Returns full user and patient details on read operations,
+    while accepting IDs for write operations.
     """
 
     approved_files = ApprovedFileSerializer(
@@ -128,6 +144,15 @@ class BloodTestRequestSerializer(BaseModelSerializer):
             "approved_files",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def to_representation(self, instance):
+        """
+        Override to return full user and patient details instead of just IDs.
+        """
+        representation = super().to_representation(instance)
+        representation["user"] = UserSerializer(instance.user).data
+        representation["patient"] = PatientSerializer(instance.patient).data
+        return representation
 
 
 class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):

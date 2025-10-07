@@ -2,7 +2,7 @@ from django.contrib.auth.models import User, Group
 from rest_framework.test import APITestCase
 from rest_framework import status
 from patients.models import Patient
-from student_groups.models import ImagingRequest
+from student_groups.models import ImagingRequest, BloodTestRequest
 from core.context import Role
 
 
@@ -97,5 +97,131 @@ class InstructorViewSetTestCase(APITestCase):
         self.client.force_authenticate(user=self.student_user)
         response = self.client.get("/api/instructors/dashboard/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        response = self.client.get("/api/instructors/dashboard/")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_imaging_request_returns_full_user_and_patient_details(self):
+        """
+        Test that GET requests return full user and patient objects, not just IDs.
+        """
+        self.client.force_authenticate(user=self.instructor_user)
+        response = self.client.get(
+            f"/api/instructors/imaging-requests/{self.imaging_request.id}/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify user is a full object with expected fields
+        self.assertIn("user", response.data)
+        self.assertIsInstance(response.data["user"], dict)
+        self.assertIn("id", response.data["user"])
+        self.assertIn("username", response.data["user"])
+        self.assertIn("email", response.data["user"])
+        self.assertEqual(response.data["user"]["username"], "student1")
+        
+        # Verify patient is a full object with expected fields
+        self.assertIn("patient", response.data)
+        self.assertIsInstance(response.data["patient"], dict)
+        self.assertIn("id", response.data["patient"])
+        self.assertIn("first_name", response.data["patient"])
+        self.assertIn("last_name", response.data["patient"])
+        self.assertIn("email", response.data["patient"])
+        self.assertEqual(response.data["patient"]["first_name"], "John")
+        self.assertEqual(response.data["patient"]["last_name"], "Doe")
+
+    def test_imaging_request_list_returns_full_user_and_patient_details(self):
+        """
+        Test that list endpoint also returns full user and patient objects.
+        """
+        self.client.force_authenticate(user=self.instructor_user)
+        response = self.client.get("/api/instructors/imaging-requests/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        first_item = response.data["results"][0]
+        
+        # Verify user is a full object
+        self.assertIsInstance(first_item["user"], dict)
+        self.assertIn("username", first_item["user"])
+        self.assertEqual(first_item["user"]["username"], "student1")
+        
+        # Verify patient is a full object
+        self.assertIsInstance(first_item["patient"], dict)
+        self.assertIn("first_name", first_item["patient"])
+        self.assertEqual(first_item["patient"]["first_name"], "John")
+
+
+class BloodTestRequestViewSetTestCase(APITestCase):
+    """
+    Test cases specifically for BloodTestRequest endpoints to verify
+    full user and patient details are returned.
+    """
+
+    def setUp(self):
+        self.instructor_group, created = Group.objects.get_or_create(
+            name=Role.INSTRUCTOR.value
+        )
+
+        self.instructor_user = User.objects.create_user(
+            username="instructor2", password="testpass123"
+        )
+        self.instructor_user.groups.add(self.instructor_group)
+
+        self.student_user = User.objects.create_user(
+            username="student2", password="testpass123"
+        )
+
+        self.patient = Patient.objects.create(
+            first_name="Jane",
+            last_name="Smith",
+            date_of_birth="1995-05-15",
+            email="jane@example.com",
+        )
+
+        self.blood_test_request = BloodTestRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="Complete Blood Count",
+            reason="Routine checkup",
+            name="Dr. Smith",
+            role="Physician",
+            status="pending",
+        )
+
+    def test_blood_test_request_returns_full_user_and_patient_details(self):
+        """
+        Test that GET requests return full user and patient objects, not just IDs.
+        """
+        self.client.force_authenticate(user=self.instructor_user)
+        response = self.client.get(
+            f"/api/instructors/blood-test-requests/{self.blood_test_request.id}/"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify user is a full object with expected fields
+        self.assertIn("user", response.data)
+        self.assertIsInstance(response.data["user"], dict)
+        self.assertIn("username", response.data["user"])
+        self.assertEqual(response.data["user"]["username"], "student2")
+
+        # Verify patient is a full object with expected fields
+        self.assertIn("patient", response.data)
+        self.assertIsInstance(response.data["patient"], dict)
+        self.assertIn("first_name", response.data["patient"])
+        self.assertIn("last_name", response.data["patient"])
+        self.assertEqual(response.data["patient"]["first_name"], "Jane")
+        self.assertEqual(response.data["patient"]["last_name"], "Smith")
+
+    def test_blood_test_request_list_returns_full_details(self):
+        """
+        Test that list endpoint also returns full user and patient objects.
+        """
+        self.client.force_authenticate(user=self.instructor_user)
+        response = self.client.get("/api/instructors/blood-test-requests/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        first_item = response.data["results"][0]
+
+        # Verify user is a full object
+        self.assertIsInstance(first_item["user"], dict)
+        self.assertIn("username", first_item["user"])
+
+        # Verify patient is a full object
+        self.assertIsInstance(first_item["patient"], dict)
+        self.assertIn("first_name", first_item["patient"])
