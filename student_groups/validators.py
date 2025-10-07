@@ -91,6 +91,4 @@ class ObservationValidator:
         if not isinstance(score, int) or score < 0:
             raise ValidationError("Pain score must be a non-negative integer")
         if score < 0 or score > 10:
-            raise ValidationError(
-                "Pain score must be between 0 and 10"
-            )
+            raise ValidationError("Pain score must be between 0 and 10")

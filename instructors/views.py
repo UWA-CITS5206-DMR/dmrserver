@@ -1,47 +1,45 @@
-from rest_framework import viewsets, mixins
+from drf_spectacular.utils import extend_schema
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema
 
+from core.context import ViewContext
+from core.permissions import IsInstructor
 from patients.models import Patient
-from student_groups.models import LabRequest
+from student_groups.models import BloodTestRequest, ImagingRequest
 from .serializers import (
-    LabRequestSerializer,
-    LabRequestStatusUpdateSerializer,
+    BloodTestRequestSerializer,
+    BloodTestRequestStatusUpdateSerializer,
+    ImagingRequestSerializer,
+    ImagingRequestStatusUpdateSerializer,
 )
-from core.permissions import InstructorOnlyPermission
 
 
-class LabRequestViewSet(
+class ImagingRequestViewSet(
     mixins.CreateModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.ListModelMixin,
-    mixins.UpdateModelMixin,
     mixins.DestroyModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    """
-    Instructor lab request management endpoints.
-    Instructors can perform full CRUD operations on all lab requests.
-    """
-
-    queryset = LabRequest.objects.all()
-    serializer_class = LabRequestSerializer
-    permission_classes = [InstructorOnlyPermission]
+    queryset = ImagingRequest.objects.all()
+    serializer_class = ImagingRequestSerializer
+    permission_classes = [IsInstructor]
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        context["for_instructor"] = True
+        context[ViewContext.INSTRUCTOR_READ.value] = True
         return context
 
     def get_serializer_class(self):
         if self.action in ["update", "partial_update"]:
-            return LabRequestStatusUpdateSerializer
-        return LabRequestSerializer
+            return ImagingRequestStatusUpdateSerializer
+        return ImagingRequestSerializer
 
     @extend_schema(
-        summary="List pending lab requests",
-        description="Get all lab requests with pending status",
+        summary="List pending imaging requests",
+        description="Get all imaging requests with pending status",
     )
     @action(detail=False, methods=["get"])
     def pending(self, request):
@@ -54,8 +52,58 @@ class LabRequestViewSet(
         return Response(serializer.data)
 
     @extend_schema(
-        summary="Get lab request statistics",
-        description="Get counts of lab requests by status",
+        summary="Get imaging request statistics",
+        description="Get counts of imaging requests by status",
+    )
+    @action(detail=False, methods=["get"])
+    def stats(self, request):
+        stats = {
+            "total": self.queryset.count(),
+            "pending": self.queryset.filter(status="pending").count(),
+            "completed": self.queryset.filter(status="completed").count(),
+        }
+        return Response(stats)
+
+
+class BloodTestRequestViewSet(
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = BloodTestRequest.objects.all()
+    serializer_class = BloodTestRequestSerializer
+    permission_classes = [IsInstructor]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context[ViewContext.INSTRUCTOR_READ.value] = True
+        return context
+
+    def get_serializer_class(self):
+        if self.action in ["update", "partial_update"]:
+            return BloodTestRequestStatusUpdateSerializer
+        return BloodTestRequestSerializer
+
+    @extend_schema(
+        summary="List pending blood test requests",
+        description="Get all blood test requests with pending status",
+    )
+    @action(detail=False, methods=["get"])
+    def pending(self, request):
+        pending_requests = self.queryset.filter(status="pending")
+        page = self.paginate_queryset(pending_requests)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(pending_requests, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Get blood test request statistics",
+        description="Get counts of blood test requests by status",
     )
     @action(detail=False, methods=["get"])
     def stats(self, request):
@@ -72,7 +120,7 @@ class DashboardViewSet(viewsets.GenericViewSet):
     Instructor dashboard data endpoints.
     """
 
-    permission_classes = [InstructorOnlyPermission]
+    permission_classes = [IsInstructor]
 
     @extend_schema(
         summary="Get dashboard overview",
@@ -81,9 +129,18 @@ class DashboardViewSet(viewsets.GenericViewSet):
     def list(self, request):
         data = {
             "patients_count": Patient.objects.count(),
-            "total_lab_requests": LabRequest.objects.count(),
-            "pending_lab_requests": LabRequest.objects.filter(status="pending").count(),
-            "completed_lab_requests": LabRequest.objects.filter(
+            "total_imaging_requests": ImagingRequest.objects.count(),
+            "pending_imaging_requests": ImagingRequest.objects.filter(
+                status="pending"
+            ).count(),
+            "completed_imaging_requests": ImagingRequest.objects.filter(
+                status="completed"
+            ).count(),
+            "total_blood_test_requests": BloodTestRequest.objects.count(),
+            "pending_blood_test_requests": BloodTestRequest.objects.filter(
+                status="pending"
+            ).count(),
+            "completed_blood_test_requests": BloodTestRequest.objects.filter(
                 status="completed"
             ).count(),
         }

@@ -12,10 +12,15 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+from corsheaders.defaults import default_methods, default_headers
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
+
+# Load environment variables from .env file
+load_dotenv(BASE_DIR / ".env")
 
 
 # Helper function to parse database URL
@@ -179,8 +184,32 @@ REST_FRAMEWORK = {
 }
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_HEADERS = "*"
+CORS_ALLOW_HEADERS = default_headers
+CORS_ALLOWED_METHODS = default_methods
+
+# Parse CORS allowed origins from environment
+_cors_allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+if _cors_allowed_origins == "*" or os.getenv(
+    "CORS_ALLOW_ALL_ORIGINS", "True"
+).lower() in ("true", "1", "yes", "on"):
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGINS = []
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
+    if _cors_allowed_origins:
+        CORS_ALLOWED_ORIGINS = [
+            origin.strip()
+            for origin in _cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
+    else:
+        # Default origins for development
+        CORS_ALLOWED_ORIGINS = [
+            "http://localhost:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:8000",
+        ]
 
 # CSRF Configuration
 CSRF_TRUSTED_ORIGINS = [

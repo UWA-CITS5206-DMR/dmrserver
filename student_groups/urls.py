@@ -11,7 +11,10 @@ from .views import (
     OxygenSaturationViewSet,
     PainScoreViewSet,
     ObservationsViewSet,
-    LabRequestViewSet,
+    ImagingRequestViewSet,
+    BloodTestRequestViewSet,
+    MedicationOrderViewSet,
+    DischargeSummaryViewSet,
 )
 
 router = DefaultRouter()
@@ -46,7 +49,16 @@ router.register(
     basename="pain-score",
 )
 router.register(r"observations", ObservationsViewSet, basename="observation")
-router.register(r"lab-requests", LabRequestViewSet, basename="lab-request")
+router.register(r"imaging-requests", ImagingRequestViewSet, basename="imaging-request")
+router.register(
+    r"blood-test-requests", BloodTestRequestViewSet, basename="blood-test-request"
+)
+router.register(
+    r"medication-orders", MedicationOrderViewSet, basename="medication-order"
+)
+router.register(
+    r"discharge-summaries", DischargeSummaryViewSet, basename="discharge-summary"
+)
 
 urlpatterns = [
     path("", include(router.urls)),

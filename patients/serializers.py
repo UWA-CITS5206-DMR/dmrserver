@@ -11,7 +11,14 @@ class FileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = File
-        fields = ["id", "patient", "display_name", "file", "created_at"]
+        fields = [
+            "id",
+            "patient",
+            "display_name",
+            "category",
+            "file",
+            "created_at",
+        ]
         read_only_fields = ["id", "patient", "display_name", "created_at"]
 
     def create(self, validated_data):

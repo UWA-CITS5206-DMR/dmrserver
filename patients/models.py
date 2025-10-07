@@ -34,6 +34,14 @@ def validate_pdf_for_pagination(file, requires_pagination):
 
 
 class File(models.Model):
+    class Category(models.TextChoices):
+        ADMISSION = "Admission", "Admission"
+        PATHOLOGY = "Pathology", "Pathology"
+        IMAGING = "Imaging", "Imaging"
+        DIAGNOSTICS = "Diagnostics", "Diagnostics"
+        LAB_RESULTS = "Lab Results", "Lab Results"
+        OTHER = "Other", "Other"
+
     id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, verbose_name="File ID"
     )
@@ -42,6 +50,12 @@ class File(models.Model):
     )
     display_name = models.CharField(
         max_length=255, editable=False, verbose_name="Display name"
+    )
+    category = models.CharField(
+        max_length=20,
+        choices=Category.choices,
+        default=Category.OTHER,
+        verbose_name="Category",
     )
     file = models.FileField(upload_to="upload_to", verbose_name="File")
     requires_pagination = models.BooleanField(
@@ -59,6 +73,16 @@ class File(models.Model):
     def clean(self):
         super().clean()
         validate_pdf_for_pagination(self.file, self.requires_pagination)
+
+    def save(self, *args, **kwargs):
+        """
+        Override save method to automatically set display_name.
+        If display_name is not set and file is uploaded, extract filename.
+        """
+        if not self.display_name and self.file:
+            # Extract original filename from file path
+            self.display_name = os.path.basename(self.file.name)
+        super().save(*args, **kwargs)
 
     @staticmethod
     def upload_to(instance, filename):

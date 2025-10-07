@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase, APIClient
 import tempfile
 import os
 import shutil
-from core.permissions import ROLE_INSTRUCTOR
+from core.context import Role
 
 from .models import Patient, File
 
@@ -19,7 +19,7 @@ class PatientApiTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.instructor_group, created = Group.objects.get_or_create(
-            name=ROLE_INSTRUCTOR
+            name=Role.INSTRUCTOR.value
         )
         cls.user = get_user_model().objects.create_user(
             username="tester", email="tester@example.com", password="pass1234"
@@ -144,3 +144,49 @@ class PatientApiTests(APITestCase):
         res_delete = self.client.delete(file_detail_url)
         self.assertEqual(res_delete.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(File.objects.filter(patient=p).count(), 0)
+
+    def test_file_display_name_auto_generated_on_save(self):
+        """
+        Test that display_name is automatically extracted from filename when creating File objects directly
+        (e.g., through Admin). This test simulates Django Admin behavior without using serializers.
+        """
+        p = self.create_patient()
+        test_content = b"test content for display name"
+        uploaded_file = SimpleUploadedFile(
+            "test_document.pdf", test_content, content_type="application/pdf"
+        )
+
+        # Create File object directly without using API (simulating Admin save)
+        file_obj = File.objects.create(
+            patient=p,
+            file=uploaded_file,
+            category=File.Category.PATHOLOGY,
+            requires_pagination=False,
+        )
+
+        # Verify display_name is automatically set to the uploaded filename
+        self.assertEqual(file_obj.display_name, "test_document.pdf")
+        self.assertIsNotNone(file_obj.display_name)
+        self.assertNotEqual(file_obj.display_name, "")
+
+    def test_file_display_name_not_overwritten_if_set(self):
+        """
+        Test that the save() method does not overwrite display_name if it's already set.
+        """
+        p = self.create_patient()
+        test_content = b"test content"
+        uploaded_file = SimpleUploadedFile(
+            "original.txt", test_content, content_type="text/plain"
+        )
+
+        # Create File object directly and set custom display_name
+        file_obj = File(
+            patient=p,
+            file=uploaded_file,
+            display_name="Custom Display Name",
+            category=File.Category.OTHER,
+        )
+        file_obj.save()
+
+        # Verify display_name remains as the custom value
+        self.assertEqual(file_obj.display_name, "Custom Display Name")

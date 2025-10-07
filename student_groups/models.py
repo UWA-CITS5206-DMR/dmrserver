@@ -8,6 +8,7 @@ from django.db import transaction
 class Note(models.Model):
     # Name of the doctor or person writing the note
     name = models.CharField(max_length=100, verbose_name="Doctor Name")
+    role = models.CharField(max_length=50, verbose_name="Role")
     patient = models.ForeignKey(
         Patient,
         on_delete=models.CASCADE,
@@ -259,9 +260,7 @@ class PainScore(models.Model):
         related_name="pain_scores",
         verbose_name="User",
     )
-    score = models.PositiveIntegerField(
-        verbose_name="Pain Score (0-10)"
-    )
+    score = models.PositiveIntegerField(verbose_name="Pain Score (0-10)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
 
     class Meta:
@@ -270,9 +269,7 @@ class PainScore(models.Model):
         ordering = ["-created_at"]
 
     def clean(self):
-        ObservationValidator.validate_pain_score(
-            self.patient, self.user, self.score
-        )
+        ObservationValidator.validate_pain_score(self.patient, self.user, self.score)
 
     def save(self, *args, **kwargs):
         self.clean()
@@ -335,36 +332,51 @@ class ObservationManager(models.Manager):
         return created_observations
 
     @staticmethod
-    def get_observations_by_user_and_patient(user_id, patient_id):
+    def get_observations_by_user_and_patient(user_id, patient_id, ordering=None):
         """
         Get all observations for a specific user and patient.
+        
+        :param user_id: User ID to filter by
+        :param patient_id: Patient ID to filter by
+        :param ordering: Optional ordering field (e.g., 'created_at' or '-created_at')
+        :return: Dictionary of querysets for each observation type
         """
+        if ordering is None:
+            ordering = "-created_at"  # Default to newest first
+        
         return {
             "blood_pressures": BloodPressure.objects.filter(
                 user_id=user_id, patient_id=patient_id
-            ),
+            ).order_by(ordering),
             "heart_rates": HeartRate.objects.filter(
                 user_id=user_id, patient_id=patient_id
-            ),
+            ).order_by(ordering),
             "body_temperatures": BodyTemperature.objects.filter(
                 user_id=user_id, patient_id=patient_id
-            ),
+            ).order_by(ordering),
             "respiratory_rates": RespiratoryRate.objects.filter(
                 user_id=user_id, patient_id=patient_id
-            ),
+            ).order_by(ordering),
             "blood_sugars": BloodSugar.objects.filter(
                 user_id=user_id, patient_id=patient_id
-            ),
+            ).order_by(ordering),
             "oxygen_saturations": OxygenSaturation.objects.filter(
                 user_id=user_id, patient_id=patient_id
-            ),
+            ).order_by(ordering),
             "pain_scores": PainScore.objects.filter(
                 user_id=user_id, patient_id=patient_id
-            ),
+            ).order_by(ordering),
         }
 
 
-class LabRequest(models.Model):
+class ImagingRequest(models.Model):
+    class TestType(models.TextChoices):
+        X_RAY = "X-ray", "X-ray"
+        CT_SCAN = "CT scan", "CT scan"
+        MRI_SCAN = "MRI scan", "MRI scan"
+        ULTRASOUND_SCAN = "Ultrasound scan", "Ultrasound scan"
+        ECHOCARDIOGRAM = "Echocardiogram", "Echocardiogram"
+
     STATUS_CHOICES = [
         ("pending", "Pending"),
         ("completed", "Completed"),
@@ -373,40 +385,44 @@ class LabRequest(models.Model):
     patient = models.ForeignKey(
         Patient,
         on_delete=models.CASCADE,
-        related_name="lab_requests",
+        related_name="imaging_requests",
         verbose_name="Patient",
     )
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="lab_requests",
+        related_name="imaging_requests",
         verbose_name="User",
     )
-    test_type = models.CharField(max_length=100, verbose_name="Test Type")
+    test_type = models.CharField(
+        max_length=50, choices=TestType.choices, verbose_name="Test Type"
+    )
     reason = models.TextField(verbose_name="Reason for Request")
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default="pending", verbose_name="Status"
     )
+    name = models.CharField(max_length=100, verbose_name="Name")
+    role = models.CharField(max_length=50, verbose_name="Role")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
     approved_files = models.ManyToManyField(
         File,
         through="ApprovedFile",
-        related_name="lab_requests",
+        related_name="imaging_requests",
         verbose_name="Approved Files",
     )
 
     class Meta:
-        verbose_name = "Lab Request"
-        verbose_name_plural = "Lab Requests"
+        verbose_name = "Imaging Request"
+        verbose_name_plural = "Imaging Requests"
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Lab request for {self.patient} by {self.user.username} ({self.status})"
+        return f"Imaging request for {self.patient} by {self.user.username} ({self.status})"
 
 
 class ApprovedFile(models.Model):
-    lab_request = models.ForeignKey(LabRequest, on_delete=models.CASCADE)
+    imaging_request = models.ForeignKey(ImagingRequest, on_delete=models.CASCADE)
     file = models.ForeignKey(File, on_delete=models.CASCADE)
     page_range = models.CharField(
         max_length=100,
@@ -418,7 +434,121 @@ class ApprovedFile(models.Model):
     class Meta:
         verbose_name = "Approved File"
         verbose_name_plural = "Approved Files"
-        unique_together = ("lab_request", "file")
+        unique_together = ("imaging_request", "file")
 
     def __str__(self):
-        return f"File {self.file.id} for request {self.lab_request.id}"
+        return f"File {self.file.id} for request {self.imaging_request.id}"
+
+
+class BloodTestRequest(models.Model):
+    class TestType(models.TextChoices):
+        FBC = "FBC", "Full Blood Count"
+        EUC = "EUC", "Electrolytes, Urea, Creatinine"
+        LFTS = "LFTs", "Liver Function Tests"
+        COAGS = "Coags", "Coagulation Profile"
+        CRP = "CRP", "C-Reactive Protein"
+        TFT = "TFT", "Thyroid Function Tests"
+        GROUP_AND_HOLD = "Group and Hold", "Group and Hold"
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+    ]
+
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="blood_test_requests",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="blood_test_requests",
+        verbose_name="User",
+    )
+    test_type = models.CharField(
+        max_length=50, choices=TestType.choices, verbose_name="Test Type"
+    )
+    reason = models.TextField(verbose_name="Reason for Request")
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default="pending", verbose_name="Status"
+    )
+    name = models.CharField(max_length=100, verbose_name="Name")
+    role = models.CharField(max_length=50, verbose_name="Role")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
+    approved_files = models.ManyToManyField(
+        File,
+        related_name="blood_test_requests",
+        verbose_name="Approved Files",
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = "Blood Test Request"
+        verbose_name_plural = "Blood Test Requests"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Blood test request for {self.patient} by {self.user.username} ({self.status})"
+
+
+class MedicationOrder(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="medication_orders",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="medication_orders",
+        verbose_name="User",
+    )
+    medication_name = models.CharField(max_length=255, verbose_name="Medication Name")
+    dosage = models.CharField(max_length=100, verbose_name="Dosage")
+    instructions = models.TextField(verbose_name="Instructions")
+    name = models.CharField(max_length=100, verbose_name="Name")
+    role = models.CharField(max_length=50, verbose_name="Role")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
+
+    class Meta:
+        verbose_name = "Medication Order"
+        verbose_name_plural = "Medication Orders"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Medication order for {self.patient} by {self.user.username}"
+
+
+class DischargeSummary(models.Model):
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="discharge_summaries",
+        verbose_name="Patient",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="discharge_summaries",
+        verbose_name="User",
+    )
+    diagnosis = models.TextField(verbose_name="Diagnosis")
+    plan = models.TextField(verbose_name="Plan")
+    free_text = models.TextField(verbose_name="Free Text", blank=True)
+    name = models.CharField(max_length=100, verbose_name="Name")
+    role = models.CharField(max_length=50, verbose_name="Role")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
+
+    class Meta:
+        verbose_name = "Discharge Summary"
+        verbose_name_plural = "Discharge Summaries"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Discharge summary for {self.patient} by {self.user.username}"

@@ -6,27 +6,59 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('patients', '0003_file_requires_pagination'),
-        ('student_groups', '0005_alter_labrequest_reason_alter_labrequest_status_and_more'),
+        ("patients", "0003_file_requires_pagination"),
+        (
+            "student_groups",
+            "0005_alter_labrequest_reason_alter_labrequest_status_and_more",
+        ),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='PainScore',
+            name="PainScore",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('score', models.PositiveIntegerField(verbose_name='Pain Score (0-10)')),
-                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Created At')),
-                ('patient', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='pain_scores', to='patients.patient', verbose_name='Patient')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='pain_scores', to=settings.AUTH_USER_MODEL, verbose_name='User')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "score",
+                    models.PositiveIntegerField(verbose_name="Pain Score (0-10)"),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(auto_now_add=True, verbose_name="Created At"),
+                ),
+                (
+                    "patient",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="pain_scores",
+                        to="patients.patient",
+                        verbose_name="Patient",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="pain_scores",
+                        to=settings.AUTH_USER_MODEL,
+                        verbose_name="User",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Pain Score',
-                'verbose_name_plural': 'Pain Scores',
-                'ordering': ['-created_at'],
+                "verbose_name": "Pain Score",
+                "verbose_name_plural": "Pain Scores",
+                "ordering": ["-created_at"],
             },
         ),
     ]

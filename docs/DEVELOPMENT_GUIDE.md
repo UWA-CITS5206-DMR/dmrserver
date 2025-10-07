@@ -14,6 +14,9 @@ uv run python manage.py makemigrations
 
 # Apply migrations
 uv run python manage.py migrate
+
+# Generate schema file for API documentation
+uv run python manage.py spectacular --color --file schema.yml
 ```
 
 #### Migration Best Practices

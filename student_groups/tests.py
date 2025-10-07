@@ -8,7 +8,7 @@ from django.urls import reverse
 from patients.models import Patient
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
-from core.permissions import ROLE_STUDENT
+from core.context import Role
 
 from student_groups.models import (
     BloodPressure,
@@ -42,11 +42,13 @@ class NoteModelTest(TestCase):
             patient=self.patient,
             user=self.user,
             name="Dr. Smith",
+            role="Doctor",
             content="This is a test note.",
         )
         self.assertEqual(note.patient, self.patient)
         self.assertEqual(note.user, self.user)
         self.assertEqual(note.name, "Dr. Smith")
+        self.assertEqual(note.role, "Doctor")
         self.assertEqual(note.content, "This is a test note.")
         self.assertIsNotNone(note.created_at)
         self.assertIsNotNone(note.updated_at)
@@ -284,6 +286,7 @@ class NoteSerializerTest(TestCase):
             "patient": cls.patient.id,
             "user": cls.user.id,
             "name": "Dr. Smith",
+            "role": "Doctor",
             "content": "This is a test note.",
         }
 
@@ -379,7 +382,9 @@ class ObservationsSerializerTest(TestCase):
 class NoteViewSetTest(APITestCase):
     def setUp(self):
         self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(name=ROLE_STUDENT)
+        self.student_group, created = Group.objects.get_or_create(
+            name=Role.STUDENT.value
+        )
         self.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
@@ -391,7 +396,11 @@ class NoteViewSetTest(APITestCase):
             email="john.doe@example.com",
         )
         self.note = Note.objects.create(
-            patient=self.patient, user=self.user, name="Dr. Smith", content="Test note"
+            patient=self.patient,
+            user=self.user,
+            name="Dr. Smith",
+            role="Doctor",
+            content="Test note",
         )
         self.client.force_authenticate(user=self.user)
 
@@ -403,8 +412,8 @@ class NoteViewSetTest(APITestCase):
     def test_create_note(self):
         data = {
             "patient": self.patient.id,
-            "user": self.user.id,
             "name": "Dr. Jones",
+            "role": "Doctor",
             "content": "New test note",
         }
         response = self.client.post(reverse("note-list"), data, format="json")
@@ -437,7 +446,9 @@ class NoteViewSetTest(APITestCase):
 class ObservationsViewSetTest(APITestCase):
     def setUp(self):
         self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(name=ROLE_STUDENT)
+        self.student_group, created = Group.objects.get_or_create(
+            name=Role.STUDENT.value
+        )
         self.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
@@ -496,12 +507,82 @@ class ObservationsViewSetTest(APITestCase):
         )
         response = self.client.get(
             reverse("observation-list"),
-            {"user": self.user.id, "patient": self.patient.id},
+            {"patient_id": self.patient.id},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["blood_pressures"]), 1)
-        self.assertEqual(len(response.data["heart_rates"]), 0)
-        self.assertEqual(len(response.data["respiratory_rates"]), 1)
+        # Check pagination format
+        self.assertIn("count", response.data)
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("results", response.data)
+        # Check observation data is in results
+        self.assertEqual(len(response.data["results"]["blood_pressures"]), 1)
+        self.assertEqual(len(response.data["results"]["heart_rates"]), 0)
+        self.assertEqual(len(response.data["results"]["respiratory_rates"]), 1)
+
+    def test_list_observations_with_pagination(self):
+        """Test that page_size parameter limits results for each observation type"""
+        # Create multiple observations
+        for i in range(5):
+            BloodPressure.objects.create(
+                patient=self.patient, user=self.user, systolic=120 + i, diastolic=80 + i
+            )
+            HeartRate.objects.create(
+                patient=self.patient, user=self.user, heart_rate=70 + i
+            )
+        
+        # Test with page_size=2
+        response = self.client.get(
+            reverse("observation-list"),
+            {"patient_id": self.patient.id, "page_size": 2},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Check pagination format
+        self.assertIn("count", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(len(response.data["results"]["blood_pressures"]), 2)
+        self.assertEqual(len(response.data["results"]["heart_rates"]), 2)
+        
+        # Test with page_size=1
+        response = self.client.get(
+            reverse("observation-list"),
+            {"patient_id": self.patient.id, "page_size": 1},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("count", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(len(response.data["results"]["blood_pressures"]), 1)
+        self.assertEqual(len(response.data["results"]["heart_rates"]), 1)
+
+    def test_list_observations_with_ordering(self):
+        """Test that ordering parameter sorts results correctly"""
+        import time
+        # Create observations with slight time differences
+        BloodPressure.objects.create(
+            patient=self.patient, user=self.user, systolic=120, diastolic=80
+        )
+        time.sleep(0.01)  # Ensure different timestamps
+        BloodPressure.objects.create(
+            patient=self.patient, user=self.user, systolic=130, diastolic=85
+        )
+        
+        # Test descending order (newest first) - default
+        response = self.client.get(
+            reverse("observation-list"),
+            {"patient_id": self.patient.id, "ordering": "-created_at"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["results"]["blood_pressures"][0]["systolic"], 130)  # Newest first
+        
+        # Test ascending order (oldest first)
+        response = self.client.get(
+            reverse("observation-list"),
+            {"patient_id": self.patient.id, "ordering": "created_at"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["results"]["blood_pressures"][0]["systolic"], 120)  # Oldest first
 
 
 class RespiratoryRateModelTest(TestCase):
@@ -611,9 +692,7 @@ class PainScoreModelTest(TestCase):
     def test_pain_score_validation_valid_range(self):
         # Test valid range 0-10
         for score in [0, 5, 10]:
-            pain_score = PainScore(
-                patient=self.patient, user=self.user, score=score
-            )
+            pain_score = PainScore(patient=self.patient, user=self.user, score=score)
             try:
                 pain_score.clean()
                 pain_score.save()
@@ -624,17 +703,17 @@ class PainScoreModelTest(TestCase):
     def test_pain_score_validation_invalid_range(self):
         # Test invalid scores
         for score in [-1, 11, 15]:
-            pain_score = PainScore(
-                patient=self.patient, user=self.user, score=score
-            )
+            pain_score = PainScore(patient=self.patient, user=self.user, score=score)
             with self.assertRaises(ValidationError):
                 pain_score.clean()
 
 
-class LabRequestViewSetTest(APITestCase):
+class ImagingRequestViewSetTest(APITestCase):
     def setUp(self):
         self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(name=ROLE_STUDENT)
+        self.student_group, created = Group.objects.get_or_create(
+            name=Role.STUDENT.value
+        )
         self.user = get_user_model().objects.create_user(
             username="student1", password="testpass123"
         )
@@ -643,68 +722,84 @@ class LabRequestViewSetTest(APITestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
-            email="john@example.com",
+            email="john.doe@example.com",
         )
         self.client.force_authenticate(user=self.user)
 
-    def test_student_can_create_lab_request(self):
+    def test_student_can_create_imaging_request(self):
+        """Test that students can create imaging requests"""
         data = {
             "patient": self.patient.id,
-            "test_type": "Blood Test",
+            "test_type": "X-ray",
             "reason": "Routine check-up for patient symptoms",
+            "name": "Test X-Ray Request",
+            "role": "Student",
         }
-        response = self.client.post("/api/student-groups/lab-requests/", data)
+        response = self.client.post("/api/student-groups/imaging-requests/", data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["test_type"], "X-ray")
+        self.assertEqual(response.data["reason"], "Routine check-up for patient symptoms")
+        self.assertEqual(response.data["role"], "Student")
 
-    def test_student_can_list_own_lab_requests(self):
-        # Create a lab request for this user
-        from student_groups.models import LabRequest
+    def test_student_can_list_own_imaging_requests(self):
+        """Test that students can only see their own imaging requests"""
+        from student_groups.models import ImagingRequest
 
-        LabRequest.objects.create(
+        ImagingRequest.objects.create(
             patient=self.patient,
             user=self.user,
-            test_type="Blood Test",
-            reason="Routine blood test",
+            test_type="X-ray",
+            reason="Routine X-ray test",
+            name="Test X-Ray",
+            role="Medical Student",
         )
-        # Create a lab request for another user
+        # Create an imaging request for another user
         other_user = get_user_model().objects.create_user(
             username="student2", password="testpass123"
         )
-        LabRequest.objects.create(
+        ImagingRequest.objects.create(
             patient=self.patient,
             user=other_user,
-            test_type="Urine Test",
-            reason="Routine urine test",
+            test_type="CT scan",
+            reason="Routine CT scan test",
+            name="Test CT Scan",
+            role="Medical Student",
         )
 
-        response = self.client.get("/api/student-groups/lab-requests/")
+        # Students should only see their own imaging requests
+        response = self.client.get("/api/student-groups/imaging-requests/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should only see own request
         self.assertEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["test_type"], "Blood Test")
+        self.assertEqual(response.data["results"][0]["test_type"], "X-ray")
+        # Note: 'user' field is hidden in student read view by the serializer
 
-    def test_student_cannot_update_lab_request(self):
-        from student_groups.models import LabRequest
+    def test_student_cannot_update_imaging_request(self):
+        """Test that students cannot update imaging requests (only create and read)"""
+        from student_groups.models import ImagingRequest
 
-        lab_request = LabRequest.objects.create(
+        imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=self.user,
-            test_type="Blood Test",
+            test_type="X-ray",
             reason="Testing update permissions",
+            name="Test Update Request",
+            role="Medical Student",
         )
 
         data = {"status": "completed"}
         response = self.client.patch(
-            f"/api/student-groups/lab-requests/{lab_request.id}/", data
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/", data
         )
-        # Should not be allowed to update - students can only create and read
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        # ImagingRequestViewSet doesn't include UpdateModelMixin, so PATCH returns 405
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 class PainScoreViewSetTest(APITestCase):
     def setUp(self):
         self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(name=ROLE_STUDENT)
+        self.student_group, created = Group.objects.get_or_create(
+            name=Role.STUDENT.value
+        )
         self.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
@@ -718,11 +813,7 @@ class PainScoreViewSetTest(APITestCase):
         self.client.force_authenticate(user=self.user)
 
     def test_create_pain_score(self):
-        data = {
-            "patient": self.patient.id,
-            "user": self.user.id,
-            "score": 6
-        }
+        data = {"patient": self.patient.id, "user": self.user.id, "score": 6}
         response = self.client.post(
             "/api/student-groups/observations/pain-scores/", data
         )
@@ -735,11 +826,7 @@ class PainScoreViewSetTest(APITestCase):
 
     def test_create_pain_score_invalid_range(self):
         # Test score above 10
-        data = {
-            "patient": self.patient.id,
-            "user": self.user.id,
-            "score": 15
-        }
+        data = {"patient": self.patient.id, "user": self.user.id, "score": 15}
         response = self.client.post(
             "/api/student-groups/observations/pain-scores/", data
         )
@@ -753,9 +840,7 @@ class PainScoreViewSetTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_list_pain_scores(self):
-        PainScore.objects.create(
-            patient=self.patient, user=self.user, score=8
-        )
+        PainScore.objects.create(patient=self.patient, user=self.user, score=8)
         response = self.client.get("/api/student-groups/observations/pain-scores/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)

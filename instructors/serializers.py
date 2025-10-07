@@ -1,13 +1,13 @@
 from rest_framework import serializers
-from student_groups.models import LabRequest, ApprovedFile
+from student_groups.models import ImagingRequest, BloodTestRequest, ApprovedFile
 from patients.models import File
 from core.serializers import BaseModelSerializer
 from student_groups.serializers import ApprovedFileSerializer
 
 
-class LabRequestSerializer(BaseModelSerializer):
+class ImagingRequestSerializer(BaseModelSerializer):
     """
-    Serializer for instructors to create/manage lab requests.
+    Serializer for instructors to create/manage imaging requests.
     Allows instructors to set the user field when creating requests.
     """
 
@@ -16,7 +16,7 @@ class LabRequestSerializer(BaseModelSerializer):
     )
 
     class Meta:
-        model = LabRequest
+        model = ImagingRequest
         fields = [
             "id",
             "patient",
@@ -24,6 +24,8 @@ class LabRequestSerializer(BaseModelSerializer):
             "test_type",
             "reason",
             "status",
+            "name",
+            "role",
             "created_at",
             "updated_at",
             "approved_files",
@@ -41,15 +43,15 @@ class LabRequestSerializer(BaseModelSerializer):
                 page_range = approved_file_data.get("page_range")
                 file = File.objects.get(id=file_id)
                 ApprovedFile.objects.create(
-                    lab_request=instance, file=file, page_range=page_range
+                    imaging_request=instance, file=file, page_range=page_range
                 )
 
         return instance
 
 
-class LabRequestStatusUpdateSerializer(serializers.ModelSerializer):
+class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
     """
-    Serializer for instructor to update only the status field of LabRequest.
+    Serializer for instructor to update only the status field of ImagingRequest.
     Used to enforce that instructors can only change status from pending to completed.
     """
 
@@ -58,7 +60,7 @@ class LabRequestStatusUpdateSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = LabRequest
+        model = ImagingRequest
         fields = ["id", "status", "updated_at", "approved_files"]
         read_only_fields = ["id", "updated_at"]
 
@@ -72,7 +74,7 @@ class LabRequestStatusUpdateSerializer(serializers.ModelSerializer):
             and value != "completed"
         ):
             raise serializers.ValidationError(
-                "Cannot change status of a completed lab request unless it is to 'completed'."
+                "Cannot change status of a completed imaging request unless it is to 'completed'."
             )
         if value not in ["pending", "completed"]:
             raise serializers.ValidationError("Invalid status value.")
@@ -89,7 +91,7 @@ class LabRequestStatusUpdateSerializer(serializers.ModelSerializer):
                 file_id = approved_file_data.get("file").get("id")
                 file = File.objects.get(id=file_id)
                 ApprovedFile.objects.create(
-                    lab_request=instance,
+                    imaging_request=instance,
                     file=file,
                     page_range=approved_file_data.get("page_range"),
                 )
@@ -99,3 +101,58 @@ class LabRequestStatusUpdateSerializer(serializers.ModelSerializer):
             instance.approvedfile_set.all().delete()
 
         return instance
+
+
+class BloodTestRequestSerializer(BaseModelSerializer):
+    """
+    Serializer for instructors to create/manage blood test requests.
+    """
+
+    approved_files = ApprovedFileSerializer(
+        source="approvedfile_set", many=True, required=False
+    )
+
+    class Meta:
+        model = BloodTestRequest
+        fields = [
+            "id",
+            "patient",
+            "user",
+            "test_type",
+            "reason",
+            "status",
+            "name",
+            "role",
+            "created_at",
+            "updated_at",
+            "approved_files",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for instructor to update only the status field of BloodTestRequest.
+    """
+
+    approved_files = ApprovedFileSerializer(
+        source="approvedfile_set", many=True, required=False
+    )
+
+    class Meta:
+        model = BloodTestRequest
+        fields = ["id", "status", "updated_at", "approved_files"]
+        read_only_fields = ["id", "updated_at"]
+
+    def validate_status(self, value):
+        if (
+            self.instance
+            and self.instance.status == "completed"
+            and value != "completed"
+        ):
+            raise serializers.ValidationError(
+                "Cannot change status of a completed blood test request unless it is to 'completed'."
+            )
+        if value not in ["pending", "completed"]:
+            raise serializers.ValidationError("Invalid status value.")
+        return value

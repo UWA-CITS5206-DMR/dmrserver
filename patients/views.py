@@ -67,14 +67,16 @@ class FileViewSet(viewsets.ModelViewSet):
         return self._serve_whole_file(file_instance)
 
     def _get_authorized_page_range(self, file_instance, user):
-        """Get the authorized page range for a user from approved lab requests"""
+        """Get the authorized page range for a user from approved imaging requests"""
         from student_groups.models import ApprovedFile
 
         if user.is_staff:
             return None  # Staff can access all pages
 
         approved_file = ApprovedFile.objects.filter(
-            file=file_instance, lab_request__user=user, lab_request__status="completed"
+            file=file_instance,
+            imaging_request__user=user,
+            imaging_request__status="completed",
         ).first()
 
         return approved_file.page_range if approved_file else None
