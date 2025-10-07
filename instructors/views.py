@@ -23,7 +23,7 @@ class ImagingRequestViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = ImagingRequest.objects.all()
+    queryset = ImagingRequest.objects.select_related("user", "patient").all()
     serializer_class = ImagingRequestSerializer
     permission_classes = [IsInstructor]
 
@@ -73,7 +73,7 @@ class BloodTestRequestViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = BloodTestRequest.objects.all()
+    queryset = BloodTestRequest.objects.select_related("user", "patient").all()
     serializer_class = BloodTestRequestSerializer
     permission_classes = [IsInstructor]
 

@@ -530,7 +530,7 @@ class ObservationsViewSetTest(APITestCase):
             HeartRate.objects.create(
                 patient=self.patient, user=self.user, heart_rate=70 + i
             )
-        
+
         # Test with page_size=2
         response = self.client.get(
             reverse("observation-list"),
@@ -542,7 +542,7 @@ class ObservationsViewSetTest(APITestCase):
         self.assertIn("results", response.data)
         self.assertEqual(len(response.data["results"]["blood_pressures"]), 2)
         self.assertEqual(len(response.data["results"]["heart_rates"]), 2)
-        
+
         # Test with page_size=1
         response = self.client.get(
             reverse("observation-list"),
@@ -557,6 +557,7 @@ class ObservationsViewSetTest(APITestCase):
     def test_list_observations_with_ordering(self):
         """Test that ordering parameter sorts results correctly"""
         import time
+
         # Create observations with slight time differences
         BloodPressure.objects.create(
             patient=self.patient, user=self.user, systolic=120, diastolic=80
@@ -565,7 +566,7 @@ class ObservationsViewSetTest(APITestCase):
         BloodPressure.objects.create(
             patient=self.patient, user=self.user, systolic=130, diastolic=85
         )
-        
+
         # Test descending order (newest first) - default
         response = self.client.get(
             reverse("observation-list"),
@@ -573,8 +574,10 @@ class ObservationsViewSetTest(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("results", response.data)
-        self.assertEqual(response.data["results"]["blood_pressures"][0]["systolic"], 130)  # Newest first
-        
+        self.assertEqual(
+            response.data["results"]["blood_pressures"][0]["systolic"], 130
+        )  # Newest first
+
         # Test ascending order (oldest first)
         response = self.client.get(
             reverse("observation-list"),
@@ -582,7 +585,9 @@ class ObservationsViewSetTest(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("results", response.data)
-        self.assertEqual(response.data["results"]["blood_pressures"][0]["systolic"], 120)  # Oldest first
+        self.assertEqual(
+            response.data["results"]["blood_pressures"][0]["systolic"], 120
+        )  # Oldest first
 
 
 class RespiratoryRateModelTest(TestCase):
@@ -738,7 +743,9 @@ class ImagingRequestViewSetTest(APITestCase):
         response = self.client.post("/api/student-groups/imaging-requests/", data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["test_type"], "X-ray")
-        self.assertEqual(response.data["reason"], "Routine check-up for patient symptoms")
+        self.assertEqual(
+            response.data["reason"], "Routine check-up for patient symptoms"
+        )
         self.assertEqual(response.data["role"], "Student")
 
     def test_student_can_list_own_imaging_requests(self):

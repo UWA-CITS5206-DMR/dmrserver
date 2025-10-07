@@ -25,9 +25,13 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
     Unified serializer for ApprovedFile with context-aware field selection.
     Use context={'for_student': True} to get student-friendly view.
     Use context={'for_instructor': True} to get instructor management view.
+
+    Accepts both flat and nested file_id structures:
+    - Flat: {"file_id": "uuid", "page_range": "1-5"}
+    - Nested: {"file": {"id": "uuid"}, "page_range": "1-5"}
     """
 
-    file_id = serializers.UUIDField(source="file.id")
+    file_id = serializers.UUIDField(write_only=True, required=False)
     display_name = serializers.CharField(source="file.display_name", read_only=True)
     requires_pagination = serializers.BooleanField(
         source="file.requires_pagination", read_only=True
@@ -39,11 +43,23 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "file_id",
+            "file",
             "display_name",
             "page_range",
             "requires_pagination",
             "file_url",
         ]
+        extra_kwargs = {
+            "file": {"write_only": True},
+        }
+
+    def to_representation(self, instance):
+        """
+        Override to include file_id in read operations.
+        """
+        representation = super().to_representation(instance)
+        representation["file_id"] = str(instance.file.id)
+        return representation
 
     def get_fields(self):
         fields = super().get_fields()
@@ -69,25 +85,44 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
             )
         return None
 
+    def to_internal_value(self, data):
+        """
+        Handle flat file_id structure by treating it as the file field.
+        """
+        # Make a copy to avoid mutating the original data
+        data = data.copy() if hasattr(data, "copy") else dict(data)
+
+        # Check if file_id is provided at the top level (flat structure)
+        if "file_id" in data and "file" not in data:
+            # Set file_id as the file field value - DRF will handle the lookup
+            data["file"] = data.pop("file_id")
+
+        return super().to_internal_value(data)
+
     def validate(self, data):
-        file_id = data.get("file", {}).get("id")
+        """
+        Validate that the file exists and pagination requirements are met.
+        """
+        from patients.models import File
+
+        # Get the file instance
+        file_instance = data.get("file")
         page_range = data.get("page_range")
 
-        if file_id:
-            try:
-                from patients.models import File
-
-                file = File.objects.get(id=file_id)
-                if page_range and not file.requires_pagination:
-                    raise serializers.ValidationError(
-                        f"File {file.display_name} does not require pagination, but a page range was provided."
-                    )
-                if file.requires_pagination and not page_range:
-                    raise serializers.ValidationError(
-                        f"File {file.display_name} requires pagination, but no page range was provided."
-                    )
-            except File.DoesNotExist:
-                raise serializers.ValidationError(f"File with id {file_id} not found.")
+        if file_instance and isinstance(file_instance, File):
+            # Validate pagination requirements
+            if page_range and not file_instance.requires_pagination:
+                raise serializers.ValidationError(
+                    {
+                        "page_range": f"File {file_instance.display_name} does not require pagination, but a page range was provided."
+                    }
+                )
+            if file_instance.requires_pagination and not page_range:
+                raise serializers.ValidationError(
+                    {
+                        "page_range": f"File {file_instance.display_name} requires pagination, but no page range was provided."
+                    }
+                )
 
         return data
 
@@ -101,7 +136,7 @@ class ImagingRequestSerializer(BaseModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approvedfile_set", many=True, required=False
+        source="approved_files_through", many=True, required=False
     )
 
     class Meta:
@@ -273,7 +308,7 @@ class PainScoreSerializer(BaseModelSerializer):
 
 class BloodTestRequestSerializer(BaseModelSerializer):
     approved_files = ApprovedFileSerializer(
-        source="approvedfile_set", many=True, required=False
+        source="approved_files_through", many=True, required=False
     )
 
     class Meta:

@@ -335,7 +335,7 @@ class ObservationManager(models.Manager):
     def get_observations_by_user_and_patient(user_id, patient_id, ordering=None):
         """
         Get all observations for a specific user and patient.
-        
+
         :param user_id: User ID to filter by
         :param patient_id: Patient ID to filter by
         :param ordering: Optional ordering field (e.g., 'created_at' or '-created_at')
@@ -343,7 +343,7 @@ class ObservationManager(models.Manager):
         """
         if ordering is None:
             ordering = "-created_at"  # Default to newest first
-        
+
         return {
             "blood_pressures": BloodPressure.objects.filter(
                 user_id=user_id, patient_id=patient_id
@@ -422,7 +422,25 @@ class ImagingRequest(models.Model):
 
 
 class ApprovedFile(models.Model):
-    imaging_request = models.ForeignKey(ImagingRequest, on_delete=models.CASCADE)
+    """
+    Approved file with page range support for both ImagingRequest and BloodTestRequest.
+    Each ApprovedFile must be associated with either an ImagingRequest OR a BloodTestRequest.
+    """
+
+    imaging_request = models.ForeignKey(
+        ImagingRequest,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="approved_files_through",
+    )
+    blood_test_request = models.ForeignKey(
+        "BloodTestRequest",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="approved_files_through",
+    )
     file = models.ForeignKey(File, on_delete=models.CASCADE)
     page_range = models.CharField(
         max_length=100,
@@ -434,10 +452,45 @@ class ApprovedFile(models.Model):
     class Meta:
         verbose_name = "Approved File"
         verbose_name_plural = "Approved Files"
-        unique_together = ("imaging_request", "file")
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        imaging_request__isnull=False, blood_test_request__isnull=True
+                    )
+                    | models.Q(
+                        imaging_request__isnull=True, blood_test_request__isnull=False
+                    )
+                ),
+                name="approved_file_single_request_type",
+            ),
+        ]
+
+    def clean(self):
+        """
+        Validate that exactly one request type is set.
+        """
+        from django.core.exceptions import ValidationError
+
+        if not self.imaging_request and not self.blood_test_request:
+            raise ValidationError(
+                "ApprovedFile must be associated with either an ImagingRequest or a BloodTestRequest."
+            )
+        if self.imaging_request and self.blood_test_request:
+            raise ValidationError(
+                "ApprovedFile cannot be associated with both ImagingRequest and BloodTestRequest."
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"File {self.file.id} for request {self.imaging_request.id}"
+        if self.imaging_request:
+            return f"File {self.file.id} for imaging request {self.imaging_request.id}"
+        elif self.blood_test_request:
+            return f"File {self.file.id} for blood test request {self.blood_test_request.id}"
+        return f"File {self.file.id}"
 
 
 class BloodTestRequest(models.Model):
@@ -480,9 +533,9 @@ class BloodTestRequest(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
     approved_files = models.ManyToManyField(
         File,
+        through="ApprovedFile",
         related_name="blood_test_requests",
         verbose_name="Approved Files",
-        blank=True,
     )
 
     class Meta:
