@@ -50,7 +50,10 @@ services:
 ## Environment Variables
 
 - `DJANGO_SETTINGS_MODULE` - Django settings module
-- `DJANGO_CONFIGURATION` - Configuration class for production
+- `SECRET_KEY` - Django secret key
+- `DEBUG` - Debug mode (True/False)
+- `ALLOWED_HOSTS` - Allowed hosts for Django
+- `DATABASE_URL` - Database URL (defaults to SQLite)
 
 ## Accessing the Application
 

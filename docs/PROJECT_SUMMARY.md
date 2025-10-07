@@ -25,8 +25,8 @@ Key Operating Points (see `README.md` in the root directory for details):
 - Application Boundaries and Responsibilities:
   - core: General permissions and authentication serializers (`core.permissions`, `core.serializers`).
   - patients: `Patient`, `File` models and views; upload, view, and manage files.
-  - student_groups: Observation models (Note, vital signs, etc.), `LabRequest`, bulk creation API (`ObservationsViewSet`).
-  - instructors: Full management of `LabRequest` by instructors, to-do lists, and statistics.
+  - student_groups: Observation models (Note, vital signs, etc.), request models (`ImagingRequest`, `BloodTestRequest`, etc.), bulk creation API (`ObservationsViewSet`).
+  - instructors: Full management of diagnostic requests (`ImagingRequest`, `BloodTestRequest`) by instructors, to-do lists, and statistics.
 
 ## 3. Permission Model
 
@@ -35,9 +35,8 @@ Key Operating Points (see `README.md` in the root directory for details):
 - Permission Classes and Key Points:
   - `PatientPermission`: student read-only; instructor full; admin full.
   - `ObservationPermission`: student can only CRUD their own records (object-level check `obj.user == request.user`); instructor read-only; admin full.
-  - `LabRequestPermission` (Student-side): student can create and read their own requests; instructor read-only (full CRUD on instructor-side).
-  - `InstructorOnlyPermission`: only instructor/admin can access (instructor-side).
-  - `FileAccessPermission`: admin/instructor can access all files; student can only access `ApprovedFile` bound to their "completed" `LabRequest`, and is restricted by `page_range`.
+  - `IsInstructor`: ensures only instructor/admin can access instructor-side views.
+  - `FileAccessPermission`: admin/instructor can access all files; student can only access `ApprovedFile` bound to their "completed" requests (e.g., `ImagingRequest` or `BloodTestRequest`), and is restricted by `page_range`.
   - `FileManagementPermission`: only instructor/admin can manage files (CRUD).
 
 Usage Requirement: New views must explicitly set `permission_classes`.
@@ -50,8 +49,8 @@ Usage Requirement: New views must explicitly set `permission_classes`.
   - Definition of "Own Records": Refers to records of the currently authenticated user; in shared account mode, this is equivalent to "records created by or belonging to this group."
   - Permission Impact:
     - Observation Data: `ObservationPermission` performs an object-level check `obj.user == request.user`, so students can only CRUD their group's records; instructors have read-only access to observations, and admin has full access.
-    - Lab Requests: Student-side `LabRequestViewSet.get_queryset()` is restricted to `user=self.request.user`; instructor-side can manage all.
-    - File Access: Student file access requires the existence of `ApprovedFile(file=obj, lab_request__user=request.user, lab_request__status="completed")`, and is restricted by `page_range`; instructor/admin can access all.
+    - Diagnostic Requests: Student-side request views are restricted to `user=self.request.user`; instructor-side can manage all requests.
+    - File Access: Student file access requires the existence of an `ApprovedFile` associated with a completed request (e.g., `imaging_request__user=request.user, imaging_request__status="completed"`), and is restricted by `page_range`; instructor/admin can access all.
   - Endpoint Practice:
     - Student-side creation APIs should fix `user=request.user` at the view layer (not trusting `user` in the request body) to prevent unauthorized access. `LabRequest` is currently enforced; `Observations` creation still requires `user` to be passed, the calling end must pass the current user, which can be overridden at the view layer for further convergence.
     - Query APIs for students must filter based on `request.user` to prevent reading data from other groups.
@@ -61,9 +60,9 @@ Usage Requirement: New views must explicitly set `permission_classes`.
 
 - Patients and Files (`patients/models.py`, `patients/views.py`):
   - `Patient`: Basic information model.
-  - `File`: File record; `requires_pagination` controls whether "page-based authorization" is enabled. Override `delete()` to remove files from disk.
+  - `File`: File record with optional categorization; `requires_pagination` controls whether "page-based authorization" is enabled. Override `delete()` to remove files from disk.
   - File Storage: `file = models.FileField(upload_to="upload_to")`, i.e., the path is `MEDIA_ROOT/upload_to/`.
-  - File Viewing: `FileViewSet.view` supports PDF output for specified pages; authorized page range comes from `ApprovedFile.page_range` and completed `LabRequest`.
+  - File Viewing: `FileViewSet.view` supports PDF output for specified pages; authorized page range comes from `ApprovedFile.page_range` and completed diagnostic requests.
   - Upload: `PatientViewSet.upload_file` is an action route; controlled by `PatientPermission`, students cannot upload.
 
 - Observations and Bulk Creation (`student_groups`):
@@ -71,10 +70,11 @@ Usage Requirement: New views must explicitly set `permission_classes`.
   - Validation: `ObservationValidator` is executed in model `clean()` and serializer `validate()`.
   - Bulk Creation: `ObservationsViewSet.create` calls `ObservationManager.create_observations`, which transactionally creates multiple records and returns a serialized data dictionary.
 
-- Lab Requests (`LabRequest`):
-  - Student-side: `student_groups.views.LabRequestViewSet` only operates on the current user's requests.
-  - Instructor-side: `instructors.views.LabRequestViewSet` full CRUD; status updates are constrained by `LabRequestStatusUpdateSerializer` rules; can manage `ApprovedFile`.
-  - Dashboard: `DashboardViewSet` provides basic statistics.
+- Diagnostic Requests (`ImagingRequest`, `BloodTestRequest`, etc.):
+  - Student-side: Request views in `student_groups.views` only operate on the current user's requests.
+  - Instructor-side: Request views in `instructors.views` provide full CRUD functionality; status updates are constrained by serializer rules (e.g., `ImagingRequestStatusUpdateSerializer`); can manage approved files.
+  - Additional request types: `MedicationOrder`, `DischargeSummary`, etc., follow similar patterns.
+  - Dashboard views provide basic statistics on request status and completion.
 
 ## 5. Test Organization and Naming
 

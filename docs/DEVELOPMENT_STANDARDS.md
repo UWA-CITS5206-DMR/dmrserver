@@ -40,7 +40,8 @@ Suggested internal application structure (if new modules are needed):
 
 - Model fields should have `verbose_name` and necessary `help_text`; implement `__str__` for easier debugging.
 - Model changes require generating and committing migration files; handle default values/data cleanup within migrations.
-- File Model `patients.File`: `file = models.FileField(upload_to="upload_to")`, override `delete()` to clean up the actual file; `requires_pagination` is the PDF page authorization switch.
+- File Model `patients.File`: `file = models.FileField(upload_to="upload_to")`, override `delete()` to clean up the actual file; `requires_pagination` is the PDF page authorization switch; `category` field allows for file classification.
+- Diagnostic request models (`ImagingRequest`, `BloodTestRequest`, etc.) follow a consistent pattern with status tracking and file approvals.
 
 ## 5. Testing Standards
 
@@ -61,7 +62,9 @@ Suggested internal application structure (if new modules are needed):
 - Formatting: Use `uv run ruff format .` to auto-format code.
 - Linting: Use `uv run ruff check .` to check for code quality issues.
 - Running commands: Use `uv run <command>` to run commands within the project's virtual environment (e.g., `uv run python manage.py runserver`).
-- Managing dependencies: Use `uv pip install` or `uv sync` to install dependencies from `pyproject.toml`. Use `uv pip install <package>` or `uv add <package>` to add new dependencies.
+- Managing dependencies: Use `uv pip install` or `uv sync` to install dependencies from `pyproject.toml`. Use `uv add <package>` to add new dependencies.
+- Current Python version: 3.12+
+- Current Django version: 5.2+
 - Naming: Variables/functions `snake_case`; classes `PascalCase`; constants `UPPER_SNAKE_CASE`; private `_leading_underscore`.
 - Structure: Smaller functions, clear responsibilities; extract common logic to utilities/base classes; avoid code duplication.
 - Imports: Group by standard library, third-party, and project-internal; remove unused imports.
