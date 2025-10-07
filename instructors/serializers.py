@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from student_groups.models import ImagingRequest, BloodTestRequest, ApprovedFile
-from patients.models import File
 from core.serializers import BaseModelSerializer, UserSerializer
 from patients.serializers import PatientSerializer
 from student_groups.serializers import ApprovedFileSerializer
@@ -52,12 +51,14 @@ class ImagingRequestSerializer(BaseModelSerializer):
         if approved_files_data is not None:
             instance.approvedfile_set.all().delete()
             for approved_file_data in approved_files_data:
-                file_id = approved_file_data.get("file", {}).get("id")
+                # The ApprovedFileSerializer.validate() now returns a File instance
+                file = approved_file_data.get("file")
                 page_range = approved_file_data.get("page_range")
-                file = File.objects.get(id=file_id)
-                ApprovedFile.objects.create(
-                    imaging_request=instance, file=file, page_range=page_range
-                )
+                
+                if file:
+                    ApprovedFile.objects.create(
+                        imaging_request=instance, file=file, page_range=page_range
+                    )
 
         return instance
 
@@ -101,13 +102,16 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
         if approved_files_data:
             instance.approvedfile_set.all().delete()
             for approved_file_data in approved_files_data:
-                file_id = approved_file_data.get("file").get("id")
-                file = File.objects.get(id=file_id)
-                ApprovedFile.objects.create(
-                    imaging_request=instance,
-                    file=file,
-                    page_range=approved_file_data.get("page_range"),
-                )
+                # The ApprovedFileSerializer.validate() now returns a File instance
+                file = approved_file_data.get("file")
+                page_range = approved_file_data.get("page_range")
+                
+                if file:
+                    ApprovedFile.objects.create(
+                        imaging_request=instance,
+                        file=file,
+                        page_range=page_range,
+                    )
         elif (
             "approved_files" in self.initial_data
         ):  # If an empty list is passed, clear the files
@@ -181,3 +185,25 @@ class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):
         if value not in ["pending", "completed"]:
             raise serializers.ValidationError("Invalid status value.")
         return value
+
+    def update(self, instance, validated_data):
+        # BloodTestRequest uses a direct ManyToManyField, not through ApprovedFile
+        # So we need different handling than ImagingRequest
+        approved_files_data = validated_data.pop("approvedfile_set", [])
+
+        instance = super().update(instance, validated_data)
+
+        if approved_files_data:
+            # Clear existing approved files
+            instance.approved_files.clear()
+            # Add new approved files from the validated data
+            for approved_file_data in approved_files_data:
+                file = approved_file_data.get("file")
+                if file:
+                    # Note: page_range is ignored for BloodTestRequest as it uses direct M2M
+                    instance.approved_files.add(file)
+        elif "approved_files" in self.initial_data:
+            # If an empty list is passed, clear the files
+            instance.approved_files.clear()
+
+        return instance
