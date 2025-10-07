@@ -50,7 +50,7 @@ Usage Requirement: New views must explicitly set `permission_classes`.
   - Permission Impact:
     - Observation Data: `ObservationPermission` performs an object-level check `obj.user == request.user`, so students can only CRUD their group's records; instructors have read-only access to observations, and admin has full access.
     - Diagnostic Requests: Student-side request views are restricted to `user=self.request.user`; instructor-side can manage all requests.
-    - File Access: Student file access requires the existence of an `ApprovedFile` associated with a completed request (e.g., `imaging_request__user=request.user, imaging_request__status="completed"`), and is restricted by `page_range`; instructor/admin can access all.
+    - File Access: Student file access requires the existence of an `ApprovedFile` associated with a completed lab request (either `ImagingRequest` or `BloodTestRequest` with `status="completed"` and matching `user`), and is restricted by `page_range`; instructor/admin can access all.
   - Endpoint Practice:
     - Student-side creation APIs should fix `user=request.user` at the view layer (not trusting `user` in the request body) to prevent unauthorized access. `LabRequest` is currently enforced; `Observations` creation still requires `user` to be passed, the calling end must pass the current user, which can be overridden at the view layer for further convergence.
     - Query APIs for students must filter based on `request.user` to prevent reading data from other groups.

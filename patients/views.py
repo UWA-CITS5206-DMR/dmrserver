@@ -1,6 +1,7 @@
 import mimetypes
 import io
 from wsgiref.util import FileWrapper
+from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseForbidden
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -249,7 +250,8 @@ class FileViewSet(viewsets.ModelViewSet):
 
     def _get_authorized_page_range(self, file_instance, user):
         """
-        Get the authorized page range for a user from approved imaging requests.
+        Get the authorized page range for a user from approved lab requests
+        (imaging requests or blood test requests).
 
         Args:
             file_instance: The File object being accessed
@@ -268,10 +270,17 @@ class FileViewSet(viewsets.ModelViewSet):
             return None
 
         # Students must have an approved lab request for this file
+        # Check both ImagingRequest and BloodTestRequest with completed status
         approved_file = ApprovedFile.objects.filter(
+            Q(
+                imaging_request__user=user,
+                imaging_request__status="completed",
+            )
+            | Q(
+                blood_test_request__user=user,
+                blood_test_request__status="completed",
+            ),
             file=file_instance,
-            imaging_request__user=user,
-            imaging_request__status="completed",
         ).first()
 
         return approved_file.page_range if approved_file else None
