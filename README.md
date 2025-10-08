@@ -38,17 +38,43 @@ source .venv/bin/activate  # On Unix/macOS
 .venv\Scripts\activate     # On Windows
 ```
 
-### 3. Database Setup
+### 3. Environment Configuration
+
+You must configure the `.env` file before running database migrations, otherwise the setup will fail.
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+```
+
+**Important:**
+
+- The `.env` file is ignored by git and should never be committed
+- For production, generate a secure `SECRET_KEY` using:
+
+  ```bash
+  python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+  ```
+
+- Set `DEBUG=False` in production
+- Configure `ALLOWED_HOSTS` appropriately for your deployment environment
+
+### 4. Database Setup
+
+The project automatically creates the necessary `data/` directory for the database, media files, and static files when Django initializes. You don't need to create this directory manually.
 
 ```bash
 # Run database migrations
+# This will create the SQLite database in the data/ directory
 uv run python manage.py migrate
 
-# Create a superuser (optional)
+# Create a superuser (optional but recommended)
 uv run python manage.py createsuperuser
 ```
 
-### 4. Start the Development Server
+**Note:** The database file will be created at `data/db.sqlite3` by default. The `data/` directory is automatically created on first run if it doesn't exist.
+
+### 5. Start the Development Server
 
 ```bash
 # Start the Django development server
@@ -97,16 +123,6 @@ Once the server is running, you can access:
 
 - **API Documentation**: `http://127.0.0.1:8000/schema/swagger-ui/`
 - **Admin Interface**: `http://127.0.0.1:8000/admin/`
-
-## Environment Variables
-
-Create a `.env` file in the project root for environment-specific settings:
-
-```env
-DEBUG=True
-SECRET_KEY=your-secret-key-here
-DATABASE_URL=sqlite:///db.sqlite3
-```
 
 ## Docker Deployment
 

@@ -19,6 +19,12 @@ from corsheaders.defaults import default_methods, default_headers
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 
+# Create data directory and subdirectories if they don't exist
+# This ensures database, media, and static files have a proper location
+DATA_DIR.mkdir(exist_ok=True)
+(DATA_DIR / "media").mkdir(exist_ok=True)
+(DATA_DIR / "static").mkdir(exist_ok=True)
+
 # Load environment variables from .env file
 load_dotenv(BASE_DIR / ".env")
 
