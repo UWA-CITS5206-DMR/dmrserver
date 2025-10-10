@@ -24,8 +24,13 @@ Suggested internal application structure (if new modules are needed):
 
 - Centralized Permissions: All general permission classes are located in `core/permissions.py`, uniformly inheriting `BaseRolePermission`.
 - Roles: `admin`, `instructor`, `student`; `get_user_role` is determined based on Django Group and superuser status.
+- RBAC Architecture: The system follows resource-based RBAC principles. All permission classes are named after the resources they protect (e.g., `PatientPermission`, `LabRequestPermission`), not after roles. Role-specific gate classes (IsAdmin, IsInstructor, IsStudent) have been eliminated to comply with RBAC best practices.
 - Method-Level Control: Each permission class defines a list of allowed methods via `role_permissions`; when not explicitly restricted, admin defaults to full access.
-- Object-Level Control: Implement `has_object_permission` when needed (e.g., `ObservationPermission` enforces `obj.user == request.user`).
+- Object-Level Control: Implement `has_object_permission` when needed (e.g., `ObservationPermission` enforces `obj.user == request.user`, `LabRequestPermission` ensures students can only access their own requests).
+- Resource-Based Permissions:
+  - `InstructorManagementPermission`: For instructor-side management endpoints (dashboard, full request management)
+  - `LabRequestPermission`: For student-side lab request endpoints (create and view own requests with ownership checks)
+  - `PatientPermission`, `ObservationPermission`, `FileAccessPermission`, `FileManagementPermission`: Existing resource-based permissions
 - File Access: Student file access is restricted by `FileAccessPermission` + `ApprovedFile` + `LabRequest(status=completed)`; `page_range` is used only for PDFs with `requires_pagination=True`.
 - View Requirements: All views must explicitly set `permission_classes`; if not specified, `IsAuthenticated` is used by default.
 

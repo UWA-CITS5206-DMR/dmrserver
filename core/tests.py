@@ -17,9 +17,6 @@ from unittest.mock import Mock
 
 from core.permissions import (
     get_user_role,
-    IsAdmin,
-    IsInstructor,
-    IsStudent,
     FileAccessPermission,
 )
 from core.context import Role, ViewContext
@@ -73,81 +70,6 @@ class CoreUtilsTest(TestCase):
         """Test that a superuser is automatically considered an admin."""
         superuser = User.objects.create_superuser(username="super", password="test123")
         self.assertEqual(get_user_role(superuser), Role.ADMIN.value)
-
-
-class RoleBasedPermissionsTest(TestCase):
-    """Test role-based permission classes"""
-
-    def setUp(self):
-        # Create user groups
-        self.admin_group, _ = Group.objects.get_or_create(name=Role.ADMIN.value)
-        self.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
-        )
-        self.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
-
-        # Create test users
-        self.admin_user = User.objects.create_user(username="admin", password="test123")
-        self.instructor_user = User.objects.create_user(
-            username="instructor", password="test123"
-        )
-        self.student_user = User.objects.create_user(
-            username="student", password="test123"
-        )
-
-        # Assign roles
-        self.admin_user.groups.add(self.admin_group)
-        self.instructor_user.groups.add(self.instructor_group)
-        self.student_user.groups.add(self.student_group)
-
-        # Create mock request objects
-        self.mock_request = Mock()
-        self.mock_view = Mock()
-
-    def test_is_admin_permission(self):
-        """Test IsAdmin permission class"""
-        permission = IsAdmin()
-
-        # Test admin user
-        self.mock_request.user = self.admin_user
-        self.assertTrue(permission.has_permission(self.mock_request, self.mock_view))
-
-        # Test non-admin users
-        self.mock_request.user = self.instructor_user
-        self.assertFalse(permission.has_permission(self.mock_request, self.mock_view))
-
-        self.mock_request.user = self.student_user
-        self.assertFalse(permission.has_permission(self.mock_request, self.mock_view))
-
-    def test_is_instructor_permission(self):
-        """Test IsInstructor permission class"""
-        permission = IsInstructor()
-
-        # Test instructor user
-        self.mock_request.user = self.instructor_user
-        self.assertTrue(permission.has_permission(self.mock_request, self.mock_view))
-
-        # Test non-instructor users
-        self.mock_request.user = self.admin_user
-        self.assertFalse(permission.has_permission(self.mock_request, self.mock_view))
-
-        self.mock_request.user = self.student_user
-        self.assertFalse(permission.has_permission(self.mock_request, self.mock_view))
-
-    def test_is_student_permission(self):
-        """Test IsStudent permission class"""
-        permission = IsStudent()
-
-        # Test student user
-        self.mock_request.user = self.student_user
-        self.assertTrue(permission.has_permission(self.mock_request, self.mock_view))
-
-        # Test non-student users
-        self.mock_request.user = self.admin_user
-        self.assertFalse(permission.has_permission(self.mock_request, self.mock_view))
-
-        self.mock_request.user = self.instructor_user
-        self.assertFalse(permission.has_permission(self.mock_request, self.mock_view))
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())

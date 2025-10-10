@@ -30,7 +30,7 @@ from .models import (
     DischargeSummary,
 )
 from .pagination import ObservationsPagination
-from core.permissions import ObservationPermission, IsStudent
+from core.permissions import ObservationPermission, LabRequestPermission
 from core.context import ViewContext
 from rest_framework.response import Response
 from rest_framework import viewsets, status, mixins
@@ -357,7 +357,7 @@ class ImagingRequestViewSet(
 ):
     queryset = ImagingRequest.objects.all()
     serializer_class = ImagingRequestSerializer
-    permission_classes = [IsStudent]
+    permission_classes = [LabRequestPermission]
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -383,7 +383,7 @@ class BloodTestRequestViewSet(
 ):
     queryset = BloodTestRequest.objects.all()
     serializer_class = BloodTestRequestSerializer
-    permission_classes = [IsStudent]
+    permission_classes = [LabRequestPermission]
 
     def get_queryset(self):
         """Students can only see their own requests"""
@@ -401,7 +401,7 @@ class MedicationOrderViewSet(
 ):
     queryset = MedicationOrder.objects.all()
     serializer_class = MedicationOrderSerializer
-    permission_classes = [IsStudent]
+    permission_classes = [LabRequestPermission]
 
     def get_queryset(self):
         """Students can only see their own requests"""
@@ -419,7 +419,7 @@ class DischargeSummaryViewSet(
 ):
     queryset = DischargeSummary.objects.all()
     serializer_class = DischargeSummarySerializer
-    permission_classes = [IsStudent]
+    permission_classes = [LabRequestPermission]
 
     def get_queryset(self):
         """Students can only see their own requests"""

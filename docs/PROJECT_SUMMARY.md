@@ -32,12 +32,15 @@ Key Operating Points (see `README.md` in the root directory for details):
 
 - Role Constants: `admin`, `instructor`, `student` (`core/permissions.py`).
 - Base Class: `BaseRolePermission` + `role_permissions` controls method-level permissions; admin has full access unless explicitly restricted.
-- Permission Classes and Key Points:
+- Permission Classes and Key Points (Resource-Based RBAC):
   - `PatientPermission`: student read-only; instructor full; admin full.
   - `ObservationPermission`: student can only CRUD their own records (object-level check `obj.user == request.user`); instructor read-only; admin full.
-  - `IsInstructor`: ensures only instructor/admin can access instructor-side views.
+  - `InstructorManagementPermission`: protects instructor-side management endpoints (dashboard, full request management); instructor full access; admin full; student no access.
+  - `LabRequestPermission`: protects student-side lab request endpoints (create and view own requests); student can POST/GET with object-level ownership check; admin full; instructor no access (uses InstructorManagementPermission on instructor-side).
   - `FileAccessPermission`: admin/instructor can access all files; student can only access `ApprovedFile` bound to their "completed" requests (e.g., `ImagingRequest` or `BloodTestRequest`), and is restricted by `page_range`.
   - `FileManagementPermission`: only instructor/admin can manage files (CRUD).
+
+RBAC Design Principle: All permissions are resource-based (named after resources, not roles) and internally manage role access via `role_permissions` dict.
 
 Usage Requirement: New views must explicitly set `permission_classes`.
 
