@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.context import ViewContext
-from core.permissions import IsInstructor
+from core.permissions import InstructorManagementPermission
 from patients.models import Patient
 from student_groups.models import BloodTestRequest, ImagingRequest
 from .serializers import (
@@ -25,7 +25,7 @@ class ImagingRequestViewSet(
 ):
     queryset = ImagingRequest.objects.select_related("user", "patient").all()
     serializer_class = ImagingRequestSerializer
-    permission_classes = [IsInstructor]
+    permission_classes = [InstructorManagementPermission]
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -75,7 +75,7 @@ class BloodTestRequestViewSet(
 ):
     queryset = BloodTestRequest.objects.select_related("user", "patient").all()
     serializer_class = BloodTestRequestSerializer
-    permission_classes = [IsInstructor]
+    permission_classes = [InstructorManagementPermission]
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -120,7 +120,7 @@ class DashboardViewSet(viewsets.GenericViewSet):
     Instructor dashboard data endpoints.
     """
 
-    permission_classes = [IsInstructor]
+    permission_classes = [InstructorManagementPermission]
 
     @extend_schema(
         summary="Get dashboard overview",

@@ -797,8 +797,9 @@ class ImagingRequestViewSetTest(APITestCase):
         response = self.client.patch(
             f"/api/student-groups/imaging-requests/{imaging_request.id}/", data
         )
-        # ImagingRequestViewSet doesn't include UpdateModelMixin, so PATCH returns 405
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        # Students don't have PATCH permission in LabRequestPermission, so returns 403
+        # (Previously returned 405 because ViewSet lacks UpdateModelMixin, but permission check happens first)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class PainScoreViewSetTest(APITestCase):

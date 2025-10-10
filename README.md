@@ -146,10 +146,9 @@ For detailed Docker setup and configuration, see **[Docker Guide](docs/DOCKER_GU
 
 For comprehensive development guides and documentation, see the [`docs/`](docs/) directory:
 
-- **[Project Summary](docs/PROJECT_SUMMARY.md)** - Overview of the project architecture
-- **[Development Standards](docs/DEVELOPMENT_STANDARDS.md)** - Coding standards and best practices
+- **[Project Summary](docs/PROJECT_SUMMARY.md)** - Overview of the project architecture and permission model
+- **[Development Standards](docs/DEVELOPMENT_STANDARDS.md)** - Coding standards, RBAC architecture, and testing best practices
 - **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** - Complete setup and development workflow
-- **[Testing Guide](docs/TESTING_GUIDE.md)** - Testing strategies and best practices
 - **[Docker Guide](docs/DOCKER_GUIDE.md)** - Instructions for Docker deployment
 
 For detailed troubleshooting, see the [Development Guide](docs/DEVELOPMENT_GUIDE.md#troubleshooting).
@@ -157,8 +156,8 @@ For detailed troubleshooting, see the [Development Guide](docs/DEVELOPMENT_GUIDE
 ## Contributing
 
 1. Create a new branch for your feature
-2. Follow the coding standards outlined in the documentation
-3. Write tests following the [Testing Guide](docs/TESTING_GUIDE.md)
+2. Follow the coding standards outlined in [Development Standards](docs/DEVELOPMENT_STANDARDS.md)
+3. Write tests following the [Testing Standards](docs/DEVELOPMENT_STANDARDS.md#5-testing-standards)
 4. Run tests with `uv run python manage.py test`
 5. Submit a pull request
 

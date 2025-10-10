@@ -76,31 +76,35 @@ class BaseRolePermission(BasePermission):
         return self.has_permission(request, view)
 
 
-class IsAdmin(BasePermission):
+class InstructorManagementPermission(BaseRolePermission):
     """
-    Custom permission to only allow admin users.
-    """
+    Permission for instructor management endpoints (dashboard, request management).
 
-    def has_permission(self, request, view):
-        return get_user_role(request.user) == Role.ADMIN.value
+    This permission protects instructor-side endpoints that provide full CRUD
+    access to lab requests and dashboard statistics.
 
+    Access rules:
+    - Instructors: full CRUD access to all management functions
+    - Admins: full access (inherited)
+    - Students: no access
 
-class IsInstructor(BasePermission):
-    """
-    Custom permission to only allow instructor users.
-    """
-
-    def has_permission(self, request, view):
-        return get_user_role(request.user) == Role.INSTRUCTOR.value
-
-
-class IsStudent(BasePermission):
-    """
-    Custom permission to only allow student users.
+    Use this for:
+    - Instructor dashboard endpoints
+    - Instructor-side lab request management
+    - Any instructor-specific management features
     """
 
-    def has_permission(self, request, view):
-        return get_user_role(request.user) == Role.STUDENT.value
+    role_permissions = {
+        Role.INSTRUCTOR.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
+    }
 
 
 class PatientPermission(BaseRolePermission):
@@ -164,43 +168,6 @@ class ObservationPermission(BaseRolePermission):
             return request.method in SAFE_METHODS
 
         # Student can only access their own observations
-        if user_role == Role.STUDENT.value:
-            return hasattr(obj, "user") and obj.user == request.user
-
-        return False
-
-
-class RequestPermission(BaseRolePermission):
-    """
-    Permission for student request operations (Imaging, Blood Test, etc.).
-    - Students: can create and read their own requests.
-    - Instructors: read-only access (full CRUD is handled in the instructors app).
-    - Admin: full access (inherited).
-    """
-
-    role_permissions = {
-        Role.STUDENT.value: ["GET", "POST", "HEAD", "OPTIONS"],
-        Role.INSTRUCTOR.value: SAFE_METHODS,
-    }
-
-    def has_object_permission(self, request, view, obj):
-        """Students can only access their own requests; instructors have read-only access."""
-        if not request.user.is_authenticated:
-            return False
-
-        user_role = get_user_role(request.user)
-        if not user_role:
-            return False
-
-        # Admin has full access
-        if user_role == Role.ADMIN.value:
-            return True
-
-        # Instructor has read-only access to all requests
-        if user_role == Role.INSTRUCTOR.value:
-            return request.method in SAFE_METHODS
-
-        # Student can only access their own requests
         if user_role == Role.STUDENT.value:
             return hasattr(obj, "user") and obj.user == request.user
 
@@ -271,3 +238,52 @@ class FileManagementPermission(BaseRolePermission):
             "OPTIONS",
         ],
     }
+
+
+class LabRequestPermission(BaseRolePermission):
+    """
+    Permission for lab request resources (ImagingRequest, BloodTestRequest,
+    MedicationOrder, DischargeSummary).
+
+    This permission provides unified access control for all lab request types,
+    ensuring consistent RBAC enforcement across student-side endpoints.
+
+    Access rules:
+    - Students: can create and view their own requests (object-level check)
+    - Instructors: no access (use InstructorManagementPermission for instructor-side endpoints)
+    - Admins: full access to all operations
+
+    Note: This permission is designed for student-side lab request endpoints.
+    Instructor-side endpoints should use InstructorManagementPermission.
+    """
+
+    role_permissions = {
+        Role.STUDENT.value: [
+            "GET",
+            "POST",
+            "HEAD",
+            "OPTIONS",
+        ],
+    }
+
+    def has_object_permission(self, request, view, obj):
+        """
+        Check object-level permissions for lab requests.
+        Students can only access their own requests.
+        """
+        if not request.user.is_authenticated:
+            return False
+
+        user_role = get_user_role(request.user)
+        if not user_role:
+            return False
+
+        # Admin has full access
+        if user_role == Role.ADMIN.value:
+            return True
+
+        # Students can only access their own requests
+        if user_role == Role.STUDENT.value:
+            return hasattr(obj, "user") and obj.user == request.user
+
+        return False
