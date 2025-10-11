@@ -21,7 +21,6 @@ VOLUME ["/app/data"]
 
 # Set environment variables
 ENV DJANGO_SETTINGS_MODULE=dmr.settings
-ENV DJANGO_CONFIGURATION=Production
 
 EXPOSE 8000
 
