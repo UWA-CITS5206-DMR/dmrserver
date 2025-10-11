@@ -10,11 +10,8 @@ To deploy the DMR Server using Docker:
 docker run -d \
   --name dmrserver \
   -p 8000:8000 \
-  -v $(pwd)/media:/app/media \
-  -v $(pwd)/static:/app/static \
-  -v $(pwd)/db.sqlite3:/app/db.sqlite3 \
+  -v $(pwd)/data:/app/data \
   -e DJANGO_SETTINGS_MODULE=dmr.settings \
-  -e DJANGO_CONFIGURATION=Production \
   dmrserver
 ```
 
@@ -32,28 +29,26 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./media:/app/media
-      - ./static:/app/static
-      - ./db.sqlite3:/app/db.sqlite3
+      - ./data:/app/data
     environment:
       - DJANGO_SETTINGS_MODULE=dmr.settings
-      - DJANGO_CONFIGURATION=Production
     restart: unless-stopped
 ```
 
 ## Volume Mounts
 
-- `./media:/app/media` - For uploaded media files
-- `./static:/app/static` - For Django static files (after running `collectstatic`)
-- `./db.sqlite3:/app/db.sqlite3` - For the SQLite database
+- `./data:/app/data` - For all persistent data (media files, static files, SQLite database)
 
 ## Environment Variables
 
-- `DJANGO_SETTINGS_MODULE` - Django settings module
+- `DJANGO_SETTINGS_MODULE` - Django settings module (default: dmr.settings)
 - `SECRET_KEY` - Django secret key
-- `DEBUG` - Debug mode (True/False)
-- `ALLOWED_HOSTS` - Allowed hosts for Django
-- `DATABASE_URL` - Database URL (defaults to SQLite)
+- `DEBUG` - Debug mode (default: False)
+- `ALLOWED_HOSTS` - Comma-separated list of allowed hosts
+- `DATABASE_URL` - Database URL (default: sqlite://db.sqlite3)
+- `CORS_ALLOWED_ORIGINS` - Comma-separated list of CORS allowed origins
+- `CORS_ALLOW_ALL_ORIGINS` - Allow all origins for CORS (True/False, default: True)
+- `CSRF_TRUSTED_ORIGINS` - Comma-separated list of CSRF trusted origins
 
 ## Accessing the Application
 
