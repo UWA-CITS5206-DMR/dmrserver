@@ -2,6 +2,7 @@ import mimetypes
 import io
 from wsgiref.util import FileWrapper
 from django.http import Http404, HttpResponse, HttpResponseForbidden
+from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -12,6 +13,7 @@ from core.permissions import (
     PatientPermission,
     FileAccessPermission,
     FileManagementPermission,
+    FileListPermission,
     get_user_role,
 )
 from core.context import Role
@@ -94,12 +96,16 @@ class FileViewSet(viewsets.ModelViewSet):
     - View file content with optional PDF pagination
 
     Permissions:
-    - Instructors/Admins: Full CRUD access (via FileManagementPermission)
-    - Students: No direct CRUD access
+    - List action:
+      - Students: Can view file lists (filtered to Admission files + approved files)
+      - Instructors/Admins: Can view all files
+    - Other CRUD actions:
+      - Instructors/Admins: Full CRUD access (via FileManagementPermission)
+      - Students: No direct CRUD access
     - File viewing (view action) uses separate FileAccessPermission
 
     File Categories:
-    - Admission: Admission documents
+    - Admission: Admission documents (always visible to students)
     - Pathology: Pathology reports
     - Imaging: Imaging results (X-rays, CT scans, etc.)
     - Diagnostics: Diagnostic test results
@@ -111,14 +117,56 @@ class FileViewSet(viewsets.ModelViewSet):
     serializer_class = FileSerializer
     permission_classes = [FileManagementPermission]
 
+    def get_permissions(self):
+        """
+        Use different permissions for list vs other actions.
+        
+        - List action: FileListPermission (allows students read-only access)
+        - Other actions: FileManagementPermission (instructors/admins only)
+        - View action: FileAccessPermission (defined in action decorator)
+        """
+        if self.action == "list":
+            return [FileListPermission()]
+        return super().get_permissions()
+
     def get_queryset(self):
-        """Filter files by patient_pk from the nested route."""
-        return File.objects.filter(patient_id=self.kwargs["patient_pk"])
+        """
+        Filter files by patient_pk from the nested route and user role.
+        
+        Filtering rules:
+        - Students: Only see Admission files + approved files from completed requests
+        - Instructors/Admins: See all files
+        """
+        base_queryset = File.objects.filter(patient_id=self.kwargs["patient_pk"])
+        
+        # For list action, filter based on user role
+        if self.action == "list" and self.request.user.is_authenticated:
+            user_role = get_user_role(self.request.user)
+            
+            # Students see only Admission files + approved files
+            if user_role == Role.STUDENT.value:
+                # Get files from approved lab requests for this student
+                approved_file_ids = ApprovedFile.objects.filter(
+                    Q(imaging_request__user=self.request.user, imaging_request__status="completed") |
+                    Q(blood_test_request__user=self.request.user, blood_test_request__status="completed")
+                ).values_list("file_id", flat=True)
+                
+                # Filter: Admission category OR in approved files
+                base_queryset = base_queryset.filter(
+                    Q(category=File.Category.ADMISSION) | Q(id__in=approved_file_ids)
+                ).distinct()
+        
+        return base_queryset
 
     @extend_schema(
         summary="List files for a patient",
-        description="Returns all files associated with a specific patient. "
-        "Only accessible by instructors and admins.",
+        description=(
+            "Returns files associated with a specific patient, filtered by user role:\n\n"
+            "**Students:** Can view:\n"
+            "- All Admission type files (always visible)\n"
+            "- Files approved in their completed lab requests\n\n"
+            "**Instructors/Admins:** Can view all files for the patient."
+        ),
         responses={200: FileSerializer(many=True)},
     )
     def list(self, request, *args, **kwargs):
