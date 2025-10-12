@@ -4,12 +4,12 @@ This document provides a project overview, module boundaries, permission model, 
 
 ## 1. Project Purpose and Operation
 
-This is a Django + DRF-based Electronic Medical Record (EMR) simulation backend for teaching practice: students record observations and notes, and initiate lab requests under shared group accounts; instructors review and generate statistics.
+This is a Django + DRF-based Digital Medical Records (DMR) simulation backend for teaching practice: students record observations and notes, and initiate lab requests under shared group accounts; instructors review and generate statistics.
 
 Key Operating Points (see `README.md` in the root directory for details):
 
 - Dependency Management: `uv` is recommended (`uv sync`), traditional venv+pip is also an option.
-- Database: SQLite (default `db.sqlite3`).
+- Database: SQLite (default `data/db.sqlite3`, automatically created on first run).
 - Startup: `uv run python manage.py runserver`; Swagger: `/schema/swagger-ui/`.
 - Authentication: DRF Token + Session (see `REST_FRAMEWORK` in `dmr/settings.py`).
 
@@ -30,7 +30,7 @@ Key Operating Points (see `README.md` in the root directory for details):
 
 ## 3. Permission Model
 
-- Role Constants: `admin`, `instructor`, `student` (`core/permissions.py`).
+- Role Constants: `admin`, `instructor`, `student` (defined in `core/context.py` as `Role` enum, used in `core/permissions.py`).
 - Base Class: `BaseRolePermission` + `role_permissions` controls method-level permissions; admin has full access unless explicitly restricted.
 - Permission Classes and Key Points (Resource-Based RBAC):
   - `PatientPermission`: student read-only; instructor full; admin full.
@@ -103,7 +103,7 @@ Usage Requirement: New views must explicitly set `permission_classes`.
 
 ## 7. Branching and Commits
 
-- Branch Naming: `feature/<name>`, `fix/<name>`, `chore/<name>` (e.g., current branch `feature/instructor`).
+- Branch Naming: `feature/<name>`, `fix/<name>`, `chore/<name>` (e.g., `feature/instructor`).
 - Commit Messages: Recommended to follow Conventional Commits (`feat: …`, `fix: …`, `docs: …`, `refactor: …`, `test: …`, `chore: …`).
 - PR Conventions: Describe motivation, changes, verification methods, and scope of impact; link to issues; at least one reviewer.
 
@@ -123,7 +123,7 @@ Usage Requirement: New views must explicitly set `permission_classes`.
 - Lint/Type: Keep imports clean; avoid unused code; if type annotations are introduced, ensure basic checks pass.
 - Testing: Can run independently and pass; avoid reliance on external states (network, real media).
 - Documentation: Update `docs/` and relevant sections in this document; examples consistent with code.
-- API Documentation: `drf-spectacular` is enabled (`SCHEMA_PATH_PREFIX = "/api"`).
+- API Documentation: `drf-spectacular` is enabled (`SCHEMA_PATH_PREFIX = "/api"` in `SPECTACULAR_SETTINGS`).
 - CORS/Authentication: Cross-origin allowed during development; configuration needs to be tightened for production.
 
 ## 10. Data and Security

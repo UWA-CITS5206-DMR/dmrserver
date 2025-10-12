@@ -13,7 +13,10 @@ Key paths in the root directory:
 - `instructors/`: Instructor-side management and statistics
 - `tests/`: Centralized integration/end-to-end tests
 - `docs/`: Project documentation
-- `media/`: User uploaded files (development environment)
+- `data/`: Contains database, media files, and static files (created automatically)
+  - `data/media/`: User uploaded files
+  - `data/static/`: Static files
+  - `data/db.sqlite3`: SQLite database (default)
 
 Suggested internal application structure (if new modules are needed):
 
@@ -23,7 +26,7 @@ Suggested internal application structure (if new modules are needed):
 ## 2. Permissions and Security
 
 - Centralized Permissions: All general permission classes are located in `core/permissions.py`, uniformly inheriting `BaseRolePermission`.
-- Roles: `admin`, `instructor`, `student`; `get_user_role` is determined based on Django Group and superuser status.
+- Roles: `admin`, `instructor`, `student` (defined in `core/context.py` as `Role` enum); `get_user_role` in `core/permissions.py` is determined based on Django Group and superuser status.
 - RBAC Architecture: The system follows resource-based RBAC principles. All permission classes are named after the resources they protect (e.g., `PatientPermission`, `LabRequestPermission`), not after roles. Role-specific gate classes (IsAdmin, IsInstructor, IsStudent) have been eliminated to comply with RBAC best practices.
 - Method-Level Control: Each permission class defines a list of allowed methods via `role_permissions`; when not explicitly restricted, admin defaults to full access.
 - Object-Level Control: Implement `has_object_permission` when needed (e.g., `ObservationPermission` enforces `obj.user == request.user`, `LabRequestPermission` ensures students can only access their own requests).
@@ -109,7 +112,7 @@ Suggested internal application structure (if new modules are needed):
 
 ## 12. Versioning and Compatibility
 
-- OpenAPI: `SPECTACULAR_SETTINGS.SCHEMA_PATH_PREFIX = "/api"`; if versioning is introduced (e.g., `/api/v1`), routes, schema, documentation, and frontend must be updated synchronously.
+- OpenAPI: `SCHEMA_PATH_PREFIX = "/api"` (in `SPECTACULAR_SETTINGS`); if versioning is introduced (e.g., `/api/v1`), routes, schema, documentation, and frontend must be updated synchronously.
 
 ## 13. Common Issues
 
