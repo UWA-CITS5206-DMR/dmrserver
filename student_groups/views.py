@@ -43,19 +43,50 @@ class BaseObservationViewSet(viewsets.ModelViewSet):
 
     Provides common functionality for observation ViewSets:
     - Automatic user filtering in get_queryset()
+    - Optional patient filtering via query parameter
     - Automatic user assignment in perform_create()
     - ObservationPermission enforcement
 
     Subclasses only need to set:
     - queryset
     - serializer_class
+
+    Query Parameters:
+    - patient: (optional) Filter observations by patient ID
     """
 
     permission_classes = [ObservationPermission]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="patient",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter observations by patient ID",
+            ),
+        ],
+    )
+    def list(self, request, *args, **kwargs):
+        """List observations with optional patient filtering"""
+        return super().list(request, *args, **kwargs)
+
     def get_queryset(self):
-        """Filter observations by authenticated user"""
-        return self.queryset.filter(user=self.request.user)
+        """
+        Filter observations by authenticated user and optionally by patient.
+
+        Always filters by user for security. If 'patient' query parameter
+        is provided, additionally filters by patient ID.
+        """
+        queryset = self.queryset.filter(user=self.request.user)
+
+        # Optional patient filtering
+        patient_id = self.request.query_params.get("patient")
+        if patient_id is not None:
+            queryset = queryset.filter(patient_id=patient_id)
+
+        return queryset
 
     def perform_create(self, serializer):
         """Automatically set the user to the authenticated user"""
@@ -73,18 +104,49 @@ class BaseStudentRequestViewSet(
 
     Provides common functionality:
     - Automatic user filtering (students see only their requests)
+    - Optional patient filtering via query parameter
     - Automatic user assignment in creation
     - LabRequestPermission enforcement
     - Read-only after creation (create, retrieve, list only)
 
     Subclasses only need to set: queryset, serializer_class
+
+    Query Parameters:
+    - patient: (optional) Filter requests by patient ID
     """
 
     permission_classes = [LabRequestPermission]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="patient",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter requests by patient ID",
+            ),
+        ],
+    )
+    def list(self, request, *args, **kwargs):
+        """List requests with optional patient filtering"""
+        return super().list(request, *args, **kwargs)
+
     def get_queryset(self):
-        """Students can only see their own requests"""
-        return self.queryset.filter(user=self.request.user)
+        """
+        Filter requests by authenticated user and optionally by patient.
+
+        Always filters by user for security. If 'patient' query parameter
+        is provided, additionally filters by patient ID.
+        """
+        queryset = self.queryset.filter(user=self.request.user)
+
+        # Optional patient filtering
+        patient_id = self.request.query_params.get("patient")
+        if patient_id is not None:
+            queryset = queryset.filter(patient_id=patient_id)
+
+        return queryset
 
     def perform_create(self, serializer):
         """Automatically set the user to the authenticated user"""
