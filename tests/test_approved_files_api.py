@@ -82,10 +82,11 @@ class ApprovedFilesAPITestCase(TestCase):
         )
 
     def _create_dummy_file(self, filename):
-        """Create a dummy file for testing."""
+        """Create a valid dummy PDF file for testing."""
         from django.core.files.uploadedfile import SimpleUploadedFile
+        from tests.test_utils import create_test_pdf
 
-        content = b"%PDF-1.4\n%dummy pdf content"
+        content = create_test_pdf(num_pages=1)
         return SimpleUploadedFile(filename, content, content_type="application/pdf")
 
     def test_imaging_request_returns_approved_files_for_instructor(self):

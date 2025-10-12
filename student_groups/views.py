@@ -37,6 +37,60 @@ from rest_framework import viewsets, status, mixins
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 
 
+class BaseObservationViewSet(viewsets.ModelViewSet):
+    """
+    Base ViewSet for all observation types.
+
+    Provides common functionality for observation ViewSets:
+    - Automatic user filtering in get_queryset()
+    - Automatic user assignment in perform_create()
+    - ObservationPermission enforcement
+
+    Subclasses only need to set:
+    - queryset
+    - serializer_class
+    """
+
+    permission_classes = [ObservationPermission]
+
+    def get_queryset(self):
+        """Filter observations by authenticated user"""
+        return self.queryset.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        """Automatically set the user to the authenticated user"""
+        serializer.save(user=self.request.user)
+
+
+class BaseStudentRequestViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """
+    Base ViewSet for student-side requests (lab requests and orders).
+
+    Provides common functionality:
+    - Automatic user filtering (students see only their requests)
+    - Automatic user assignment in creation
+    - LabRequestPermission enforcement
+    - Read-only after creation (create, retrieve, list only)
+
+    Subclasses only need to set: queryset, serializer_class
+    """
+
+    permission_classes = [LabRequestPermission]
+
+    def get_queryset(self):
+        """Students can only see their own requests"""
+        return self.queryset.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        """Automatically set the user to the authenticated user"""
+        serializer.save(user=self.request.user)
+
+
 class ObservationsViewSet(viewsets.GenericViewSet):
     permission_classes = [ObservationPermission]
     serializer_class = ObservationsSerializer
@@ -245,121 +299,70 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         return paginator.get_paginated_response(serializer.data)
 
 
-class NoteViewSet(viewsets.ModelViewSet):
+class NoteViewSet(BaseObservationViewSet):
+    """ViewSet for Note observations"""
+
     queryset = Note.objects.all()
     serializer_class = NoteSerializer
-    permission_classes = [ObservationPermission]
-
-    def get_queryset(self):
-        """Filter observations by authenticated user"""
-        return Note.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class BloodPressureViewSet(viewsets.ModelViewSet):
+class BloodPressureViewSet(BaseObservationViewSet):
+    """ViewSet for BloodPressure observations"""
+
     queryset = BloodPressure.objects.all()
     serializer_class = BloodPressureSerializer
-    permission_classes = [ObservationPermission]
-
-    def get_queryset(self):
-        """Filter observations by authenticated user"""
-        return BloodPressure.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class HeartRateViewSet(viewsets.ModelViewSet):
+class HeartRateViewSet(BaseObservationViewSet):
+    """ViewSet for HeartRate observations"""
+
     queryset = HeartRate.objects.all()
     serializer_class = HeartRateSerializer
-    permission_classes = [ObservationPermission]
-
-    def get_queryset(self):
-        """Filter observations by authenticated user"""
-        return HeartRate.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class BodyTemperatureViewSet(viewsets.ModelViewSet):
+class BodyTemperatureViewSet(BaseObservationViewSet):
+    """ViewSet for BodyTemperature observations"""
+
     queryset = BodyTemperature.objects.all()
     serializer_class = BodyTemperatureSerializer
-    permission_classes = [ObservationPermission]
-
-    def get_queryset(self):
-        """Filter observations by authenticated user"""
-        return BodyTemperature.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class RespiratoryRateViewSet(viewsets.ModelViewSet):
+class RespiratoryRateViewSet(BaseObservationViewSet):
+    """ViewSet for RespiratoryRate observations"""
+
     queryset = RespiratoryRate.objects.all()
     serializer_class = RespiratoryRateSerializer
-    permission_classes = [ObservationPermission]
-
-    def get_queryset(self):
-        """Filter observations by authenticated user"""
-        return RespiratoryRate.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class BloodSugarViewSet(viewsets.ModelViewSet):
+class BloodSugarViewSet(BaseObservationViewSet):
+    """ViewSet for BloodSugar observations"""
+
     queryset = BloodSugar.objects.all()
     serializer_class = BloodSugarSerializer
-    permission_classes = [ObservationPermission]
-
-    def get_queryset(self):
-        """Filter observations by authenticated user"""
-        return BloodSugar.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class OxygenSaturationViewSet(viewsets.ModelViewSet):
+class OxygenSaturationViewSet(BaseObservationViewSet):
+    """ViewSet for OxygenSaturation observations"""
+
     queryset = OxygenSaturation.objects.all()
     serializer_class = OxygenSaturationSerializer
-    permission_classes = [ObservationPermission]
-
-    def get_queryset(self):
-        """Filter observations by authenticated user"""
-        return OxygenSaturation.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class PainScoreViewSet(viewsets.ModelViewSet):
+class PainScoreViewSet(BaseObservationViewSet):
+    """ViewSet for PainScore observations"""
+
     queryset = PainScore.objects.all()
     serializer_class = PainScoreSerializer
-    permission_classes = [ObservationPermission]
-
-    def get_queryset(self):
-        """Filter observations by authenticated user"""
-        return PainScore.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class ImagingRequestViewSet(
-    mixins.CreateModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.ListModelMixin,
-    viewsets.GenericViewSet,
-):
+class ImagingRequestViewSet(BaseStudentRequestViewSet):
+    """ViewSet for ImagingRequest (student-side)"""
+
     queryset = ImagingRequest.objects.all()
     serializer_class = ImagingRequestSerializer
-    permission_classes = [LabRequestPermission]
 
     def get_serializer_context(self):
+        """Add context for student create/read operations"""
         context = super().get_serializer_context()
         if self.action == "create":
             context[ViewContext.STUDENT_CREATE.value] = True
@@ -367,63 +370,23 @@ class ImagingRequestViewSet(
             context[ViewContext.STUDENT_READ.value] = True
         return context
 
-    def get_queryset(self):
-        """Students can only see their own requests"""
-        return ImagingRequest.objects.filter(user=self.request.user)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+class BloodTestRequestViewSet(BaseStudentRequestViewSet):
+    """ViewSet for BloodTestRequest (student-side)"""
 
-
-class BloodTestRequestViewSet(
-    mixins.CreateModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.ListModelMixin,
-    viewsets.GenericViewSet,
-):
     queryset = BloodTestRequest.objects.all()
     serializer_class = BloodTestRequestSerializer
-    permission_classes = [LabRequestPermission]
-
-    def get_queryset(self):
-        """Students can only see their own requests"""
-        return BloodTestRequest.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class MedicationOrderViewSet(
-    mixins.CreateModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.ListModelMixin,
-    viewsets.GenericViewSet,
-):
+class MedicationOrderViewSet(BaseStudentRequestViewSet):
+    """ViewSet for MedicationOrder (student-side)"""
+
     queryset = MedicationOrder.objects.all()
     serializer_class = MedicationOrderSerializer
-    permission_classes = [LabRequestPermission]
-
-    def get_queryset(self):
-        """Students can only see their own requests"""
-        return MedicationOrder.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
 
 
-class DischargeSummaryViewSet(
-    mixins.CreateModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.ListModelMixin,
-    viewsets.GenericViewSet,
-):
+class DischargeSummaryViewSet(BaseStudentRequestViewSet):
+    """ViewSet for DischargeSummary (student-side)"""
+
     queryset = DischargeSummary.objects.all()
     serializer_class = DischargeSummarySerializer
-    permission_classes = [LabRequestPermission]
-
-    def get_queryset(self):
-        """Students can only see their own requests"""
-        return DischargeSummary.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)

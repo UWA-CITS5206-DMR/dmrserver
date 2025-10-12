@@ -1,13 +1,11 @@
 import mimetypes
-import io
 from wsgiref.util import FileWrapper
-from django.http import Http404, HttpResponse, HttpResponseForbidden
+from django.http import Http404, HttpResponse
 from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiExample
-from PyPDF2 import PdfReader, PdfWriter
 
 from core.permissions import (
     PatientPermission,
@@ -20,6 +18,7 @@ from core.context import Role
 from student_groups.models import ApprovedFile
 from .models import Patient, File
 from .serializers import PatientSerializer, FileSerializer
+from .services import PdfPaginationService
 
 
 class PatientViewSet(viewsets.ModelViewSet):
@@ -120,7 +119,7 @@ class FileViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         """
         Use different permissions for list vs other actions.
-        
+
         - List action: FileListPermission (allows students read-only access)
         - Other actions: FileManagementPermission (instructors/admins only)
         - View action: FileAccessPermission (defined in action decorator)
@@ -132,30 +131,36 @@ class FileViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         Filter files by patient_pk from the nested route and user role.
-        
+
         Filtering rules:
         - Students: Only see Admission files + approved files from completed requests
         - Instructors/Admins: See all files
         """
         base_queryset = File.objects.filter(patient_id=self.kwargs["patient_pk"])
-        
+
         # For list action, filter based on user role
         if self.action == "list" and self.request.user.is_authenticated:
             user_role = get_user_role(self.request.user)
-            
+
             # Students see only Admission files + approved files
             if user_role == Role.STUDENT.value:
                 # Get files from approved lab requests for this student
                 approved_file_ids = ApprovedFile.objects.filter(
-                    Q(imaging_request__user=self.request.user, imaging_request__status="completed") |
-                    Q(blood_test_request__user=self.request.user, blood_test_request__status="completed")
+                    Q(
+                        imaging_request__user=self.request.user,
+                        imaging_request__status="completed",
+                    )
+                    | Q(
+                        blood_test_request__user=self.request.user,
+                        blood_test_request__status="completed",
+                    )
                 ).values_list("file_id", flat=True)
-                
+
                 # Filter: Admission category OR in approved files
                 base_queryset = base_queryset.filter(
                     Q(category=File.Category.ADMISSION) | Q(id__in=approved_file_ids)
                 ).distinct()
-        
+
         return base_queryset
 
     @extend_schema(
@@ -260,15 +265,19 @@ class FileViewSet(viewsets.ModelViewSet):
             "View file content with role-based access control.\n\n"
             "**For non-paginated files:** Returns the entire file.\n\n"
             "**For paginated PDFs (requires_pagination=True):**\n"
-            "- **Instructors/Admins:** Can view any page range by specifying `?page_range` parameter:\n"
-            "  - `?page_range=5` - View a single page\n"
-            "  - `?page_range=1-5` - View a range of pages\n"
-            "  - `?page_range=1-5,7,10-12` - View multiple pages/ranges\n"
+            "- **Instructors/Admins:**\n"
+            "  - Without `?page_range` parameter: Returns the entire PDF file\n"
+            "  - With `?page_range` parameter: Returns specified pages\n"
+            "    - `?page_range=5` - View a single page\n"
+            "    - `?page_range=1-5` - View a range of pages\n"
+            "    - `?page_range=1-5,7,10-12` - View multiple pages/ranges\n"
             "- **Students:** Can only view pages from approved lab requests (ApprovedFile.page_range).\n"
             "  Students can optionally specify pages within their approved range.\n\n"
             "**Authorization:**\n"
             "- Students: Must have a completed lab request with an ApprovedFile for this file\n"
-            "- Instructors/Admins: Full access to all files and pages"
+            "- Instructors/Admins: Full access to all files and pages\n\n"
+            "**Error Handling:**\n"
+            "- Invalid page ranges will return an error with the valid page range"
         ),
     )
     @action(detail=True, methods=["get"], permission_classes=[FileAccessPermission])
@@ -276,167 +285,32 @@ class FileViewSet(viewsets.ModelViewSet):
         """
         View file content with pagination support for PDFs.
 
-        This action enforces role-based access:
-        - Instructors/Admins: Can specify custom page ranges for any file
+        Role-based access control:
+        - Instructors/Admins: Full access to all files and optional page ranges
         - Students: Restricted to approved page ranges from completed lab requests
         """
         file_instance = self.get_object()
-
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden("Authentication required.")
-
         page_range_query = request.query_params.get("page_range")
 
+        # For paginated PDFs, check if we need pagination or full file
         if file_instance.requires_pagination:
-            return self._serve_paginated_pdf(
+            user_role = get_user_role(request.user)
+
+            # Instructors/admins without page_range get the full file
+            if (
+                user_role in [Role.ADMIN.value, Role.INSTRUCTOR.value]
+                and not page_range_query
+            ):
+                return self._serve_whole_file(file_instance)
+
+            # Use pagination service for page extraction
+            pdf_service = PdfPaginationService()
+            return pdf_service.serve_paginated_pdf(
                 file_instance, request.user, page_range_query
             )
 
         # For non-paginated files, serve the whole file
         return self._serve_whole_file(file_instance)
-
-    def _get_authorized_page_range(self, file_instance, user):
-        """
-        Get the authorized page range for a user from approved lab requests.
-
-        Args:
-            file_instance: The File object being accessed
-            user: The requesting user
-
-        Returns:
-            str or None:
-                - None for instructors/admins (unrestricted access to all pages)
-                - page_range string for students with approved access
-                - None for students without approved access (will be denied)
-        """
-        user_role = get_user_role(user)
-
-        # Instructors and admins have unrestricted access to all pages
-        if user_role in [Role.ADMIN.value, Role.INSTRUCTOR.value]:
-            return None
-
-        # Students must have an approved lab request for this file
-        # Check both ImagingRequest and BloodTestRequest
-        approved_file = ApprovedFile.objects.filter(
-            file=file_instance,
-            imaging_request__user=user,
-            imaging_request__status="completed",
-        ).first()
-
-        if not approved_file:
-            # If not found in ImagingRequest, check BloodTestRequest
-            approved_file = ApprovedFile.objects.filter(
-                file=file_instance,
-                blood_test_request__user=user,
-                blood_test_request__status="completed",
-            ).first()
-
-        return approved_file.page_range if approved_file else None
-
-    def _parse_page_range(self, range_str):
-        """Parse page range string like '1-5' or '7' into a list of page numbers"""
-        if not range_str:
-            return []
-
-        pages = []
-        for part in range_str.split(","):
-            part = part.strip()
-            if "-" in part:
-                start, end = map(int, part.split("-"))
-                pages.extend(range(start, end + 1))
-            else:
-                pages.append(int(part))
-        return pages
-
-    def _serve_paginated_pdf(self, file_instance, user, page_range_query):
-        """
-        Serve specific pages of a PDF file based on authorization.
-
-        Authorization rules:
-        - Instructors/Admins: Can specify any page range via query parameters
-        - Students: Must have an ApprovedFile with authorized page_range from completed lab request
-
-        Query parameters:
-        - page_range: Page range string supporting single page or ranges
-          Examples: ?page_range=5 (single page)
-                   ?page_range=1-5 (range)
-                   ?page_range=1-5,7,10-12 (multiple ranges)
-
-        Args:
-            file_instance: The File object to serve
-            user: The requesting user
-            page_range_query: Page range string from query params
-
-        Returns:
-            HttpResponse with PDF content or HttpResponseForbidden
-        """
-        try:
-            user_role = get_user_role(user)
-            authorized_range = self._get_authorized_page_range(file_instance, user)
-
-            # Check if user has any access to this file
-            # For instructors/admins, authorized_range is None (unrestricted)
-            # For students without approved access, authorized_range is also None (denied)
-            if authorized_range is None and user_role == Role.STUDENT.value:
-                return HttpResponseForbidden(
-                    "No authorized page range found for this file."
-                )
-
-            # Determine which pages to extract
-            # Instructors/admins can specify custom ranges via query parameters
-            if page_range_query:
-                requested_pages = self._parse_page_range(page_range_query)
-            elif authorized_range:
-                # Students without query params get their approved range
-                requested_pages = self._parse_page_range(authorized_range)
-            else:
-                # Instructors/admins must specify page_range in query params
-                return HttpResponseForbidden(
-                    "Please specify page range (e.g., ?page_range=1 or ?page_range=1-5)."
-                )
-
-            # For students, verify requested pages are within authorized range
-            if user_role == Role.STUDENT.value and authorized_range:
-                authorized_pages = self._parse_page_range(authorized_range)
-                if not all(page in authorized_pages for page in requested_pages):
-                    return HttpResponseForbidden(
-                        "Requested pages are not authorized. Your approved range is: {}".format(
-                            authorized_range
-                        )
-                    )
-
-            # Extract pages from PDF
-            with file_instance.file.open("rb") as pdf_file:
-                reader = PdfReader(pdf_file)
-                writer = PdfWriter()
-
-                total_pages = len(reader.pages)
-
-                for page_num in requested_pages:
-                    if 1 <= page_num <= total_pages:
-                        writer.add_page(
-                            reader.pages[page_num - 1]
-                        )  # Convert to 0-based index
-
-                if len(writer.pages) == 0:
-                    return HttpResponseForbidden(
-                        "No valid pages found in the requested range."
-                    )
-
-                # Create response with extracted pages
-                output_buffer = io.BytesIO()
-                writer.write(output_buffer)
-                output_buffer.seek(0)
-
-                response = HttpResponse(
-                    output_buffer.getvalue(), content_type="application/pdf"
-                )
-                filename = f"{file_instance.display_name}_pages_{'-'.join(map(str, requested_pages))}.pdf"
-                response["Content-Disposition"] = f'inline; filename="{filename}"'
-                return response
-
-        except Exception as e:
-            return HttpResponseForbidden(f"Error processing PDF: {str(e)}")
 
     def _serve_whole_file(self, file_instance):
         """Serve the entire file content"""
