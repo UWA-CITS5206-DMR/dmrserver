@@ -249,7 +249,7 @@ class FileViewSet(viewsets.ModelViewSet):
 
     def _get_authorized_page_range(self, file_instance, user):
         """
-        Get the authorized page range for a user from approved imaging requests.
+        Get the authorized page range for a user from approved lab requests.
 
         Args:
             file_instance: The File object being accessed
@@ -268,11 +268,20 @@ class FileViewSet(viewsets.ModelViewSet):
             return None
 
         # Students must have an approved lab request for this file
+        # Check both ImagingRequest and BloodTestRequest
         approved_file = ApprovedFile.objects.filter(
             file=file_instance,
             imaging_request__user=user,
             imaging_request__status="completed",
         ).first()
+
+        if not approved_file:
+            # If not found in ImagingRequest, check BloodTestRequest
+            approved_file = ApprovedFile.objects.filter(
+                file=file_instance,
+                blood_test_request__user=user,
+                blood_test_request__status="completed",
+            ).first()
 
         return approved_file.page_range if approved_file else None
 

@@ -420,3 +420,113 @@ startxref
         response = self.client.get(url, {"page_range": "2-5"})
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertIn("not authorized", response.content.decode().lower())
+
+    def test_student_can_access_approved_file_from_blood_test_request(self):
+        """
+        Test that students can access files from BloodTestRequest with ApprovedFile.
+
+        This test ensures that file access works for both ImagingRequest and BloodTestRequest.
+        Previously, paginated files from BloodTestRequest were not accessible to students.
+        """
+        from student_groups.models import BloodTestRequest
+
+        # Create a new file for blood test
+        pdf_content = self._create_test_pdf()
+        blood_test_file = File.objects.create(
+            patient=self.patient,
+            file=SimpleUploadedFile(
+                "blood_test.pdf", pdf_content, content_type="application/pdf"
+            ),
+            display_name="Blood Test Results",
+            requires_pagination=False,
+        )
+
+        # Create blood test request
+        blood_test_request = BloodTestRequest.objects.create(
+            user=self.student,
+            patient=self.patient,
+            test_type=BloodTestRequest.TestType.FBC,
+            reason="Test blood test request for file integration test",
+            name="Dr. Lab",
+            role="Pathologist",
+            status="completed",
+        )
+
+        # Create approved file for blood test
+        ApprovedFile.objects.create(
+            blood_test_request=blood_test_request,
+            file=blood_test_file,
+            page_range="1-2",
+        )
+
+        # Student should be able to access the file
+        self.client.force_authenticate(user=self.student)
+        url = reverse(
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": blood_test_file.id},
+        )
+
+        response = self.client.get(url)
+
+        # Should be successful
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+    def test_student_can_access_paginated_file_from_blood_test_request(self):
+        """
+        Test that students can access paginated files from BloodTestRequest.
+
+        This specifically tests the _get_authorized_page_range method for BloodTestRequest.
+        """
+        from student_groups.models import BloodTestRequest
+
+        # Create a paginated file for blood test
+        pdf_content = self._create_test_pdf()
+        blood_test_file = File.objects.create(
+            patient=self.patient,
+            file=SimpleUploadedFile(
+                "blood_test_paginated.pdf", pdf_content, content_type="application/pdf"
+            ),
+            display_name="Blood Test Results (Paginated)",
+            requires_pagination=True,
+        )
+
+        # Create blood test request
+        blood_test_request = BloodTestRequest.objects.create(
+            user=self.student,
+            patient=self.patient,
+            test_type=BloodTestRequest.TestType.EUC,
+            reason="Test paginated blood test file access",
+            name="Dr. Lab",
+            role="Pathologist",
+            status="completed",
+        )
+
+        # Create approved file with page range
+        ApprovedFile.objects.create(
+            blood_test_request=blood_test_request,
+            file=blood_test_file,
+            page_range="2-4",
+        )
+
+        # Student should be able to access pages within approved range
+        self.client.force_authenticate(user=self.student)
+        url = reverse(
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": blood_test_file.id},
+        )
+
+        # Test 1: Access page within approved range (should succeed)
+        response = self.client.get(url, {"page_range": "3"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+        # Test 2: Access range within approved range (should succeed)
+        response = self.client.get(url, {"page_range": "2-3"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+        # Test 3: Access page outside approved range (should fail)
+        response = self.client.get(url, {"page_range": "5"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("not authorized", response.content.decode().lower())
