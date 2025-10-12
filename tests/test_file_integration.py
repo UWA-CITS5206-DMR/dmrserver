@@ -75,154 +75,11 @@ class FileAccessIntegrationTest(TestCase):
         self.client = APIClient()
 
     def _create_test_pdf(self):
-        """Create a simple test PDF with multiple pages"""
-        # Create a minimal PDF content for testing
-        # This is a simple PDF with basic structure
-        pdf_content = b"""%PDF-1.4
-1 0 obj
-<<
-/Type /Catalog
-/Pages 2 0 R
->>
-endobj
+        """Create a valid test PDF with multiple pages using PyPDF2"""
+        from tests.test_utils import create_test_pdf
 
-2 0 obj
-<<
-/Type /Pages
-/Kids [3 0 R 4 0 R 5 0 R 6 0 R 7 0 R]
-/Count 5
->>
-endobj
-
-3 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/Contents 8 0 R
->>
-endobj
-
-4 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/Contents 9 0 R
->>
-endobj
-
-5 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/Contents 10 0 R
->>
-endobj
-
-6 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/Contents 11 0 R
->>
-endobj
-
-7 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/Contents 12 0 R
->>
-endobj
-
-8 0 obj
-<<
-/Length 44
->>
-stream
-BT
-/F1 12 Tf
-72 720 Td
-(Page 1) Tj
-ET
-endstream
-endobj
-
-9 0 obj
-<<
-/Length 44
->>
-stream
-BT
-/F1 12 Tf
-72 720 Td
-(Page 2) Tj
-ET
-endstream
-endobj
-
-10 0 obj
-<<
-/Length 44
->>
-stream
-BT
-/F1 12 Tf
-72 720 Td
-(Page 3) Tj
-ET
-endstream
-endobj
-
-11 0 obj
-<<
-/Length 44
->>
-stream
-BT
-/F1 12 Tf
-72 720 Td
-(Page 4) Tj
-ET
-endstream
-endobj
-
-12 0 obj
-<<
-/Length 44
->>
-stream
-BT
-/F1 12 Tf
-72 720 Td
-(Page 5) Tj
-ET
-endstream
-endobj
-
-xref
-0 13
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000123 00000 n 
-0000000190 00000 n 
-0000000257 00000 n 
-0000000324 00000 n 
-0000000391 00000 n 
-0000000458 00000 n 
-0000000552 00000 n 
-0000000646 00000 n 
-0000000741 00000 n 
-0000000836 00000 n 
-trailer
-<<
-/Size 13
-/Root 1 0 R
->>
-startxref
-931
-%%EOF"""
-        return pdf_content
+        # Create a 5-page PDF with proper structure to avoid warnings
+        return create_test_pdf(num_pages=5)
 
     def test_student_can_access_approved_file(self):
         """Test that student can access file they have approval for"""
@@ -365,6 +222,27 @@ startxref
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "application/pdf")
 
+    def test_instructor_can_access_entire_paginated_file_without_page_range(self):
+        """
+        Test that instructors can access entire paginated file without specifying page_range.
+
+        This is a performance improvement - instructors don't need to specify
+        a page range if they want the entire file.
+        """
+        # Enable pagination for the file
+        self.file.requires_pagination = True
+        self.file.save()
+
+        self.client.force_authenticate(user=self.instructor)
+        url = reverse(
+            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+        )
+
+        # Instructor can access entire file without page_range parameter
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
     def test_admin_custom_page_range_access(self):
         """
         Test that admins can specify custom page ranges for paginated files.
@@ -387,6 +265,26 @@ startxref
 
         # Admin can access any range using page_range parameter
         response = self.client.get(url, {"page_range": "1-5"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+    def test_admin_can_access_entire_paginated_file_without_page_range(self):
+        """
+        Test that admins can access entire paginated file without specifying page_range.
+
+        Similar to instructors, admins have unrestricted access.
+        """
+        # Enable pagination for the file
+        self.file.requires_pagination = True
+        self.file.save()
+
+        self.client.force_authenticate(user=self.admin)
+        url = reverse(
+            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+        )
+
+        # Admin can access entire file without page_range parameter
+        response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "application/pdf")
 
@@ -530,3 +428,63 @@ startxref
         response = self.client.get(url, {"page_range": "5"})
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertIn("not authorized", response.content.decode().lower())
+
+    def test_invalid_page_range_returns_helpful_error(self):
+        """
+        Test that invalid page ranges return helpful error messages with valid range.
+
+        This ensures users get clear feedback when they request pages that don't exist.
+        """
+        # Enable pagination for the file (has 5 pages)
+        self.file.requires_pagination = True
+        self.file.save()
+
+        self.client.force_authenticate(user=self.instructor)
+        url = reverse(
+            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+        )
+
+        # Test 1: Request page beyond PDF total pages
+        response = self.client.get(url, {"page_range": "10"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        response_text = response.content.decode()
+        self.assertIn("invalid page range", response_text.lower())
+        self.assertIn("valid pages: 1-5", response_text.lower())
+
+        # Test 2: Request range with some invalid pages
+        response = self.client.get(url, {"page_range": "4-10"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        response_text = response.content.decode()
+        self.assertIn("invalid page range", response_text.lower())
+        self.assertIn("valid pages: 1-5", response_text.lower())
+
+        # Test 3: Request page 0 (invalid)
+        response = self.client.get(url, {"page_range": "0"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        response_text = response.content.decode()
+        self.assertIn("invalid page range", response_text.lower())
+
+    def test_student_invalid_page_shows_both_errors(self):
+        """
+        Test that students get appropriate error for invalid pages.
+
+        When a student requests an invalid page, they should get an error
+        about the page being invalid (not about authorization).
+        """
+        # Enable pagination for the file (has 5 pages)
+        self.file.requires_pagination = True
+        self.file.save()
+
+        self.client.force_authenticate(user=self.student)
+        url = reverse(
+            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+        )
+
+        # Student approved range is "1-3"
+        # Test: Request page beyond PDF total pages (page 10)
+        response = self.client.get(url, {"page_range": "10"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        response_text = response.content.decode()
+        # Should see error about invalid page range, not authorization
+        self.assertIn("invalid page range", response_text.lower())
+        self.assertIn("valid pages: 1-5", response_text.lower())

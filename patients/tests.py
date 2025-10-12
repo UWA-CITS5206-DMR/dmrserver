@@ -261,9 +261,10 @@ class FileManagementTestCase(APITestCase):
             super().tearDownClass()
 
     def _create_test_pdf(self, filename="test.pdf"):
-        """Create a simple test PDF file."""
-        # Minimal PDF structure
-        pdf_content = b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000115 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF"
+        """Create a valid test PDF file using PyPDF2."""
+        from tests.test_utils import create_test_pdf
+
+        pdf_content = create_test_pdf(num_pages=1)
         return SimpleUploadedFile(filename, pdf_content, content_type="application/pdf")
 
     def _create_test_txt(self, filename="test.txt", content=b"Test content"):
@@ -623,14 +624,14 @@ class FileManagementTestCase(APITestCase):
 
         # Student should be able to list files
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         # Response should contain results
         self.assertIn("results", response.data)
         file_ids = [f["id"] for f in response.data["results"]]
-        
+
         # Should see Admission file
         self.assertIn(str(admission_file.id), file_ids)
-        
+
         # Should NOT see Imaging file (not approved)
         self.assertNotIn(str(imaging_file.id), file_ids)
 
@@ -677,14 +678,14 @@ class FileManagementTestCase(APITestCase):
 
         # Student should be able to list files
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         # Response should contain results
         self.assertIn("results", response.data)
         file_ids = [f["id"] for f in response.data["results"]]
-        
+
         # Should see the approved pathology file
         self.assertIn(str(pathology_file.id), file_ids)
-        
+
         # Should NOT see the imaging file (not approved)
         self.assertNotIn(str(imaging_file.id), file_ids)
 
@@ -723,11 +724,11 @@ class FileManagementTestCase(APITestCase):
 
         # Student should be able to list files
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         # Response should contain results
         self.assertIn("results", response.data)
         file_ids = [f["id"] for f in response.data["results"]]
-        
+
         # Should NOT see the file because request is not completed
         self.assertNotIn(str(pathology_file.id), file_ids)
 
@@ -783,21 +784,16 @@ class FileUploadMultipartParserTests(APITestCase):
 
     def _create_pdf_with_binary_content(self, filename="test.pdf"):
         """
-        Create a PDF file with binary content that includes non-UTF-8 bytes.
+        Create a valid PDF file with binary content using PyPDF2.
 
-        This simulates real PDF files which contain binary data that cannot
-        be decoded as UTF-8. The byte sequence 0xe2 was specifically causing
-        errors before the parser fix.
+        This creates a proper PDF with correct xref table structure to avoid
+        "incorrect startxref pointer" warnings. The PDF includes proper
+        structure to simulate real PDF files.
         """
-        # Create PDF with binary content including problematic bytes
-        pdf_content = (
-            b"%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n"
-        )
-        pdf_content += (
-            b"\xe2\x80\x99"  # Non-UTF-8 byte sequence (right single quotation mark)
-        )
-        pdf_content += b"\n2 0 obj\n<<\n/Type /Pages\n>>\nendobj\n"
-        pdf_content += b"%%EOF"
+        from tests.test_utils import create_test_pdf
+
+        # Create a valid PDF with proper structure
+        pdf_content = create_test_pdf(num_pages=1)
 
         return SimpleUploadedFile(
             name=filename, content=pdf_content, content_type="application/pdf"
@@ -937,12 +933,10 @@ class FileUploadMultipartParserTests(APITestCase):
         """
         url = reverse("file-list", kwargs={"patient_pk": self.patient.id})
 
-        # Create PDF with various binary sequences
-        pdf_content = b"%PDF-1.4\n"
-        pdf_content += b"\x00\x01\x02\x03"  # Binary bytes
-        pdf_content += b"\xe2\x80\x93"  # En dash (UTF-8 multi-byte)
-        pdf_content += b"\xff\xfe"  # BOM marker
-        pdf_content += b"%%EOF"
+        # Create a valid PDF for testing mixed content handling
+        from tests.test_utils import create_test_pdf
+
+        pdf_content = create_test_pdf(num_pages=1)
 
         pdf_file = SimpleUploadedFile(
             name="mixed_content.pdf",
@@ -971,8 +965,10 @@ class FileUploadMultipartParserTests(APITestCase):
         """
         url = reverse("file-list", kwargs={"patient_pk": self.patient.id})
 
-        # Create specific binary content to verify
-        original_content = b"%PDF-1.4\n\xe2\x80\x99\xff\xfe\x00\x01%%EOF"
+        # Create a valid PDF for testing file integrity
+        from tests.test_utils import create_test_pdf
+
+        original_content = create_test_pdf(num_pages=1)
         pdf_file = SimpleUploadedFile(
             name="integrity_test.pdf",
             content=original_content,
