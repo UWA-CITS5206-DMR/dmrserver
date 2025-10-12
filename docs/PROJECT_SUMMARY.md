@@ -1,17 +1,20 @@
-# DMR Project Overview and Development Specification
+# DMR Project Summary
 
-This document provides a project overview, module boundaries, permission model, and comprehensive development specifications and process conventions.
+This document provides a comprehensive project overview, system architecture, module boundaries, permission model, and key business logic. For development standards and coding conventions, see [DEVELOPMENT_STANDARDS.md](./DEVELOPMENT_STANDARDS.md).
 
-## 1. Project Purpose and Operation
+## 1. Project Purpose and Context
 
 This is a Django + DRF-based Digital Medical Records (DMR) simulation backend for teaching practice: students record observations and notes, and initiate lab requests under shared group accounts; instructors review and generate statistics.
 
-Key Operating Points (see `README.md` in the root directory for details):
+**Key Characteristics:**
 
-- Dependency Management: `uv` is recommended (`uv sync`), traditional venv+pip is also an option.
-- Database: SQLite (default `data/db.sqlite3`, automatically created on first run).
-- Startup: `uv run python manage.py runserver`; Swagger: `/schema/swagger-ui/`.
-- Authentication: DRF Token + Session (see `REST_FRAMEWORK` in `dmr/settings.py`).
+- **Tech Stack**: Django 5.2+ with Django REST Framework
+- **Database**: SQLite (default `data/db.sqlite3`)
+- **Authentication**: DRF Token + Session (see `REST_FRAMEWORK` in `dmr/settings.py`)
+- **API Documentation**: Swagger/OpenAPI at `/schema/swagger-ui/`
+- **Package Manager**: `uv` (recommended)
+
+For setup and running instructions, see `README.md` in the root directory.
 
 ## 2. Routing and Application Boundaries
 
@@ -28,21 +31,44 @@ Key Operating Points (see `README.md` in the root directory for details):
   - student_groups: Observation models (Note, vital signs, etc.), request models (`ImagingRequest`, `BloodTestRequest`, etc.), bulk creation API (`ObservationsViewSet`).
   - instructors: Full management of diagnostic requests (`ImagingRequest`, `BloodTestRequest`) by instructors, to-do lists, and statistics.
 
-## 3. Permission Model
+## 3. Permission Model and Access Control
 
-- Role Constants: `admin`, `instructor`, `student` (defined in `core/context.py` as `Role` enum, used in `core/permissions.py`).
-- Base Class: `BaseRolePermission` + `role_permissions` controls method-level permissions; admin has full access unless explicitly restricted.
-- Permission Classes and Key Points (Resource-Based RBAC):
-  - `PatientPermission`: student read-only; instructor full; admin full.
-  - `ObservationPermission`: student can only CRUD their own records (object-level check `obj.user == request.user`); instructor read-only; admin full.
-  - `InstructorManagementPermission`: protects instructor-side management endpoints (dashboard, full request management); instructor full access; admin full; student no access.
-  - `LabRequestPermission`: protects student-side lab request endpoints (create and view own requests); student can POST/GET with object-level ownership check; admin full; instructor no access (uses InstructorManagementPermission on instructor-side).
-  - `FileAccessPermission`: admin/instructor can access all files; student can only access `ApprovedFile` bound to their "completed" requests (e.g., `ImagingRequest` or `BloodTestRequest`), and is restricted by `page_range`.
-  - `FileManagementPermission`: only instructor/admin can manage files (CRUD).
+### 3.1 Role Overview
 
-RBAC Design Principle: All permissions are resource-based (named after resources, not roles) and internally manage role access via `role_permissions` dict.
+The system defines three roles (in `core/context.py` as `Role` enum):
 
-Usage Requirement: New views must explicitly set `permission_classes`.
+- **admin**: Full system access (superusers)
+- **instructor**: Teaching staff with management capabilities
+- **student**: Student group shared accounts with restricted access
+
+Role determination is based on Django Group membership and superuser status.
+
+### 3.2 Resource-Based Access Control
+
+The system follows RBAC (Role-Based Access Control) principles. Each resource has specific permission rules:
+
+**Patient and File Management:**
+
+- `PatientPermission`: Students read-only; instructors and admins have full CRUD.
+- `FileAccessPermission`: Admins/instructors access all files; students only access `ApprovedFile` associated with their completed requests, restricted by `page_range`.
+- `FileManagementPermission`: Only instructors and admins can manage files (upload, update, delete).
+
+**Observation Data:**
+
+- `ObservationPermission`: Students can only CRUD their own group's records (enforced by `obj.user == request.user`); instructors have read-only access; admins have full access.
+
+**Lab Requests:**
+
+- `LabRequestPermission`: Students can create and view their own requests (ownership checked); admins have full access.
+- `InstructorManagementPermission`: Instructors can manage all requests via dedicated management endpoints; students have no access to these endpoints.
+
+**Key Design Principles:**
+
+- All permissions are named after resources, not roles (e.g., `PatientPermission`, not `InstructorPermission`).
+- Method-level control via `role_permissions` dict in each permission class.
+- Object-level control via `has_object_permission` for ownership validation.
+
+For permission development guidelines, see [DEVELOPMENT_STANDARDS.md](./DEVELOPMENT_STANDARDS.md#2-permission-development-guidelines).
 
 ## 4. Key Models and Business Flow
 
@@ -79,68 +105,43 @@ Usage Requirement: New views must explicitly set `permission_classes`.
   - Additional request types: `MedicationOrder`, `DischargeSummary`, etc., follow similar patterns.
   - Dashboard views provide basic statistics on request status and completion.
 
-## 5. Test Organization and Naming
+## 5. Data Security and File Access Control
 
-- Location:
-  - Centralized directory `tests/`: Login, cross-app integration/end-to-end tests.
-  - Within app: Unit tests can be placed (e.g., `patients/tests.py`, `instructors/tests.py`, etc.).
-- Naming:
-  - Unit tests: `test_<feature>.py` or centralized in the app's `tests.py`.
-  - Integration tests: `test_<feature>_integration.py` (usually in `tests/`).
-- Basic Conventions:
-  - Use DRF's `APIClient` for API testing.
-  - Tests involving file operations use `override_settings(MEDIA_ROOT=tmpdir)` to isolate the environment and clean up afterwards.
-  - Permission test cases should cover both positive and negative scenarios for admin/instructor/student.
-  - Assert response structure and status codes; validate object-level permissions (e.g., `obj.user == request.user`).
+- **File Types**: Only files marked `requires_pagination=True` are allowed to configure `page_range` (usually limited to PDF).
+- **Access Control**: `FileAccessPermission` + `ApprovedFile` + `LabRequest(status=completed)` collectively restrict student access to file pages.
+- **Sensitive Information**: Example and test data should avoid real PII; media sample files are for teaching demonstration only.
 
-## 6. Code Style and Naming
+## 6. Testing Key Points
 
-- Naming: Variables/functions `snake_case`; classes `PascalCase`; constants `UPPER_SNAKE_CASE`; private `_leading_underscore`.
-- Permission Class Naming: `<FeatureName>Permission` (e.g., `PatientPermission`, `FileAccessPermission`).
-- URL Naming: `<app>-<action>` (e.g., `patient-list`, `patient-detail`, `file-view`).
-- Documentation: Modules, classes, methods provide Chinese docstrings; explain purpose, parameters, return values, and exceptions.
-- Serializers: Common timestamp fields are handled by `core.serializers.BaseModelSerializer`.
+Permission test cases should cover:
 
-## 7. Branching and Commits
+- Positive and negative scenarios for admin/instructor/student roles
+- Object-level permissions (e.g., `obj.user == request.user`)
+- Cross-group access denial for student accounts
+- File access authorization based on approved requests
 
-- Branch Naming: `feature/<name>`, `fix/<name>`, `chore/<name>` (e.g., `feature/instructor`).
-- Commit Messages: Recommended to follow Conventional Commits (`feat: …`, `fix: …`, `docs: …`, `refactor: …`, `test: …`, `chore: …`).
-- PR Conventions: Describe motivation, changes, verification methods, and scope of impact; link to issues; at least one reviewer.
+For detailed testing standards and conventions, see [DEVELOPMENT_STANDARDS.md](./DEVELOPMENT_STANDARDS.md#5-testing-standards).
 
-## 8. Development Process
+## 7. Quick Reference
 
-1) Requirements Analysis: Understand data relationships and permission boundaries; confirm scope of impact.
-2) Implementation:
-   - Follow existing patterns and styles; prioritize minimal changes within existing files.
-   - New endpoints explicitly declare `permission_classes`; add OpenAPI annotations (`extend_schema`).
-   - Pre-validate serializers to prevent business exceptions from resulting in 500 errors; input errors should primarily return 400.
-3) Testing: New features should be accompanied by unit tests and at least 1 boundary/negative case; regression test existing tests.
-4) Self-check: Local run, basic smoke test; check permissions and response structure.
+**Key Configuration Files:**
 
-## 9. Quality Gates and Tools
-
-- Build: Buildable; no syntax/import errors.
-- Lint/Type: Keep imports clean; avoid unused code; if type annotations are introduced, ensure basic checks pass.
-- Testing: Can run independently and pass; avoid reliance on external states (network, real media).
-- Documentation: Update `docs/` and relevant sections in this document; examples consistent with code.
-- API Documentation: `drf-spectacular` is enabled (`SCHEMA_PATH_PREFIX = "/api"` in `SPECTACULAR_SETTINGS`).
-- CORS/Authentication: Cross-origin allowed during development; configuration needs to be tightened for production.
-
-## 10. Data and Security
-
-- File Types: Only files marked `requires_pagination=True` are allowed to configure `page_range` (usually limited to PDF).
-- Access Control: `FileAccessPermission` + `ApprovedFile` + `LabRequest(status=completed)` collectively restrict student access to file pages.
-- Sensitive Information: Example and test data should avoid real PII; media sample files are for teaching demonstration only.
-
-## 11. Migrations and Dependencies
-
-- Migrations: Model changes require generating and committing migration files; pay attention to default values and data compatibility.
-- Dependencies: Managed uniformly via uv; commit `pyproject.toml` and `uv.lock`.
-
-## 12. Quick Locator
-
-- Configuration: `dmr/settings.py`
+- Project Settings: `dmr/settings.py`
+- URL Routing: `dmr/urls.py`
 - Permissions: `core/permissions.py`
-- Patients/Files: `patients/models.py`, `patients/views.py`, `patients/serializers.py`
-- Student Groups: `student_groups/models.py`, `student_groups/serializers.py`, `student_groups/views.py`, `student_groups/validators.py`
-- Instructor-side: `instructors/views.py`, `instructors/serializers.py`
+- Base Serializers: `core/serializers.py`
+
+**Module Locations:**
+
+- **Patients & Files**: `patients/` (models, views, serializers)
+- **Student Groups**: `student_groups/` (observations, lab requests, validators)
+- **Instructors**: `instructors/` (management views, statistics)
+- **Tests**: `tests/` (integration tests) + per-app `tests.py` (unit tests)
+- **Documentation**: `docs/`
+
+**Related Documentation:**
+
+- Setup Guide: [README.md](../README.md)
+- Development Standards: [DEVELOPMENT_STANDARDS.md](./DEVELOPMENT_STANDARDS.md)
+- Docker Guide: [DOCKER_GUIDE.md](./DOCKER_GUIDE.md)
+- Development Guide: [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)
