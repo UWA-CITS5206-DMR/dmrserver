@@ -1,6 +1,8 @@
-# DMR Development Specification and Coding Style Guide
+# DMR Development Standards and Coding Conventions
 
-This guide defines the project's directory structure, code style, permission architecture, testing standards, commit conventions, and quality gates, applicable to all contributors.
+This guide defines the project's development standards, code style, testing practices, commit conventions, and quality gates. All contributors must follow these standards to ensure code quality and consistency.
+
+For project overview, architecture, and business logic, see [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md).
 
 ## 1. Directory Structure
 
@@ -23,19 +25,22 @@ Suggested internal application structure (if new modules are needed):
 - `admin.py`, `apps.py`, `models.py`, `serializers.py`, `views.py`, `urls.py`, `validators.py` (optional), `permissions.py` (try to centralize in `core`)
 - `migrations/`: Submit migration files
 
-## 2. Permissions and Security
+## 2. Permission Development Guidelines
 
-- Centralized Permissions: All general permission classes are located in `core/permissions.py`, uniformly inheriting `BaseRolePermission`.
-- Roles: `admin`, `instructor`, `student` (defined in `core/context.py` as `Role` enum); `get_user_role` in `core/permissions.py` is determined based on Django Group and superuser status.
-- RBAC Architecture: The system follows resource-based RBAC principles. All permission classes are named after the resources they protect (e.g., `PatientPermission`, `LabRequestPermission`), not after roles. Role-specific gate classes (IsAdmin, IsInstructor, IsStudent) have been eliminated to comply with RBAC best practices.
-- Method-Level Control: Each permission class defines a list of allowed methods via `role_permissions`; when not explicitly restricted, admin defaults to full access.
-- Object-Level Control: Implement `has_object_permission` when needed (e.g., `ObservationPermission` enforces `obj.user == request.user`, `LabRequestPermission` ensures students can only access their own requests).
-- Resource-Based Permissions:
-  - `InstructorManagementPermission`: For instructor-side management endpoints (dashboard, full request management)
-  - `LabRequestPermission`: For student-side lab request endpoints (create and view own requests with ownership checks)
-  - `PatientPermission`, `ObservationPermission`, `FileAccessPermission`, `FileManagementPermission`: Existing resource-based permissions
-- File Access: Student file access is restricted by `FileAccessPermission` + `ApprovedFile` + `LabRequest(status=completed)`; `page_range` is used only for PDFs with `requires_pagination=True`.
-- View Requirements: All views must explicitly set `permission_classes`; if not specified, `IsAuthenticated` is used by default.
+### 2.1 Architecture Principles
+
+- **Centralized Location**: All general permission classes are located in `core/permissions.py`, uniformly inheriting `BaseRolePermission`.
+- **RBAC Pattern**: Follow resource-based RBAC. Name permission classes after the resources they protect (e.g., `PatientPermission`, `LabRequestPermission`), not after roles.
+- **Method-Level Control**: Define allowed methods via `role_permissions` dict; admin defaults to full access when not explicitly restricted.
+- **Object-Level Control**: Implement `has_object_permission` when needed (e.g., enforce `obj.user == request.user` for ownership checks).
+
+### 2.2 Implementation Requirements
+
+- **Explicit Declaration**: All views must explicitly set `permission_classes`; never rely on defaults.
+- **Naming Convention**: `<ResourceName>Permission` (e.g., `PatientPermission`, `FileAccessPermission`).
+- **Testing**: Every permission class must have tests covering all role scenarios (admin/instructor/student) and both positive and negative cases.
+
+For detailed permission model and access control rules, see [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md#3-permission-model-and-access-control).
 
 ## 3. API Design and Serialization
 
@@ -46,10 +51,20 @@ Suggested internal application structure (if new modules are needed):
 
 ## 4. Data Models and Migrations
 
-- Model fields should have `verbose_name` and necessary `help_text`; implement `__str__` for easier debugging.
-- Model changes require generating and committing migration files; handle default values/data cleanup within migrations.
-- File Model `patients.File`: `file = models.FileField(upload_to="upload_to")`, override `delete()` to clean up the actual file; `requires_pagination` is the PDF page authorization switch; `category` field allows for file classification.
-- Diagnostic request models (`ImagingRequest`, `BloodTestRequest`, etc.) follow a consistent pattern with status tracking and file approvals.
+### 4.1 Model Development Standards
+
+- **Field Documentation**: All model fields should have `verbose_name` and necessary `help_text`.
+- **String Representation**: Implement `__str__` method for easier debugging and admin interface.
+- **Naming**: Model class names in `PascalCase`; field names in `snake_case`.
+- **Validation**: Override `clean()` method for model-level validation; raise `ValidationError` for business rule violations.
+
+### 4.2 Migration Standards
+
+- **Generation**: Always generate migration files for model changes using `python manage.py makemigrations`.
+- **Review**: Review generated migrations before committing; ensure data compatibility.
+- **Data Migrations**: Use data migrations for complex transformations; handle default values appropriately.
+- **Commit**: Always commit migration files with the corresponding code changes.
+- **Dependencies**: Be mindful of migration dependencies across apps.
 
 ## 5. Testing Standards
 
@@ -104,18 +119,45 @@ Suggested internal application structure (if new modules are needed):
 - Files: Only trusted sources can upload; strictly validate page ranges when enabling pagination authorization for PDFs; avoid exposing file system structure through paths.
 - Data: Avoid real PII; example data is for teaching, note labeling.
 
-## 11. Performance and Maintainability
+## 11. Performance Best Practices
 
-- Queries: `get_queryset()` in views should avoid N+1 problems; add `select_related/prefetch_related` when needed.
-- Pagination: Enable pagination for list endpoints; use streaming/background tasks for exports/large lists (extensible in the future).
-- Extensibility: When adding new observation types, reuse the `ObservationValidator` pattern and `ObservationManager` transaction framework.
+### 11.1 Database Queries
 
-## 12. Versioning and Compatibility
+- **N+1 Prevention**: Always use `select_related()` for ForeignKey fields and `prefetch_related()` for ManyToMany relationships in `get_queryset()`.
+- **Query Optimization**: Use `only()` and `defer()` to limit fields when appropriate.
+- **Indexing**: Add database indexes for frequently queried fields (define in model's `Meta.indexes`).
 
-- OpenAPI: `SCHEMA_PATH_PREFIX = "/api"` (in `SPECTACULAR_SETTINGS`); if versioning is introduced (e.g., `/api/v1`), routes, schema, documentation, and frontend must be updated synchronously.
+### 11.2 API Performance
 
-## 13. Common Issues
+- **Pagination**: Enable pagination for all list endpoints; default pagination is configured in `REST_FRAMEWORK` settings.
+- **Response Size**: Avoid returning large nested objects; use appropriate serializer depth.
+- **Caching**: Consider caching for expensive queries (future extensibility).
 
-- Permission Mismatch: Failure to explicitly set `permission_classes` leading to default inheritance; please explicitly declare them in new views.
-- File Access Denied: `LabRequest` not completed or `ApprovedFile` not configured with the correct page range.
-- Batch Creation Failure: Incorrect data structure in `ObservationsSerializer` or `ObservationValidator` triggered validation.
+## 12. Versioning and API Evolution
+
+- **OpenAPI Schema**: `SCHEMA_PATH_PREFIX = "/api"` (configured in `SPECTACULAR_SETTINGS`).
+- **API Versioning**: If versioning is introduced (e.g., `/api/v1`), routes, schema, documentation, and frontend must be updated synchronously.
+- **Backward Compatibility**: Avoid breaking changes; deprecate features before removal.
+
+## 13. Common Development Pitfalls
+
+### 13.1 Permission Issues
+
+- **Missing Declaration**: Forgetting to explicitly set `permission_classes` leads to default inheritance. Always declare explicitly.
+- **Object-Level Checks**: Remember to implement `has_object_permission` for resource ownership validation.
+
+### 13.2 Data Validation
+
+- **Serializer Validation**: Always validate input in `validate()` method; return 400 errors for bad input, not 500.
+- **Model Validation**: Implement `clean()` for model-level business rules.
+
+### 13.3 File and Media
+
+- **File Cleanup**: Override model's `delete()` method to remove files from disk.
+- **Access Control**: Ensure file access is properly restricted by permissions and approved requests.
+
+### 13.4 Testing
+
+- **Isolation**: Use `override_settings(MEDIA_ROOT=tmpdir)` for file tests.
+- **Cleanup**: Always clean up test data and files after tests.
+- **External Dependencies**: Avoid real network calls or external services in tests.
