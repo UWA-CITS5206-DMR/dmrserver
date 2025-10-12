@@ -34,6 +34,9 @@ class NoteModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_001",
+            ward="Ward SG",
+            bed="Bed 1",
             email="john.doe@example.com",
         )
 
@@ -67,6 +70,9 @@ class BloodPressureModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_002",
+            ward="Ward SG",
+            bed="Bed 2",
             email="john.doe@example.com",
         )
 
@@ -94,6 +100,9 @@ class HeartRateModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_003",
+            ward="Ward SG",
+            bed="Bed 3",
             email="john.doe@example.com",
         )
 
@@ -120,6 +129,9 @@ class BodyTemperatureModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_004",
+            ward="Ward SG",
+            bed="Bed 4",
             email="john.doe@example.com",
         )
 
@@ -152,6 +164,9 @@ class ObservationManagerTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_005",
+            ward="Ward SG",
+            bed="Bed 5",
             email="john.doe@example.com",
         )
         BloodPressure.objects.create(
@@ -280,6 +295,9 @@ class NoteSerializerTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_006",
+            ward="Ward SG",
+            bed="Bed 6",
             email="john.doe@example.com",
         )
         cls.note_data = {
@@ -319,6 +337,9 @@ class ObservationsSerializerTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_007",
+            ward="Ward SG",
+            bed="Bed 7",
             email="john.doe@example.com",
         )
         cls.observation_data = {
@@ -393,6 +414,9 @@ class NoteViewSetTest(APITestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN400",
+            ward="Ward G",
+            bed="Bed 7",
             email="john.doe@example.com",
         )
         self.note = Note.objects.create(
@@ -457,6 +481,9 @@ class ObservationsViewSetTest(APITestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN401",
+            ward="Ward H",
+            bed="Bed 8",
             email="john.doe@example.com",
         )
         self.client.force_authenticate(user=self.user)
@@ -600,6 +627,9 @@ class RespiratoryRateModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_008",
+            ward="Ward SG",
+            bed="Bed 8",
             email="john.doe@example.com",
         )
 
@@ -627,6 +657,9 @@ class BloodSugarModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_009",
+            ward="Ward SG",
+            bed="Bed 9",
             email="john.doe@example.com",
         )
 
@@ -653,6 +686,9 @@ class OxygenSaturationModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_010",
+            ward="Ward SG",
+            bed="Bed 10",
             email="john.doe@example.com",
         )
 
@@ -679,6 +715,9 @@ class PainScoreModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_011",
+            ward="Ward SG",
+            bed="Bed 11",
             email="john.doe@example.com",
         )
 
@@ -727,6 +766,9 @@ class ImagingRequestViewSetTest(APITestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_012",
+            ward="Ward SG",
+            bed="Bed 12",
             email="john.doe@example.com",
         )
         self.client.force_authenticate(user=self.user)
@@ -736,7 +778,9 @@ class ImagingRequestViewSetTest(APITestCase):
         data = {
             "patient": self.patient.id,
             "test_type": "X-ray",
-            "reason": "Routine check-up for patient symptoms",
+            "details": "Routine check-up for patient symptoms",
+            "infection_control_precautions": "None",
+            "imaging_focus": "Chest",
             "name": "Test X-Ray Request",
             "role": "Student",
         }
@@ -744,7 +788,7 @@ class ImagingRequestViewSetTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["test_type"], "X-ray")
         self.assertEqual(
-            response.data["reason"], "Routine check-up for patient symptoms"
+            response.data["details"], "Routine check-up for patient symptoms"
         )
         self.assertEqual(response.data["role"], "Student")
 
@@ -756,7 +800,9 @@ class ImagingRequestViewSetTest(APITestCase):
             patient=self.patient,
             user=self.user,
             test_type="X-ray",
-            reason="Routine X-ray test",
+            details="Routine X-ray test",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Arm",
             name="Test X-Ray",
             role="Medical Student",
         )
@@ -768,7 +814,9 @@ class ImagingRequestViewSetTest(APITestCase):
             patient=self.patient,
             user=other_user,
             test_type="CT scan",
-            reason="Routine CT scan test",
+            details="Routine CT scan test",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Head",
             name="Test CT Scan",
             role="Medical Student",
         )
@@ -788,7 +836,9 @@ class ImagingRequestViewSetTest(APITestCase):
             patient=self.patient,
             user=self.user,
             test_type="X-ray",
-            reason="Testing update permissions",
+            details="Testing update permissions",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Leg",
             name="Test Update Request",
             role="Medical Student",
         )
@@ -816,6 +866,9 @@ class PainScoreViewSetTest(APITestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_013",
+            ward="Ward SG",
+            bed="Bed 13",
             email="john.doe@example.com",
         )
         self.client.force_authenticate(user=self.user)

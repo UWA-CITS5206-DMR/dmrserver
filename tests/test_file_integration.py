@@ -1,9 +1,9 @@
-"""
-Integration tests for file access permissions in real scenarios.
-Tests the complete flow from lab request approval to file access.
-"""
+"""Integration tests for file access permissions in real scenarios."""
 
-from django.test import TestCase
+import shutil
+import tempfile
+
+from django.test import TestCase, override_settings
 from django.contrib.auth.models import User, Group
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -15,7 +15,21 @@ from student_groups.models import ImagingRequest, ApprovedFile
 from core.context import Role
 
 
+TEST_MEDIA_ROOT = tempfile.mkdtemp()
+
+
+@override_settings(MEDIA_ROOT=TEST_MEDIA_ROOT)
 class FileAccessIntegrationTest(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._media_root = TEST_MEDIA_ROOT
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls._media_root, ignore_errors=True)
+        super().tearDownClass()
+
     def setUp(self):
         """Set up test data"""
         # Get or create groups
@@ -42,6 +56,9 @@ class FileAccessIntegrationTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN100",
+            ward="Ward X",
+            bed="Bed 10",
             email="john.doe@example.com",
         )
 
@@ -61,7 +78,9 @@ class FileAccessIntegrationTest(TestCase):
             user=self.student,
             patient=self.patient,
             test_type=ImagingRequest.TestType.X_RAY,
-            reason="Test imaging request for file integration test",
+            details="Test imaging request for file integration test",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
             name="Dr. Test",
             role="Doctor",
             status="completed",
@@ -344,7 +363,7 @@ class FileAccessIntegrationTest(TestCase):
             user=self.student,
             patient=self.patient,
             test_type=BloodTestRequest.TestType.FBC,
-            reason="Test blood test request for file integration test",
+            details="Test blood test request for file integration test",
             name="Dr. Lab",
             role="Pathologist",
             status="completed",
@@ -394,7 +413,7 @@ class FileAccessIntegrationTest(TestCase):
             user=self.student,
             patient=self.patient,
             test_type=BloodTestRequest.TestType.EUC,
-            reason="Test paginated blood test file access",
+            details="Test paginated blood test file access",
             name="Dr. Lab",
             role="Pathologist",
             status="completed",

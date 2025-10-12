@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase, APIClient
 import tempfile
 import os
 import shutil
+from uuid import uuid4
 from core.context import Role
 
 from .models import Patient, File
@@ -51,6 +52,13 @@ class PatientApiTests(APITestCase):
             "email": "john.doe@example.com",
             "phone_number": "+1234567890",
         }
+        payload.update(
+            {
+                "mrn": overrides.pop("mrn", f"MRN-{uuid4().hex[:8]}"),
+                "ward": overrides.pop("ward", "Ward A"),
+                "bed": overrides.pop("bed", "Bed 1"),
+            }
+        )
         payload.update(overrides)
         return payload
 
@@ -242,6 +250,9 @@ class FileManagementTestCase(APITestCase):
             first_name="Test",
             last_name="Patient",
             date_of_birth="1990-01-01",
+            mrn="MRN_PATIENTS_001",
+            ward="Ward Patients",
+            bed="Bed 1",
             email="patient@example.com",
             phone_number="+1234567890",
         )
@@ -660,7 +671,9 @@ class FileManagementTestCase(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type=ImagingRequest.TestType.X_RAY,
-            reason="Test imaging request",
+            details="Test imaging request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
             status="completed",  # Important: must be completed
             name="Test Student",
             role="Student",
@@ -706,7 +719,9 @@ class FileManagementTestCase(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type=ImagingRequest.TestType.X_RAY,
-            reason="Test imaging request",
+            details="Test imaging request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
             status="pending",  # Important: pending, not completed
             name="Test Student",
             role="Student",
@@ -770,6 +785,9 @@ class FileUploadMultipartParserTests(APITestCase):
             first_name="Test",
             last_name="Patient",
             date_of_birth="1990-01-01",
+            mrn="MRN_PATIENTS_002",
+            ward="Ward Patients",
+            bed="Bed 2",
             email="test@example.com",
         )
 

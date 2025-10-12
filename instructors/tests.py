@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.models import User, Group
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -33,6 +34,9 @@ class InstructorViewSetTestCase(APITestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN300",
+            ward="Ward D",
+            bed="Bed 4",
             email="john@example.com",
         )
 
@@ -40,7 +44,9 @@ class InstructorViewSetTestCase(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="Blood Test",
-            reason="Instructor test case setup",
+            details="Instructor test case setup",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
             name="Dr. Test",
             role="Doctor",
             status="pending",
@@ -175,6 +181,9 @@ class BloodTestRequestViewSetTestCase(APITestCase):
             first_name="Jane",
             last_name="Smith",
             date_of_birth="1995-05-15",
+            mrn="MRN301",
+            ward="Ward E",
+            bed="Bed 5",
             email="jane@example.com",
         )
 
@@ -182,7 +191,7 @@ class BloodTestRequestViewSetTestCase(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="Complete Blood Count",
-            reason="Routine checkup",
+            details="Routine checkup",
             name="Dr. Smith",
             role="Physician",
             status="pending",
@@ -239,14 +248,9 @@ class ApprovedFilesTestCase(APITestCase):
     """
 
     @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.temp_media_root = tempfile.mkdtemp()
-
-    @classmethod
     def tearDownClass(cls):
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
         super().tearDownClass()
-        shutil.rmtree(cls.temp_media_root, ignore_errors=True)
 
     def setUp(self):
         self.instructor_group, created = Group.objects.get_or_create(
@@ -266,6 +270,9 @@ class ApprovedFilesTestCase(APITestCase):
             first_name="Test",
             last_name="Patient",
             date_of_birth="2000-01-01",
+            mrn="MRN302",
+            ward="Ward F",
+            bed="Bed 6",
             email="test@example.com",
         )
 
@@ -289,7 +296,9 @@ class ApprovedFilesTestCase(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="X-ray",
-            reason="Test request",
+            details="Test request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Arm",
             name="Dr. Test",
             role="Doctor",
             status="pending",
@@ -299,7 +308,7 @@ class ApprovedFilesTestCase(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="FBC",
-            reason="Test blood test",
+            details="Test blood test",
             name="Dr. Test",
             role="Doctor",
             status="pending",

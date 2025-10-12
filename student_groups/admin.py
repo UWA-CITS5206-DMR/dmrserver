@@ -176,7 +176,20 @@ class ImagingRequestAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
-        ("Request Info", {"fields": ("name", "role", "test_type", "reason", "status")}),
+        (
+            "Request Info",
+            {
+                "fields": (
+                    "name",
+                    "role",
+                    "test_type",
+                    "details",
+                    "infection_control_precautions",
+                    "imaging_focus",
+                    "status",
+                )
+            },
+        ),
         (
             "Timestamps",
             {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
@@ -227,7 +240,7 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
                     "name",
                     "role",
                     "test_type",
-                    "reason",
+                    "details",
                     "status",
                 )
             },

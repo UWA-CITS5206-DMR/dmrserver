@@ -1,7 +1,6 @@
 import os
 import uuid
 from datetime import datetime
-from django.conf import settings
 from django.db import models
 from django.core.exceptions import ValidationError
 
@@ -10,6 +9,11 @@ class Patient(models.Model):
     first_name = models.CharField(max_length=100, verbose_name="First Name")
     last_name = models.CharField(max_length=100, verbose_name="Last Name")
     date_of_birth = models.DateField(verbose_name="Date of Birth")
+    mrn = models.CharField(
+        max_length=50, unique=True, verbose_name="Medical Record Number (MRN)"
+    )
+    ward = models.CharField(max_length=100, verbose_name="Ward")
+    bed = models.CharField(max_length=20, verbose_name="Bed")
     email = models.EmailField(unique=True, verbose_name="Email Address")
     phone_number = models.CharField(
         max_length=15, blank=True, verbose_name="Phone Number"
@@ -27,10 +31,15 @@ class Patient(models.Model):
 
 
 def validate_pdf_for_pagination(file, requires_pagination):
-    if requires_pagination:
-        ext = os.path.splitext(file.name)[1]
-        if not ext.lower() == ".pdf":
-            raise ValidationError("Only PDF files can be marked for pagination.")
+    # Only validate when a file is present and pagination is requested
+    if not requires_pagination:
+        return
+    if not file:
+        # No file provided, nothing to validate here (other validators can enforce presence)
+        return
+    ext = os.path.splitext(file.name)[1]
+    if ext.lower() != ".pdf":
+        raise ValidationError("Only PDF files can be marked for pagination.")
 
 
 class File(models.Model):
@@ -88,11 +97,15 @@ class File(models.Model):
     def upload_to(instance, filename):
         today = datetime.today().strftime("%Y/%m/%d")
         ext = filename.split(".")[-1]
-        unique_filename = f"{instance.id}.{ext}"
+        # Ensure we always have an identifier to use (instance.id may be None in some cases)
+        file_id = getattr(instance, "id", None) or uuid.uuid4()
+        unique_filename = f"{file_id}.{ext}"
         return os.path.join("uploads", today, unique_filename)
 
     def get_full_path(self):
-        return os.path.join(settings.MEDIA_ROOT, self.file.path)
+        # self.file.path is already an absolute filesystem path when using
+        # the default FileSystemStorage. Return it directly for correctness.
+        return getattr(self.file, "path", None)
 
     def delete(self, *args, **kwargs):
         self.file.delete(save=False)

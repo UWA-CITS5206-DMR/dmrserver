@@ -42,12 +42,18 @@ class PatientFilteringTestCase(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN001",
+            ward="Ward A",
+            bed="Bed 1",
             email="john.doe@test.com",
         )
         self.patient2 = Patient.objects.create(
             first_name="Jane",
             last_name="Smith",
             date_of_birth="1985-05-15",
+            mrn="MRN002",
+            ward="Ward B",
+            bed="Bed 2",
             email="jane.smith@test.com",
         )
 
@@ -91,7 +97,9 @@ class PatientFilteringTestCase(TestCase):
             test_type="X-ray",
             name="Dr. Smith",
             role="Physician",
-            reason="Test",
+            details="Test",
+            infection_control_precautions="None",
+            imaging_focus="Chest",
         )
         self.imaging_req2 = ImagingRequest.objects.create(
             patient=self.patient2,
@@ -99,7 +107,9 @@ class PatientFilteringTestCase(TestCase):
             test_type="MRI scan",
             name="Dr. Jones",
             role="Physician",
-            reason="Test",
+            details="Test",
+            infection_control_precautions="None",
+            imaging_focus="Head",
         )
 
         self.blood_test_req1 = BloodTestRequest.objects.create(
@@ -107,7 +117,8 @@ class PatientFilteringTestCase(TestCase):
             user=self.student1,
             name="Dr. Smith",
             role="Physician",
-            reason="Routine check",
+            test_type="Full blood count",
+            details="Routine check",
         )
 
         # Setup API client

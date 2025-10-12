@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from patients.models import Patient, File
 from .validators import ObservationValidator
 from django.db import transaction
+from django.core.exceptions import ValidationError
 
 
 class Note(models.Model):
@@ -377,6 +378,13 @@ class ImagingRequest(models.Model):
         ULTRASOUND_SCAN = "Ultrasound scan", "Ultrasound scan"
         ECHOCARDIOGRAM = "Echocardiogram", "Echocardiogram"
 
+    class InfectionControlPrecaution(models.TextChoices):
+        AIRBORNE = "Airborne", "Airborne"
+        DROPLET = "Droplet", "Droplet"
+        CONTACT = "Contact", "Contact"
+        CHEMOTHERAPY = "Chemotherapy", "Chemotherapy"
+        NONE = "None", "None"
+
     STATUS_CHOICES = [
         ("pending", "Pending"),
         ("completed", "Completed"),
@@ -397,7 +405,16 @@ class ImagingRequest(models.Model):
     test_type = models.CharField(
         max_length=50, choices=TestType.choices, verbose_name="Test Type"
     )
-    reason = models.TextField(verbose_name="Reason for Request")
+    details = models.TextField(verbose_name="Details")
+    infection_control_precautions = models.CharField(
+        max_length=20,
+        choices=InfectionControlPrecaution.choices,
+        default=InfectionControlPrecaution.NONE,
+        verbose_name="Infection Control Precautions",
+    )
+    imaging_focus = models.TextField(
+        blank=True, verbose_name="Imaging Focus"
+    )
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default="pending", verbose_name="Status"
     )
@@ -470,8 +487,6 @@ class ApprovedFile(models.Model):
         """
         Validate that exactly one request type is set.
         """
-        from django.core.exceptions import ValidationError
-
         if not self.imaging_request and not self.blood_test_request:
             raise ValidationError(
                 "ApprovedFile must be associated with either an ImagingRequest or a BloodTestRequest."
@@ -523,7 +538,7 @@ class BloodTestRequest(models.Model):
     test_type = models.CharField(
         max_length=50, choices=TestType.choices, verbose_name="Test Type"
     )
-    reason = models.TextField(verbose_name="Reason for Request")
+    details = models.TextField(verbose_name="Details")
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default="pending", verbose_name="Status"
     )
