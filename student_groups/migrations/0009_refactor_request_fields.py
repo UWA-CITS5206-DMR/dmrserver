@@ -4,49 +4,72 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('patients', '0005_add_mrn_ward_bed_fields'),
-        ('student_groups', '0008_migrate_blood_test_to_approved_file'),
+        ("patients", "0005_add_mrn_ward_bed_fields"),
+        ("student_groups", "0008_migrate_blood_test_to_approved_file"),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='approvedfile',
-            name='approved_file_single_request_type',
+            model_name="approvedfile",
+            name="approved_file_single_request_type",
         ),
         migrations.RemoveField(
-            model_name='bloodtestrequest',
-            name='reason',
+            model_name="bloodtestrequest",
+            name="reason",
         ),
         migrations.RemoveField(
-            model_name='imagingrequest',
-            name='reason',
+            model_name="imagingrequest",
+            name="reason",
         ),
         migrations.AddField(
-            model_name='bloodtestrequest',
-            name='details',
-            field=models.TextField(default='', verbose_name='Details'),
+            model_name="bloodtestrequest",
+            name="details",
+            field=models.TextField(default="", verbose_name="Details"),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='imagingrequest',
-            name='details',
-            field=models.TextField(default='', verbose_name='Details'),
+            model_name="imagingrequest",
+            name="details",
+            field=models.TextField(default="", verbose_name="Details"),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='imagingrequest',
-            name='imaging_focus',
-            field=models.TextField(blank=True, verbose_name='Imaging Focus'),
+            model_name="imagingrequest",
+            name="imaging_focus",
+            field=models.TextField(blank=True, verbose_name="Imaging Focus"),
         ),
         migrations.AddField(
-            model_name='imagingrequest',
-            name='infection_control_precautions',
-            field=models.CharField(choices=[('Airborne', 'Airborne'), ('Droplet', 'Droplet'), ('Contact', 'Contact'), ('Chemotherapy', 'Chemotherapy'), ('None', 'None')], default='None', max_length=20, verbose_name='Infection Control Precautions'),
+            model_name="imagingrequest",
+            name="infection_control_precautions",
+            field=models.CharField(
+                choices=[
+                    ("Airborne", "Airborne"),
+                    ("Droplet", "Droplet"),
+                    ("Contact", "Contact"),
+                    ("Chemotherapy", "Chemotherapy"),
+                    ("None", "None"),
+                ],
+                default="None",
+                max_length=20,
+                verbose_name="Infection Control Precautions",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='approvedfile',
-            constraint=models.CheckConstraint(condition=models.Q(models.Q(('blood_test_request__isnull', True), ('imaging_request__isnull', False)), models.Q(('blood_test_request__isnull', False), ('imaging_request__isnull', True)), _connector='OR'), name='approved_file_single_request_type'),
+            model_name="approvedfile",
+            constraint=models.CheckConstraint(
+                condition=models.Q(
+                    models.Q(
+                        ("blood_test_request__isnull", True),
+                        ("imaging_request__isnull", False),
+                    ),
+                    models.Q(
+                        ("blood_test_request__isnull", False),
+                        ("imaging_request__isnull", True),
+                    ),
+                    _connector="OR",
+                ),
+                name="approved_file_single_request_type",
+            ),
         ),
     ]

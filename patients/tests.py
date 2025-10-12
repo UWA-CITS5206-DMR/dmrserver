@@ -257,6 +257,14 @@ class FileManagementTestCase(APITestCase):
             phone_number="+1234567890",
         )
 
+        # Pre-generate a small PDF to reuse in tests and avoid repeated PyPDF2 generation
+        try:
+            from tests.test_utils import create_test_pdf
+
+            cls._cached_pdf = create_test_pdf(num_pages=1)
+        except Exception:
+            cls._cached_pdf = None
+
     def setUp(self):
         """Set up test client for each test."""
         self.client: APIClient = APIClient()
@@ -273,6 +281,12 @@ class FileManagementTestCase(APITestCase):
 
     def _create_test_pdf(self, filename="test.pdf"):
         """Create a valid test PDF file using PyPDF2."""
+        # Reuse cached PDF bytes when available
+        if getattr(self.__class__, "_cached_pdf", None) is not None:
+            return SimpleUploadedFile(
+                filename, self.__class__._cached_pdf, content_type="application/pdf"
+            )
+
         from tests.test_utils import create_test_pdf
 
         pdf_content = create_test_pdf(num_pages=1)

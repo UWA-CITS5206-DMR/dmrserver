@@ -21,24 +21,25 @@ from student_groups.models import (
 class PatientFilteringTestCase(TestCase):
     """Test patient filtering in student_groups endpoints"""
 
-    def setUp(self):
-        """Set up test data"""
+    @classmethod
+    def setUpTestData(cls):
+        """Create DB fixtures once per class to speed up tests."""
         # Get or create student group
         student_group, _ = Group.objects.get_or_create(name="student")
 
         # Create two student users (representing two different groups)
-        self.student1 = User.objects.create_user(
+        cls.student1 = User.objects.create_user(
             username="student_group1", password="test123"
         )
-        self.student1.groups.add(student_group)
+        cls.student1.groups.add(student_group)
 
-        self.student2 = User.objects.create_user(
+        cls.student2 = User.objects.create_user(
             username="student_group2", password="test123"
         )
-        self.student2.groups.add(student_group)
+        cls.student2.groups.add(student_group)
 
         # Create two patients
-        self.patient1 = Patient.objects.create(
+        cls.patient1 = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
@@ -47,7 +48,7 @@ class PatientFilteringTestCase(TestCase):
             bed="Bed 1",
             email="john.doe@test.com",
         )
-        self.patient2 = Patient.objects.create(
+        cls.patient2 = Patient.objects.create(
             first_name="Jane",
             last_name="Smith",
             date_of_birth="1985-05-15",
@@ -58,42 +59,42 @@ class PatientFilteringTestCase(TestCase):
         )
 
         # Create observations for student1
-        self.bp1_patient1 = BloodPressure.objects.create(
-            patient=self.patient1,
-            user=self.student1,
+        cls.bp1_patient1 = BloodPressure.objects.create(
+            patient=cls.patient1,
+            user=cls.student1,
             systolic=120,
             diastolic=80,
         )
-        self.bp2_patient2 = BloodPressure.objects.create(
-            patient=self.patient2,
-            user=self.student1,
+        cls.bp2_patient2 = BloodPressure.objects.create(
+            patient=cls.patient2,
+            user=cls.student1,
             systolic=130,
             diastolic=85,
         )
 
-        self.hr1_patient1 = HeartRate.objects.create(
-            patient=self.patient1,
-            user=self.student1,
+        cls.hr1_patient1 = HeartRate.objects.create(
+            patient=cls.patient1,
+            user=cls.student1,
             heart_rate=72,
         )
-        self.hr2_patient2 = HeartRate.objects.create(
-            patient=self.patient2,
-            user=self.student1,
+        cls.hr2_patient2 = HeartRate.objects.create(
+            patient=cls.patient2,
+            user=cls.student1,
             heart_rate=80,
         )
 
         # Create observations for student2
-        self.bp3_patient1 = BloodPressure.objects.create(
-            patient=self.patient1,
-            user=self.student2,
+        cls.bp3_patient1 = BloodPressure.objects.create(
+            patient=cls.patient1,
+            user=cls.student2,
             systolic=140,
             diastolic=90,
         )
 
         # Create requests for student1
-        self.imaging_req1 = ImagingRequest.objects.create(
-            patient=self.patient1,
-            user=self.student1,
+        cls.imaging_req1 = ImagingRequest.objects.create(
+            patient=cls.patient1,
+            user=cls.student1,
             test_type="X-ray",
             name="Dr. Smith",
             role="Physician",
@@ -101,9 +102,9 @@ class PatientFilteringTestCase(TestCase):
             infection_control_precautions="None",
             imaging_focus="Chest",
         )
-        self.imaging_req2 = ImagingRequest.objects.create(
-            patient=self.patient2,
-            user=self.student1,
+        cls.imaging_req2 = ImagingRequest.objects.create(
+            patient=cls.patient2,
+            user=cls.student1,
             test_type="MRI scan",
             name="Dr. Jones",
             role="Physician",
@@ -112,16 +113,17 @@ class PatientFilteringTestCase(TestCase):
             imaging_focus="Head",
         )
 
-        self.blood_test_req1 = BloodTestRequest.objects.create(
-            patient=self.patient1,
-            user=self.student1,
+        cls.blood_test_req1 = BloodTestRequest.objects.create(
+            patient=cls.patient1,
+            user=cls.student1,
             name="Dr. Smith",
             role="Physician",
             test_type="Full blood count",
             details="Routine check",
         )
 
-        # Setup API client
+    def setUp(self):
+        # Setup a fresh API client per test
         self.client = APIClient()
 
     def test_blood_pressure_without_patient_filter(self):

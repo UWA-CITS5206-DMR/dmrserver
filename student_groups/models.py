@@ -412,9 +412,7 @@ class ImagingRequest(models.Model):
         default=InfectionControlPrecaution.NONE,
         verbose_name="Infection Control Precautions",
     )
-    imaging_focus = models.TextField(
-        blank=True, verbose_name="Imaging Focus"
-    )
+    imaging_focus = models.TextField(blank=True, verbose_name="Imaging Focus")
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default="pending", verbose_name="Status"
     )

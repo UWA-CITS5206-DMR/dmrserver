@@ -33,9 +33,7 @@ class RoleFixtureMixin:
             Role.INSTRUCTOR.value: Group.objects.get_or_create(
                 name=Role.INSTRUCTOR.value
             )[0],
-            Role.STUDENT.value: Group.objects.get_or_create(name=Role.STUDENT.value)[
-                0
-            ],
+            Role.STUDENT.value: Group.objects.get_or_create(name=Role.STUDENT.value)[0],
         }
 
     @classmethod
@@ -105,17 +103,21 @@ class CoreUtilsTest(RoleFixtureMixin, TestCase):
 class FilePermissionsTest(RoleFixtureMixin, TestCase):
     """Test file access permissions with approval-based logic"""
 
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Create role-aware users once per class
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
+
+        # Create test patient and file once per class
+        cls.patient = cls.create_patient()
+        cls.file = File.objects.create(file="test_file.pdf", patient=cls.patient)
+
     def setUp(self):
         super().setUp()
-        self.admin_user = self.create_user("admin", Role.ADMIN)
-        self.instructor_user = self.create_user("instructor", Role.INSTRUCTOR)
-        self.student_user = self.create_user("student", Role.STUDENT)
-
-        # Create test patient and file
-        self.patient = self.create_patient()
-        self.file = File.objects.create(file="test_file.pdf", patient=self.patient)
-
-        # Create mock request
+        # Lightweight per-test mocks
         self.mock_request = Mock()
         self.mock_view = Mock()
 
@@ -229,13 +231,19 @@ class FilePermissionsTest(RoleFixtureMixin, TestCase):
 class PatientRBACTest(RoleFixtureMixin, APITestCase):
     """Test RBAC for Patient operations"""
 
-    def setUp(self):
-        self.client = APIClient()
-        self.admin_user = self.create_user("admin", Role.ADMIN)
-        self.instructor_user = self.create_user("instructor", Role.INSTRUCTOR)
-        self.student_user = self.create_user("student", Role.STUDENT)
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Create users and patient once per class to avoid repeated DB writes
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
 
-        self.patient = self.create_patient(bed="Bed 2")
+        cls.patient = cls.create_patient(bed="Bed 2")
+
+    def setUp(self):
+        # Keep a fresh API client per test for authentication handling
+        self.client = APIClient()
 
     def test_student_can_read_patients(self):
         """Test that students can read patient data"""
@@ -300,16 +308,23 @@ class PatientRBACTest(RoleFixtureMixin, APITestCase):
 
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.first_name, "Updated Admin")
+
+
 class RequestRBACTest(RoleFixtureMixin, APITestCase):
     """Test RBAC for new request types (ImagingRequest, etc.)"""
 
-    def setUp(self):
-        self.client = APIClient()
-        self.admin_user = self.create_user("admin", Role.ADMIN)
-        self.instructor_user = self.create_user("instructor", Role.INSTRUCTOR)
-        self.student_user = self.create_user("student", Role.STUDENT)
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
 
-        self.patient = self.create_patient(bed="Bed 5")
+        cls.patient = cls.create_patient(bed="Bed 5")
+
+    def setUp(self):
+        # Fresh API client per test
+        self.client = APIClient()
 
     def test_student_can_create_imaging_request(self):
         """Test that students can create imaging requests"""

@@ -4,28 +4,32 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('patients', '0004_file_category'),
+        ("patients", "0004_file_category"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='patient',
-            name='bed',
-            field=models.CharField(default='', max_length=20, verbose_name='Bed'),
+            model_name="patient",
+            name="bed",
+            field=models.CharField(default="", max_length=20, verbose_name="Bed"),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='patient',
-            name='mrn',
-            field=models.CharField(default='', max_length=50, unique=True, verbose_name='Medical Record Number (MRN)'),
+            model_name="patient",
+            name="mrn",
+            field=models.CharField(
+                default="",
+                max_length=50,
+                unique=True,
+                verbose_name="Medical Record Number (MRN)",
+            ),
             preserve_default=False,
         ),
         migrations.AddField(
-            model_name='patient',
-            name='ward',
-            field=models.CharField(default='', max_length=100, verbose_name='Ward'),
+            model_name="patient",
+            name="ward",
+            field=models.CharField(default="", max_length=100, verbose_name="Ward"),
             preserve_default=False,
         ),
     ]

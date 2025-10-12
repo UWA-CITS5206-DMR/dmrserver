@@ -401,16 +401,16 @@ class ObservationsSerializerTest(TestCase):
 
 
 class NoteViewSetTest(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.student_group, created = Group.objects.get_or_create(
             name=Role.STUDENT.value
         )
-        self.user = get_user_model().objects.create_user(
+        cls.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
-        self.user.groups.add(self.student_group)
-        self.patient = Patient.objects.create(
+        cls.user.groups.add(cls.student_group)
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
@@ -419,13 +419,16 @@ class NoteViewSetTest(APITestCase):
             bed="Bed 7",
             email="john.doe@example.com",
         )
-        self.note = Note.objects.create(
-            patient=self.patient,
-            user=self.user,
+        cls.note = Note.objects.create(
+            patient=cls.patient,
+            user=cls.user,
             name="Dr. Smith",
             role="Doctor",
             content="Test note",
         )
+
+    def setUp(self):
+        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
     def test_list_notes(self):
@@ -468,16 +471,16 @@ class NoteViewSetTest(APITestCase):
 
 
 class ObservationsViewSetTest(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.student_group, created = Group.objects.get_or_create(
             name=Role.STUDENT.value
         )
-        self.user = get_user_model().objects.create_user(
+        cls.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
-        self.user.groups.add(self.student_group)
-        self.patient = Patient.objects.create(
+        cls.user.groups.add(cls.student_group)
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
@@ -486,6 +489,9 @@ class ObservationsViewSetTest(APITestCase):
             bed="Bed 8",
             email="john.doe@example.com",
         )
+
+    def setUp(self):
+        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
         self.observation_data = {
             "blood_pressure": {
@@ -583,16 +589,22 @@ class ObservationsViewSetTest(APITestCase):
 
     def test_list_observations_with_ordering(self):
         """Test that ordering parameter sorts results correctly"""
-        import time
+        from django.utils import timezone
+        from datetime import timedelta
 
-        # Create observations with slight time differences
-        BloodPressure.objects.create(
+        # Create observations with distinct timestamps without sleeping
+        now = timezone.now()
+        bp_old = BloodPressure.objects.create(
             patient=self.patient, user=self.user, systolic=120, diastolic=80
         )
-        time.sleep(0.01)  # Ensure different timestamps
-        BloodPressure.objects.create(
+        bp_new = BloodPressure.objects.create(
             patient=self.patient, user=self.user, systolic=130, diastolic=85
         )
+        # Set explicit created_at values so ordering tests are deterministic and fast
+        BloodPressure.objects.filter(pk=bp_old.pk).update(
+            created_at=now - timedelta(milliseconds=10)
+        )
+        BloodPressure.objects.filter(pk=bp_new.pk).update(created_at=now)
 
         # Test descending order (newest first) - default
         response = self.client.get(
@@ -753,16 +765,16 @@ class PainScoreModelTest(TestCase):
 
 
 class ImagingRequestViewSetTest(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.student_group, created = Group.objects.get_or_create(
             name=Role.STUDENT.value
         )
-        self.user = get_user_model().objects.create_user(
+        cls.user = get_user_model().objects.create_user(
             username="student1", password="testpass123"
         )
-        self.user.groups.add(self.student_group)
-        self.patient = Patient.objects.create(
+        cls.user.groups.add(cls.student_group)
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
@@ -771,6 +783,9 @@ class ImagingRequestViewSetTest(APITestCase):
             bed="Bed 12",
             email="john.doe@example.com",
         )
+
+    def setUp(self):
+        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
     def test_student_can_create_imaging_request(self):
@@ -853,16 +868,16 @@ class ImagingRequestViewSetTest(APITestCase):
 
 
 class PainScoreViewSetTest(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.student_group, created = Group.objects.get_or_create(
             name=Role.STUDENT.value
         )
-        self.user = get_user_model().objects.create_user(
+        cls.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
-        self.user.groups.add(self.student_group)
-        self.patient = Patient.objects.create(
+        cls.user.groups.add(cls.student_group)
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
@@ -871,6 +886,9 @@ class PainScoreViewSetTest(APITestCase):
             bed="Bed 13",
             email="john.doe@example.com",
         )
+
+    def setUp(self):
+        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
     def test_create_pain_score(self):

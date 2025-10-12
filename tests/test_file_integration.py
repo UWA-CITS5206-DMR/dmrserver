@@ -30,29 +30,29 @@ class FileAccessIntegrationTest(TestCase):
         shutil.rmtree(cls._media_root, ignore_errors=True)
         super().tearDownClass()
 
-    def setUp(self):
-        """Set up test data"""
-        # Get or create groups
-        self.admin_group, _ = Group.objects.get_or_create(name=Role.ADMIN.value)
-        self.instructor_group, _ = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        # Create persistent data reused across tests to avoid repeated file I/O
+        cls.admin_group, _ = Group.objects.get_or_create(name=Role.ADMIN.value)
+        cls.instructor_group, _ = Group.objects.get_or_create(
             name=Role.INSTRUCTOR.value
         )
-        self.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
+        cls.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
 
         # Create users
-        self.student = User.objects.create_user("student1", "student@test.com", "pass")
-        self.instructor = User.objects.create_user(
+        cls.student = User.objects.create_user("student1", "student@test.com", "pass")
+        cls.instructor = User.objects.create_user(
             "instructor1", "instructor@test.com", "pass"
         )
-        self.admin = User.objects.create_user("admin1", "admin@test.com", "pass")
+        cls.admin = User.objects.create_user("admin1", "admin@test.com", "pass")
 
         # Assign roles
-        self.student.groups.add(self.student_group)
-        self.instructor.groups.add(self.instructor_group)
-        self.admin.groups.add(self.admin_group)
+        cls.student.groups.add(cls.student_group)
+        cls.instructor.groups.add(cls.instructor_group)
+        cls.admin.groups.add(cls.admin_group)
 
-        # Create patient
-        self.patient = Patient.objects.create(
+        # Create patient reused across tests
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
@@ -62,17 +62,23 @@ class FileAccessIntegrationTest(TestCase):
             email="john.doe@example.com",
         )
 
-        # Create a PDF file
-        pdf_content = self._create_test_pdf()
-        self.file = File.objects.create(
-            patient=self.patient,
+        # Create a single PDF file stored in media root and reused by tests
+        from tests.test_utils import create_test_pdf
+
+        pdf_content = create_test_pdf(num_pages=5)
+        # Cache PDF bytes for reuse by tests to avoid repeated PyPDF2 work
+        cls._cached_pdf = pdf_content
+        cls.file = File.objects.create(
+            patient=cls.patient,
             file=SimpleUploadedFile(
                 "test.pdf", pdf_content, content_type="application/pdf"
             ),
             display_name="Test PDF",
-            requires_pagination=False,  # Use simple non-paginated file for testing
+            requires_pagination=False,
         )
 
+    def setUp(self):
+        # Per-test data that may be mutated (requests, approved files)
         # Create imaging request
         self.imaging_request = ImagingRequest.objects.create(
             user=self.student,
@@ -86,7 +92,7 @@ class FileAccessIntegrationTest(TestCase):
             status="completed",
         )
 
-        # Create approved file
+        # Create approved file per test
         self.approved_file = ApprovedFile.objects.create(
             imaging_request=self.imaging_request, file=self.file, page_range="1-3"
         )
@@ -95,6 +101,11 @@ class FileAccessIntegrationTest(TestCase):
 
     def _create_test_pdf(self):
         """Create a valid test PDF with multiple pages using PyPDF2"""
+        # Reuse cached PDF bytes when possible to avoid regeneration
+        cached = getattr(self.__class__, "_cached_pdf", None)
+        if cached is not None:
+            return cached
+
         from tests.test_utils import create_test_pdf
 
         # Create a 5-page PDF with proper structure to avoid warnings

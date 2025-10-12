@@ -12,25 +12,27 @@ import shutil
 
 
 class InstructorViewSetTestCase(APITestCase):
-    def setUp(self):
-        self.instructor_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        # Shared fixtures that are immutable across tests
+        cls.instructor_group, _ = Group.objects.get_or_create(
             name=Role.INSTRUCTOR.value
         )
-        self.student_group, created = Group.objects.get_or_create(
-            name=Role.STUDENT.value
-        )
+        cls.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
 
-        self.instructor_user = User.objects.create_user(
-            username="instructor1", password="testpass123"
+        cls.instructor_user = User.objects.create_user(
+            username="instructor1",
+            password="testpass123",
         )
-        self.instructor_user.groups.add(self.instructor_group)
+        cls.instructor_user.groups.add(cls.instructor_group)
 
-        self.student_user = User.objects.create_user(
-            username="student1", password="testpass123"
+        cls.student_user = User.objects.create_user(
+            username="student1",
+            password="testpass123",
         )
-        self.student_user.groups.add(self.student_group)
+        cls.student_user.groups.add(cls.student_group)
 
-        self.patient = Patient.objects.create(
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
@@ -40,6 +42,8 @@ class InstructorViewSetTestCase(APITestCase):
             email="john@example.com",
         )
 
+    def setUp(self):
+        # Per-test mutable objects (requests) should stay in setUp
         self.imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
@@ -163,21 +167,24 @@ class BloodTestRequestViewSetTestCase(APITestCase):
     full user and patient details are returned.
     """
 
-    def setUp(self):
-        self.instructor_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.instructor_group, _ = Group.objects.get_or_create(
             name=Role.INSTRUCTOR.value
         )
 
-        self.instructor_user = User.objects.create_user(
-            username="instructor2", password="testpass123"
+        cls.instructor_user = User.objects.create_user(
+            username="instructor2",
+            password="testpass123",
         )
-        self.instructor_user.groups.add(self.instructor_group)
+        cls.instructor_user.groups.add(cls.instructor_group)
 
-        self.student_user = User.objects.create_user(
-            username="student2", password="testpass123"
+        cls.student_user = User.objects.create_user(
+            username="student2",
+            password="testpass123",
         )
 
-        self.patient = Patient.objects.create(
+        cls.patient = Patient.objects.create(
             first_name="Jane",
             last_name="Smith",
             date_of_birth="1995-05-15",
@@ -187,6 +194,8 @@ class BloodTestRequestViewSetTestCase(APITestCase):
             email="jane@example.com",
         )
 
+    def setUp(self):
+        # Keep per-test mutable request objects here
         self.blood_test_request = BloodTestRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
@@ -253,45 +262,7 @@ class ApprovedFilesTestCase(APITestCase):
         super().tearDownClass()
 
     def setUp(self):
-        self.instructor_group, created = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
-        )
-
-        self.instructor_user = User.objects.create_user(
-            username="instructor_file_test", password="testpass123"
-        )
-        self.instructor_user.groups.add(self.instructor_group)
-
-        self.student_user = User.objects.create_user(
-            username="student_file_test", password="testpass123"
-        )
-
-        self.patient = Patient.objects.create(
-            first_name="Test",
-            last_name="Patient",
-            date_of_birth="2000-01-01",
-            mrn="MRN302",
-            ward="Ward F",
-            bed="Bed 6",
-            email="test@example.com",
-        )
-
-        # Create test files
-        test_file_content = b"Test file content"
-        self.file1 = File.objects.create(
-            patient=self.patient,
-            file=SimpleUploadedFile("test1.txt", test_file_content),
-            display_name="Test File 1",
-            requires_pagination=False,
-        )
-
-        self.file2 = File.objects.create(
-            patient=self.patient,
-            file=SimpleUploadedFile("test2.pdf", test_file_content),
-            display_name="Test File 2 (PDF)",
-            requires_pagination=True,
-        )
-
+        # Only create per-test mutable request objects here; shared fixtures are in setUpTestData
         self.imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
@@ -312,6 +283,50 @@ class ApprovedFilesTestCase(APITestCase):
             name="Dr. Test",
             role="Doctor",
             status="pending",
+        )
+
+    @classmethod
+    def setUpTestData(cls):
+        # Shared fixtures for approved files tests
+        cls.instructor_group, _ = Group.objects.get_or_create(
+            name=Role.INSTRUCTOR.value
+        )
+
+        cls.instructor_user = User.objects.create_user(
+            username="instructor_file_test",
+            password="testpass123",
+        )
+        cls.instructor_user.groups.add(cls.instructor_group)
+
+        cls.student_user = User.objects.create_user(
+            username="student_file_test",
+            password="testpass123",
+        )
+
+        cls.patient = Patient.objects.create(
+            first_name="Test",
+            last_name="Patient",
+            date_of_birth="2000-01-01",
+            mrn="MRN302",
+            ward="Ward F",
+            bed="Bed 6",
+            email="test@example.com",
+        )
+
+        # Create test files once for the class to avoid repeated file writes
+        test_file_content = b"Test file content"
+        cls.file1 = File.objects.create(
+            patient=cls.patient,
+            file=SimpleUploadedFile("test1.txt", test_file_content),
+            display_name="Test File 1",
+            requires_pagination=False,
+        )
+
+        cls.file2 = File.objects.create(
+            patient=cls.patient,
+            file=SimpleUploadedFile("test2.pdf", test_file_content),
+            display_name="Test File 2 (PDF)",
+            requires_pagination=True,
         )
 
     def test_imaging_request_approval_with_flat_file_id_structure(self):
