@@ -12,6 +12,7 @@ import shutil
 from core.context import Role
 
 from .models import Patient, File
+from student_groups.models import ImagingRequest, ApprovedFile
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -597,21 +598,138 @@ class FileManagementTestCase(APITestCase):
         self.assertEqual(response.data["category"], File.Category.PATHOLOGY)
         self.assertTrue(response.data["requires_pagination"])
 
-    def test_student_cannot_list_files(self):
-        """Test that student cannot list files directly."""
+    def test_student_can_list_files_with_filtering(self):
+        """Test that student can list files but only sees Admission files and approved files."""
         self.client.force_authenticate(user=self.student_user)
 
-        File.objects.create(
+        # Create an Admission file - should be visible to student
+        admission_file = File.objects.create(
             patient=self.patient,
             file=self._create_test_pdf(),
-            display_name="test.pdf",
+            display_name="admission.pdf",
+            category=File.Category.ADMISSION,
+        )
+
+        # Create an Imaging file - should NOT be visible to student (no approval)
+        imaging_file = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="imaging.pdf",
             category=File.Category.IMAGING,
         )
 
         url = self._get_file_list_url()
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        # Student should be able to list files
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Response should contain results
+        self.assertIn("results", response.data)
+        file_ids = [f["id"] for f in response.data["results"]]
+        
+        # Should see Admission file
+        self.assertIn(str(admission_file.id), file_ids)
+        
+        # Should NOT see Imaging file (not approved)
+        self.assertNotIn(str(imaging_file.id), file_ids)
+
+    def test_student_can_see_approved_files_from_completed_requests(self):
+        """Test that student can see files approved in their completed lab requests."""
+        self.client.force_authenticate(user=self.student_user)
+
+        # Create a Pathology file - not Admission, so normally not visible
+        pathology_file = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="pathology.pdf",
+            category=File.Category.PATHOLOGY,
+        )
+
+        # Create another file that won't be approved
+        imaging_file = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="imaging.pdf",
+            category=File.Category.IMAGING,
+        )
+
+        # Create a completed imaging request for this student
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type=ImagingRequest.TestType.X_RAY,
+            reason="Test imaging request",
+            status="completed",  # Important: must be completed
+            name="Test Student",
+            role="Student",
+        )
+
+        # Approve the pathology file for this request
+        ApprovedFile.objects.create(
+            imaging_request=imaging_request,
+            file=pathology_file,
+            page_range="1-5",
+        )
+
+        url = self._get_file_list_url()
+        response = self.client.get(url)
+
+        # Student should be able to list files
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Response should contain results
+        self.assertIn("results", response.data)
+        file_ids = [f["id"] for f in response.data["results"]]
+        
+        # Should see the approved pathology file
+        self.assertIn(str(pathology_file.id), file_ids)
+        
+        # Should NOT see the imaging file (not approved)
+        self.assertNotIn(str(imaging_file.id), file_ids)
+
+    def test_student_cannot_see_approved_files_from_pending_requests(self):
+        """Test that student cannot see files from pending (not completed) lab requests."""
+        self.client.force_authenticate(user=self.student_user)
+
+        # Create a Pathology file
+        pathology_file = File.objects.create(
+            patient=self.patient,
+            file=self._create_test_pdf(),
+            display_name="pathology.pdf",
+            category=File.Category.PATHOLOGY,
+        )
+
+        # Create a PENDING imaging request (not completed)
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type=ImagingRequest.TestType.X_RAY,
+            reason="Test imaging request",
+            status="pending",  # Important: pending, not completed
+            name="Test Student",
+            role="Student",
+        )
+
+        # "Approve" the file for this pending request
+        ApprovedFile.objects.create(
+            imaging_request=imaging_request,
+            file=pathology_file,
+            page_range="1-5",
+        )
+
+        url = self._get_file_list_url()
+        response = self.client.get(url)
+
+        # Student should be able to list files
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Response should contain results
+        self.assertIn("results", response.data)
+        file_ids = [f["id"] for f in response.data["results"]]
+        
+        # Should NOT see the file because request is not completed
+        self.assertNotIn(str(pathology_file.id), file_ids)
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())

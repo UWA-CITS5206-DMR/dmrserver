@@ -240,6 +240,37 @@ class FileManagementPermission(BaseRolePermission):
     }
 
 
+class FileListPermission(BaseRolePermission):
+    """
+    Permission for listing patient files.
+    
+    This permission allows students to view file lists (read-only),
+    while instructors and admins have full access.
+    
+    Access rules:
+    - Students: read-only access to file lists (actual files shown are filtered by queryset)
+    - Instructors: full access to all file lists
+    - Admins: full access (inherited)
+    
+    Note: The queryset filtering is handled in the view layer to show:
+    - Students: Only Admission files + approved files from completed requests
+    - Instructors/Admins: All files
+    """
+
+    role_permissions = {
+        Role.STUDENT.value: ["GET", "HEAD", "OPTIONS"],
+        Role.INSTRUCTOR.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
+    }
+
+
 class LabRequestPermission(BaseRolePermission):
     """
     Permission for lab request resources (ImagingRequest, BloodTestRequest,
