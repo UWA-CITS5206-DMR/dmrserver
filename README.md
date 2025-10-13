@@ -31,12 +31,29 @@ cd dmrserver
 
 # Install dependencies and create virtual environment
 uv sync
-
-# Activate the virtual environment
-source .venv/bin/activate  # On Unix/macOS
-# or
-.venv\Scripts\activate     # On Windows
 ```
+
+#### Optional development extras
+
+The project provides optional development extras (for example, `ruff`) under the `dev` extras in `pyproject.toml`. To install the optional dev dependencies with `uv` run:
+
+```bash
+uv sync --extras dev
+```
+
+Or, if you prefer pip/PEP 621 style installation from source (after activating a virtualenv):
+
+```bash
+pip install -e '.[dev]'
+```
+
+While installing the `dev` extras is optional for local development, every pull request must pass the project's `ruff` checks. The repository's CI workflow runs `uv run ruff check .` on each PR and will fail the PR if lint errors are present. To run the same check locally before opening a PR:
+
+```bash
+uv run ruff check .
+```
+
+Fix lint issues locally (or enable ruff's auto-fix where appropriate) before pushing changes to avoid PR failures.
 
 ### 3. Environment Configuration
 
