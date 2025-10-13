@@ -15,21 +15,50 @@ class Migration(migrations.Migration):
             field=models.CharField(default="", max_length=20, verbose_name="Bed"),
             preserve_default=False,
         ),
+        # Add mrn as nullable first to avoid UNIQUE constraint failures when populating
         migrations.AddField(
             model_name="patient",
             name="mrn",
             field=models.CharField(
-                default="",
                 max_length=50,
-                unique=True,
+                null=True,
+                blank=True,
                 verbose_name="Medical Record Number (MRN)",
             ),
-            preserve_default=False,
         ),
         migrations.AddField(
             model_name="patient",
             name="ward",
             field=models.CharField(default="", max_length=100, verbose_name="Ward"),
             preserve_default=False,
+        ),
+        # Populate unique MRNs for existing rows before enforcing uniqueness
+        migrations.RunPython(
+            code=lambda apps, schema_editor: (
+                (
+                    lambda Patient: [
+                        (
+                            setattr(
+                                p,
+                                "mrn",
+                                f"MRN-{p.pk}-{__import__('uuid').uuid4().hex[:8]}",
+                            ),
+                            p.save(),
+                        )
+                        for p in Patient.objects.filter(mrn__isnull=True)
+                    ]
+                )(apps.get_model("patients", "Patient"))
+            ),
+            reverse_code=migrations.RunPython.noop,
+        ),
+        # Now alter the field to be unique and non-nullable
+        migrations.AlterField(
+            model_name="patient",
+            name="mrn",
+            field=models.CharField(
+                max_length=50,
+                unique=True,
+                verbose_name="Medical Record Number (MRN)",
+            ),
         ),
     ]
