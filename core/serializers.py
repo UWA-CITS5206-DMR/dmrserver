@@ -44,18 +44,22 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-
-    fields: ClassVar[list[str]] = [
-        "id",
-        "username",
-        "email",
-        "first_name",
-        "last_name",
-        "is_staff",
-        "is_superuser",
-        "role",
-    ]
-    read_only_fields: ClassVar[list[str]] = ["id", "is_staff", "is_superuser", "role"]
+        fields: ClassVar[list[str]] = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "is_staff",
+            "is_superuser",
+            "role",
+        ]
+        read_only_fields: ClassVar[list[str]] = [
+            "id",
+            "is_staff",
+            "is_superuser",
+            "role",
+        ]
 
     def get_role(self, obj: User) -> str | None:
         """Get user role using the project's role system"""

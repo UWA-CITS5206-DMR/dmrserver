@@ -67,7 +67,9 @@ class PatientViewSet(viewsets.ModelViewSet):
         ],
     )
     @action(detail=True, methods=["post"], serializer_class=FileSerializer)
-    def upload_file(self, request: Request, _pk: int | None = None) -> Response:
+    def upload_file(
+        self, request: Request, *_args: object, **_kwargs: object
+    ) -> Response:
         """
         Upload a file for a specific patient.
 
@@ -289,7 +291,7 @@ class FileViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=["get"], permission_classes=[FileAccessPermission])
     def view(
-        self, request: Request, _pk: int | None = None, _patient_pk: int | None = None
+        self, request: Request, *_args: object, **_kwargs: object
     ) -> HttpResponse | Response:
         """
         View file content with pagination support for PDFs.

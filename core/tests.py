@@ -44,7 +44,7 @@ class RoleFixtureMixin:
 
         user = User.objects.create_user(
             username=username,
-            password=extra.pop("password", cls.password),
+            password=extra.pop("password", cls.DEFAULT_PASSWORD),
             **extra,
         )
         if role:
