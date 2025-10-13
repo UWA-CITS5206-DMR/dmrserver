@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase, APIClient
 import tempfile
 import os
 import shutil
+from uuid import uuid4
 from core.context import Role
 
 from .models import Patient, File
@@ -48,9 +49,17 @@ class PatientApiTests(APITestCase):
             "first_name": "John",
             "last_name": "Doe",
             "date_of_birth": "1990-01-01",
+            "gender": Patient.Gender.MALE,
             "email": "john.doe@example.com",
             "phone_number": "+1234567890",
         }
+        payload.update(
+            {
+                "mrn": overrides.pop("mrn", f"MRN-{uuid4().hex[:8]}"),
+                "ward": overrides.pop("ward", "Ward A"),
+                "bed": overrides.pop("bed", "Bed 1"),
+            }
+        )
         payload.update(overrides)
         return payload
 
@@ -82,6 +91,7 @@ class PatientApiTests(APITestCase):
         self.assertEqual(patient.first_name, "John")
         self.assertEqual(patient.last_name, "Doe")
         self.assertEqual(patient.email, "john.doe@example.com")
+        self.assertEqual(patient.gender, Patient.Gender.MALE)
 
     def test_list_and_retrieve_patient(self):
         p = Patient.objects.create(**self._patient_payload())
@@ -242,9 +252,21 @@ class FileManagementTestCase(APITestCase):
             first_name="Test",
             last_name="Patient",
             date_of_birth="1990-01-01",
+            gender=Patient.Gender.FEMALE,
+            mrn="MRN_PATIENTS_001",
+            ward="Ward Patients",
+            bed="Bed 1",
             email="patient@example.com",
             phone_number="+1234567890",
         )
+
+        # Pre-generate a small PDF to reuse in tests and avoid repeated PyPDF2 generation
+        try:
+            from tests.test_utils import create_test_pdf
+
+            cls._cached_pdf = create_test_pdf(num_pages=1)
+        except Exception:
+            cls._cached_pdf = None
 
     def setUp(self):
         """Set up test client for each test."""
@@ -262,6 +284,12 @@ class FileManagementTestCase(APITestCase):
 
     def _create_test_pdf(self, filename="test.pdf"):
         """Create a valid test PDF file using PyPDF2."""
+        # Reuse cached PDF bytes when available
+        if getattr(self.__class__, "_cached_pdf", None) is not None:
+            return SimpleUploadedFile(
+                filename, self.__class__._cached_pdf, content_type="application/pdf"
+            )
+
         from tests.test_utils import create_test_pdf
 
         pdf_content = create_test_pdf(num_pages=1)
@@ -660,7 +688,9 @@ class FileManagementTestCase(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type=ImagingRequest.TestType.X_RAY,
-            reason="Test imaging request",
+            details="Test imaging request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
             status="completed",  # Important: must be completed
             name="Test Student",
             role="Student",
@@ -706,7 +736,9 @@ class FileManagementTestCase(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type=ImagingRequest.TestType.X_RAY,
-            reason="Test imaging request",
+            details="Test imaging request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
             status="pending",  # Important: pending, not completed
             name="Test Student",
             role="Student",
@@ -770,6 +802,9 @@ class FileUploadMultipartParserTests(APITestCase):
             first_name="Test",
             last_name="Patient",
             date_of_birth="1990-01-01",
+            mrn="MRN_PATIENTS_002",
+            ward="Ward Patients",
+            bed="Bed 2",
             email="test@example.com",
         )
 

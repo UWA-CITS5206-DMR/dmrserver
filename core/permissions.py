@@ -182,8 +182,8 @@ class FileAccessPermission(BaseRolePermission):
     """
 
     role_permissions = {
-        Role.STUDENT.value: ["GET", "HEAD", "OPTIONS"],
-        Role.INSTRUCTOR.value: ["GET", "HEAD", "OPTIONS"],
+        Role.STUDENT.value: SAFE_METHODS,
+        Role.INSTRUCTOR.value: SAFE_METHODS,
     }
 
     def has_object_permission(self, request, view, obj):
@@ -258,7 +258,7 @@ class FileListPermission(BaseRolePermission):
     """
 
     role_permissions = {
-        Role.STUDENT.value: ["GET", "HEAD", "OPTIONS"],
+        Role.STUDENT.value: SAFE_METHODS,
         Role.INSTRUCTOR.value: [
             "GET",
             "POST",

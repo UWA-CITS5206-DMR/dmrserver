@@ -34,6 +34,9 @@ class NoteModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_001",
+            ward="Ward SG",
+            bed="Bed 1",
             email="john.doe@example.com",
         )
 
@@ -67,6 +70,9 @@ class BloodPressureModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_002",
+            ward="Ward SG",
+            bed="Bed 2",
             email="john.doe@example.com",
         )
 
@@ -94,6 +100,9 @@ class HeartRateModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_003",
+            ward="Ward SG",
+            bed="Bed 3",
             email="john.doe@example.com",
         )
 
@@ -120,6 +129,9 @@ class BodyTemperatureModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_004",
+            ward="Ward SG",
+            bed="Bed 4",
             email="john.doe@example.com",
         )
 
@@ -152,6 +164,9 @@ class ObservationManagerTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_005",
+            ward="Ward SG",
+            bed="Bed 5",
             email="john.doe@example.com",
         )
         BloodPressure.objects.create(
@@ -280,6 +295,9 @@ class NoteSerializerTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_006",
+            ward="Ward SG",
+            bed="Bed 6",
             email="john.doe@example.com",
         )
         cls.note_data = {
@@ -319,6 +337,9 @@ class ObservationsSerializerTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_007",
+            ward="Ward SG",
+            bed="Bed 7",
             email="john.doe@example.com",
         )
         cls.observation_data = {
@@ -380,28 +401,34 @@ class ObservationsSerializerTest(TestCase):
 
 
 class NoteViewSetTest(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.student_group, created = Group.objects.get_or_create(
             name=Role.STUDENT.value
         )
-        self.user = get_user_model().objects.create_user(
+        cls.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
-        self.user.groups.add(self.student_group)
-        self.patient = Patient.objects.create(
+        cls.user.groups.add(cls.student_group)
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN400",
+            ward="Ward G",
+            bed="Bed 7",
             email="john.doe@example.com",
         )
-        self.note = Note.objects.create(
-            patient=self.patient,
-            user=self.user,
+        cls.note = Note.objects.create(
+            patient=cls.patient,
+            user=cls.user,
             name="Dr. Smith",
             role="Doctor",
             content="Test note",
         )
+
+    def setUp(self):
+        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
     def test_list_notes(self):
@@ -444,21 +471,27 @@ class NoteViewSetTest(APITestCase):
 
 
 class ObservationsViewSetTest(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.student_group, created = Group.objects.get_or_create(
             name=Role.STUDENT.value
         )
-        self.user = get_user_model().objects.create_user(
+        cls.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
-        self.user.groups.add(self.student_group)
-        self.patient = Patient.objects.create(
+        cls.user.groups.add(cls.student_group)
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN401",
+            ward="Ward H",
+            bed="Bed 8",
             email="john.doe@example.com",
         )
+
+    def setUp(self):
+        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
         self.observation_data = {
             "blood_pressure": {
@@ -556,16 +589,22 @@ class ObservationsViewSetTest(APITestCase):
 
     def test_list_observations_with_ordering(self):
         """Test that ordering parameter sorts results correctly"""
-        import time
+        from django.utils import timezone
+        from datetime import timedelta
 
-        # Create observations with slight time differences
-        BloodPressure.objects.create(
+        # Create observations with distinct timestamps without sleeping
+        now = timezone.now()
+        bp_old = BloodPressure.objects.create(
             patient=self.patient, user=self.user, systolic=120, diastolic=80
         )
-        time.sleep(0.01)  # Ensure different timestamps
-        BloodPressure.objects.create(
+        bp_new = BloodPressure.objects.create(
             patient=self.patient, user=self.user, systolic=130, diastolic=85
         )
+        # Set explicit created_at values so ordering tests are deterministic and fast
+        BloodPressure.objects.filter(pk=bp_old.pk).update(
+            created_at=now - timedelta(milliseconds=10)
+        )
+        BloodPressure.objects.filter(pk=bp_new.pk).update(created_at=now)
 
         # Test descending order (newest first) - default
         response = self.client.get(
@@ -600,6 +639,9 @@ class RespiratoryRateModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_008",
+            ward="Ward SG",
+            bed="Bed 8",
             email="john.doe@example.com",
         )
 
@@ -627,6 +669,9 @@ class BloodSugarModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_009",
+            ward="Ward SG",
+            bed="Bed 9",
             email="john.doe@example.com",
         )
 
@@ -653,6 +698,9 @@ class OxygenSaturationModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_010",
+            ward="Ward SG",
+            bed="Bed 10",
             email="john.doe@example.com",
         )
 
@@ -679,6 +727,9 @@ class PainScoreModelTest(TestCase):
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_011",
+            ward="Ward SG",
+            bed="Bed 11",
             email="john.doe@example.com",
         )
 
@@ -714,21 +765,27 @@ class PainScoreModelTest(TestCase):
 
 
 class ImagingRequestViewSetTest(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.student_group, created = Group.objects.get_or_create(
             name=Role.STUDENT.value
         )
-        self.user = get_user_model().objects.create_user(
+        cls.user = get_user_model().objects.create_user(
             username="student1", password="testpass123"
         )
-        self.user.groups.add(self.student_group)
-        self.patient = Patient.objects.create(
+        cls.user.groups.add(cls.student_group)
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_012",
+            ward="Ward SG",
+            bed="Bed 12",
             email="john.doe@example.com",
         )
+
+    def setUp(self):
+        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
     def test_student_can_create_imaging_request(self):
@@ -736,7 +793,9 @@ class ImagingRequestViewSetTest(APITestCase):
         data = {
             "patient": self.patient.id,
             "test_type": "X-ray",
-            "reason": "Routine check-up for patient symptoms",
+            "details": "Routine check-up for patient symptoms",
+            "infection_control_precautions": "None",
+            "imaging_focus": "Chest",
             "name": "Test X-Ray Request",
             "role": "Student",
         }
@@ -744,7 +803,7 @@ class ImagingRequestViewSetTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["test_type"], "X-ray")
         self.assertEqual(
-            response.data["reason"], "Routine check-up for patient symptoms"
+            response.data["details"], "Routine check-up for patient symptoms"
         )
         self.assertEqual(response.data["role"], "Student")
 
@@ -756,7 +815,9 @@ class ImagingRequestViewSetTest(APITestCase):
             patient=self.patient,
             user=self.user,
             test_type="X-ray",
-            reason="Routine X-ray test",
+            details="Routine X-ray test",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Arm",
             name="Test X-Ray",
             role="Medical Student",
         )
@@ -768,7 +829,9 @@ class ImagingRequestViewSetTest(APITestCase):
             patient=self.patient,
             user=other_user,
             test_type="CT scan",
-            reason="Routine CT scan test",
+            details="Routine CT scan test",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Head",
             name="Test CT Scan",
             role="Medical Student",
         )
@@ -788,7 +851,9 @@ class ImagingRequestViewSetTest(APITestCase):
             patient=self.patient,
             user=self.user,
             test_type="X-ray",
-            reason="Testing update permissions",
+            details="Testing update permissions",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Leg",
             name="Test Update Request",
             role="Medical Student",
         )
@@ -803,21 +868,27 @@ class ImagingRequestViewSetTest(APITestCase):
 
 
 class PainScoreViewSetTest(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.student_group, created = Group.objects.get_or_create(
+    @classmethod
+    def setUpTestData(cls):
+        cls.student_group, created = Group.objects.get_or_create(
             name=Role.STUDENT.value
         )
-        self.user = get_user_model().objects.create_user(
+        cls.user = get_user_model().objects.create_user(
             username="testuser", password="password"
         )
-        self.user.groups.add(self.student_group)
-        self.patient = Patient.objects.create(
+        cls.user.groups.add(cls.student_group)
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN_SG_013",
+            ward="Ward SG",
+            bed="Bed 13",
             email="john.doe@example.com",
         )
+
+    def setUp(self):
+        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
     def test_create_pain_score(self):

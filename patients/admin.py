@@ -26,16 +26,19 @@ class PatientAdmin(admin.ModelAdmin):
     """Admin configuration for patient basic information."""
 
     list_display = (
+        "mrn",
         "first_name",
         "last_name",
         "email",
         "phone_number",
         "date_of_birth",
+        "gender",
         "created_at",
         "updated_at",
     )
-    list_filter = ("created_at", "updated_at")
+    list_filter = ("gender", "created_at", "updated_at")
     search_fields = (
+        "mrn",
         "first_name",
         "last_name",
         "email",
@@ -46,8 +49,20 @@ class PatientAdmin(admin.ModelAdmin):
     inlines = [FileInline]
 
     fieldsets = (
-        ("Basic Information", {"fields": ("first_name", "last_name", "date_of_birth")}),
+        (
+            "Basic Information",
+            {
+                "fields": (
+                    "mrn",
+                    "first_name",
+                    "last_name",
+                    "date_of_birth",
+                    "gender",
+                )
+            },
+        ),
         ("Contact Information", {"fields": ("email", "phone_number")}),
+        ("Location", {"fields": ("ward", "bed")}),
         (
             "Timestamps",
             {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
@@ -71,6 +86,7 @@ class FileAdmin(admin.ModelAdmin):
         "display_name",
         "patient__first_name",
         "patient__last_name",
+        "patient__mrn",
     )
     autocomplete_fields = ("patient",)
     readonly_fields = ("id", "display_name", "created_at")

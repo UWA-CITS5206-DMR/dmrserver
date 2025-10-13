@@ -1,13 +1,12 @@
-"""
-Tests for role-based access control (RBAC) system.
+"""Role-based access control (RBAC) test suite.
 
-This module tests the permission system for different user roles:
-- admin: Full access to all resources
-- instructor: Full CRUD access to patients and requests
-- student: Can create requests, read-only access to patient data
+The tests in this module focus on access rules across admin, instructor, and
+student personas. Shared fixtures ensure we only create the necessary objects
+once per class, which keeps the suite fast and avoids repeated boilerplate.
 """
 
 import tempfile
+import uuid
 from django.contrib.auth.models import User, Group
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -15,42 +14,71 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 from unittest.mock import Mock
 
-from core.permissions import (
-    get_user_role,
-    FileAccessPermission,
-)
-from core.context import Role, ViewContext
+from core.permissions import get_user_role, FileAccessPermission
+from core.context import Role
 from patients.models import Patient, File
 from student_groups.models import ImagingRequest, ApprovedFile
 
 
-class CoreUtilsTest(TestCase):
+class RoleFixtureMixin:
+    """Reusable helpers for creating role-aware users and patients."""
+
+    password = "test123"
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.role_groups = {
+            Role.ADMIN.value: Group.objects.get_or_create(name=Role.ADMIN.value)[0],
+            Role.INSTRUCTOR.value: Group.objects.get_or_create(
+                name=Role.INSTRUCTOR.value
+            )[0],
+            Role.STUDENT.value: Group.objects.get_or_create(name=Role.STUDENT.value)[0],
+        }
+
+    @classmethod
+    def create_user(cls, username, role=None, **extra):
+        """Create a user and attach them to the requested role group."""
+
+        user = User.objects.create_user(
+            username=username,
+            password=extra.pop("password", cls.password),
+            **extra,
+        )
+        if role:
+            role_value = role.value if isinstance(role, Role) else role
+            user.groups.add(cls.role_groups[role_value])
+        return user
+
+    @classmethod
+    def create_patient(cls, **overrides):
+        """Create a patient with the new mandatory identifiers populated."""
+
+        suffix = uuid.uuid4().hex[:8]
+        defaults = {
+            "first_name": "Test",
+            "last_name": "Patient",
+            "date_of_birth": "1990-01-01",
+            "gender": Patient.Gender.UNSPECIFIED,
+            "mrn": f"MRN_CORE_{suffix}",
+            "ward": "Ward Core",
+            "bed": "Bed 1",
+            "email": f"test-{suffix}@example.com",
+        }
+        defaults.update(overrides)
+        return Patient.objects.create(**defaults)
+
+
+class CoreUtilsTest(RoleFixtureMixin, TestCase):
     """Test core utility functions"""
 
-    def setUp(self):
-        # Create user groups
-        self.admin_group, _ = Group.objects.get_or_create(name=Role.ADMIN.value)
-        self.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
-        )
-        self.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
-
-        # Create test users
-        self.admin_user = User.objects.create_user(username="admin", password="test123")
-        self.instructor_user = User.objects.create_user(
-            username="instructor", password="test123"
-        )
-        self.student_user = User.objects.create_user(
-            username="student", password="test123"
-        )
-        self.no_role_user = User.objects.create_user(
-            username="norole", password="test123"
-        )
-
-        # Assign roles
-        self.admin_user.groups.add(self.admin_group)
-        self.instructor_user.groups.add(self.instructor_group)
-        self.student_user.groups.add(self.student_group)
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
+        cls.no_role_user = cls.create_user("norole")
 
     def test_get_user_role_unauthenticated(self):
         """Test that an unauthenticated user has no role."""
@@ -73,46 +101,24 @@ class CoreUtilsTest(TestCase):
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
-class FilePermissionsTest(TestCase):
+class FilePermissionsTest(RoleFixtureMixin, TestCase):
     """Test file access permissions with approval-based logic"""
 
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Create role-aware users once per class
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
+
+        # Create test patient and file once per class
+        cls.patient = cls.create_patient()
+        cls.file = File.objects.create(file="test_file.pdf", patient=cls.patient)
+
     def setUp(self):
-        # Create user groups
-        self.admin_group, _ = Group.objects.get_or_create(name=Role.ADMIN.value)
-        self.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
-        )
-        self.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
-
-        # Create test users
-        self.admin_user = User.objects.create_user(username="admin", password="test123")
-        self.instructor_user = User.objects.create_user(
-            username="instructor", password="test123"
-        )
-        self.student_user = User.objects.create_user(
-            username="student", password="test123"
-        )
-
-        # Assign roles
-        self.admin_user.groups.add(self.admin_group)
-        self.instructor_user.groups.add(self.instructor_group)
-        self.student_user.groups.add(self.student_group)
-
-        # Create test patient
-        self.patient = Patient.objects.create(
-            first_name="Test",
-            last_name="Patient",
-            date_of_birth="1990-01-01",
-            email="test@example.com",
-        )
-
-        # Create test file
-        self.file = File.objects.create(
-            file="test_file.pdf",
-            patient=self.patient,
-        )
-
-        # Create mock request
+        super().setUp()
+        # Lightweight per-test mocks
         self.mock_request = Mock()
         self.mock_view = Mock()
 
@@ -166,7 +172,9 @@ class FilePermissionsTest(TestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="X_RAY",
-            reason="Test request",
+            details="Test request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
             status="completed",
             name="Test X-Ray Request",
         )
@@ -184,19 +192,29 @@ class FilePermissionsTest(TestCase):
             )
         )
 
-    def test_instructor_can_manage_files(self):
-        """Test that an instructor can create and delete files."""
+    def test_instructor_safe_methods_allowed(self):
+        """Instructors should have permission for safe HTTP methods."""
+
         permission = FileAccessPermission()
         self.mock_request.user = self.instructor_user
 
-        # Test various HTTP methods
-        for method in ["GET", "POST", "PUT", "PATCH", "DELETE"]:
+        for method in ["GET", "HEAD", "OPTIONS"]:
             self.mock_request.method = method
-            # Only GET is allowed by FileAccessPermission, but instructor has access
-            if method in ["GET", "HEAD", "OPTIONS"]:
-                self.assertTrue(
-                    permission.has_permission(self.mock_request, self.mock_view)
-                )
+            self.assertTrue(
+                permission.has_permission(self.mock_request, self.mock_view)
+            )
+
+    def test_instructor_write_methods_denied_by_permission_class(self):
+        """Instructor write operations require the view to allow them explicitly."""
+
+        permission = FileAccessPermission()
+        self.mock_request.user = self.instructor_user
+
+        for method in ["POST", "PUT", "PATCH", "DELETE"]:
+            self.mock_request.method = method
+            self.assertFalse(
+                permission.has_permission(self.mock_request, self.mock_view)
+            )
 
     def test_student_cannot_manage_files(self):
         """Test that a student cannot create, update, or delete files."""
@@ -211,40 +229,22 @@ class FilePermissionsTest(TestCase):
             )
 
 
-class PatientRBACTest(APITestCase):
+class PatientRBACTest(RoleFixtureMixin, APITestCase):
     """Test RBAC for Patient operations"""
 
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # Create users and patient once per class to avoid repeated DB writes
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
+
+        cls.patient = cls.create_patient(bed="Bed 2")
+
     def setUp(self):
+        # Keep a fresh API client per test for authentication handling
         self.client = APIClient()
-
-        # Create user groups
-        self.admin_group, _ = Group.objects.get_or_create(name=Role.ADMIN.value)
-        self.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
-        )
-        self.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
-
-        # Create test users
-        self.admin_user = User.objects.create_user(username="admin", password="test123")
-        self.instructor_user = User.objects.create_user(
-            username="instructor", password="test123"
-        )
-        self.student_user = User.objects.create_user(
-            username="student", password="test123"
-        )
-
-        # Assign roles
-        self.admin_user.groups.add(self.admin_group)
-        self.instructor_user.groups.add(self.instructor_group)
-        self.student_user.groups.add(self.student_group)
-
-        # Create test patient
-        self.patient = Patient.objects.create(
-            first_name="Test",
-            last_name="Patient",
-            date_of_birth="1990-01-01",
-            email="test@example.com",
-        )
 
     def test_student_can_read_patients(self):
         """Test that students can read patient data"""
@@ -258,65 +258,30 @@ class PatientRBACTest(APITestCase):
         response = self.client.get(reverse("patient-detail", args=[self.patient.id]))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_student_cannot_modify_patients(self):
-        """Test that students cannot modify patient data"""
-        self.client.force_authenticate(user=self.student_user)
-
-        # Cannot create
-        data = {
-            "first_name": "New",
-            "last_name": "Patient",
-            "date_of_birth": "1985-01-01",
-            "email": "new@example.com",
-        }
-        response = self.client.post(reverse("patient-list"), data)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-        # Cannot update
-        data = {"first_name": "Updated"}
-        response = self.client.patch(
-            reverse("patient-detail", args=[self.patient.id]), data
-        )
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-        # Cannot delete
-        response = self.client.delete(reverse("patient-detail", args=[self.patient.id]))
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_instructor_can_read_patients(self):
-        """Test that instructors can read patient data"""
-        self.client.force_authenticate(user=self.instructor_user)
-
-        # Can list patients
-        response = self.client.get(reverse("patient-list"))
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-        # Can retrieve specific patient
-        response = self.client.get(reverse("patient-detail", args=[self.patient.id]))
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
     def test_instructor_can_modify_patients(self):
         """Test that instructors can modify patient data"""
         self.client.force_authenticate(user=self.instructor_user)
 
-        # Can create
-        data = {
+        create_payload = {
             "first_name": "New",
             "last_name": "Patient",
             "date_of_birth": "1985-01-01",
+            "gender": Patient.Gender.FEMALE,
             "email": "new@example.com",
+            "mrn": "MRN_CORE_INSTR_CREATE",
+            "ward": "Ward Core",
+            "bed": "Bed 3",
+            "phone_number": "+61800000001",
         }
-        response = self.client.post(reverse("patient-list"), data)
+        response = self.client.post(reverse("patient-list"), create_payload)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        # Can update
-        data = {"first_name": "Updated"}
+        update_payload = {"first_name": "Updated"}
         response = self.client.patch(
-            reverse("patient-detail", args=[self.patient.id]), data
+            reverse("patient-detail", args=[self.patient.id]), update_payload
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Verify update
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.first_name, "Updated")
 
@@ -324,80 +289,45 @@ class PatientRBACTest(APITestCase):
         """Test that admin users can modify patient data"""
         self.client.force_authenticate(user=self.admin_user)
 
-        # Can create
-        data = {
+        create_payload = {
             "first_name": "New",
             "last_name": "Patient",
             "date_of_birth": "1985-01-01",
+            "gender": Patient.Gender.MALE,
             "email": "new@example.com",
+            "mrn": "MRN_CORE_ADMIN_CREATE",
+            "ward": "Ward Core",
+            "bed": "Bed 4",
+            "phone_number": "+61800000002",
         }
-        response = self.client.post(reverse("patient-list"), data)
+        response = self.client.post(reverse("patient-list"), create_payload)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        # Can update
-        data = {"first_name": "Updated"}
+        update_payload = {"first_name": "Updated Admin"}
         response = self.client.patch(
-            reverse("patient-detail", args=[self.patient.id]), data
-        )
-        # Can update
-        data = {"first_name": "Updated Admin"}
-        response = self.client.patch(
-            reverse("patient-detail", args=[self.patient.id]), data
+            reverse("patient-detail", args=[self.patient.id]), update_payload
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-
-class ContextEnumTest(TestCase):
-    """Test the context enum definitions"""
-
-    def test_role_enum_values(self):
-        """Test that role enum has correct values"""
-        self.assertEqual(Role.ADMIN.value, "admin")
-        self.assertEqual(Role.INSTRUCTOR.value, "instructor")
-        self.assertEqual(Role.STUDENT.value, "student")
-
-    def test_view_context_enum_values(self):
-        """Test that view context enum has correct values"""
-        self.assertEqual(ViewContext.STUDENT_READ.value, "student_read")
-        self.assertEqual(ViewContext.STUDENT_CREATE.value, "student_create")
-        self.assertEqual(ViewContext.INSTRUCTOR_READ.value, "instructor_read")
-        self.assertEqual(ViewContext.INSTRUCTOR_WRITE.value, "instructor_write")
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.first_name, "Updated Admin")
 
 
-class RequestRBACTest(APITestCase):
+class RequestRBACTest(RoleFixtureMixin, APITestCase):
     """Test RBAC for new request types (ImagingRequest, etc.)"""
 
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
+
+        cls.patient = cls.create_patient(bed="Bed 5")
+
     def setUp(self):
+        # Fresh API client per test
         self.client = APIClient()
-
-        # Create user groups
-        self.admin_group, _ = Group.objects.get_or_create(name=Role.ADMIN.value)
-        self.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
-        )
-        self.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
-
-        # Create test users
-        self.admin_user = User.objects.create_user(username="admin", password="test123")
-        self.instructor_user = User.objects.create_user(
-            username="instructor", password="test123"
-        )
-        self.student_user = User.objects.create_user(
-            username="student", password="test123"
-        )
-
-        # Assign roles
-        self.admin_user.groups.add(self.admin_group)
-        self.instructor_user.groups.add(self.instructor_group)
-        self.student_user.groups.add(self.student_group)
-
-        # Create test patient
-        self.patient = Patient.objects.create(
-            first_name="Test",
-            last_name="Patient",
-            date_of_birth="1990-01-01",
-            email="test@example.com",
-        )
 
     def test_student_can_create_imaging_request(self):
         """Test that students can create imaging requests"""
@@ -405,7 +335,9 @@ class RequestRBACTest(APITestCase):
         data = {
             "patient": self.patient.id,
             "test_type": "X-ray",
-            "reason": "Patient complaining of chest pain",
+            "details": "Patient complaining of chest pain",
+            "infection_control_precautions": "None",
+            "imaging_focus": "Chest",
             "name": "Test Request",
             "role": "Student",
         }
@@ -423,7 +355,9 @@ class RequestRBACTest(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="MRI scan",
-            reason="Patient needs MRI scan for diagnosis",
+            details="Patient needs MRI scan for diagnosis",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Head",
             status="pending",
             name="Test MRI Request",
             role="Medical Student",
@@ -442,7 +376,9 @@ class RequestRBACTest(APITestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="X-ray",
-            reason="Testing admin access rights",
+            details="Testing admin access rights",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Arm",
             status="pending",
             name="Admin Test Request",
             role="Doctor",

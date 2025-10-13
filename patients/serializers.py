@@ -77,6 +77,13 @@ class PatientSerializer(serializers.ModelSerializer):
     Instructors access files through the dedicated File management endpoints.
     """
 
+    gender = serializers.ChoiceField(
+        choices=Patient.Gender.choices,
+        required=False,
+        default=Patient.Gender.UNSPECIFIED,
+        help_text="Patient's gender",
+    )
+
     class Meta:
         model = Patient
         fields = [
@@ -84,6 +91,10 @@ class PatientSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "date_of_birth",
+            "gender",
+            "mrn",
+            "ward",
+            "bed",
             "email",
             "phone_number",
             "created_at",
@@ -92,6 +103,7 @@ class PatientSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def create(self, validated_data):
+        validated_data.setdefault("gender", Patient.Gender.UNSPECIFIED)
         return Patient.objects.create(**validated_data)
 
     def update(self, instance, validated_data):
@@ -100,6 +112,10 @@ class PatientSerializer(serializers.ModelSerializer):
         instance.date_of_birth = validated_data.get(
             "date_of_birth", instance.date_of_birth
         )
+        instance.gender = validated_data.get("gender", instance.gender)
+        instance.mrn = validated_data.get("mrn", instance.mrn)
+        instance.ward = validated_data.get("ward", instance.ward)
+        instance.bed = validated_data.get("bed", instance.bed)
         instance.email = validated_data.get("email", instance.email)
         instance.phone_number = validated_data.get(
             "phone_number", instance.phone_number

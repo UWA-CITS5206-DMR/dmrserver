@@ -11,6 +11,7 @@ import tempfile
 import shutil
 from django.test import TestCase, override_settings
 from django.contrib.auth.models import User, Group
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 from rest_framework import status
 from patients.models import Patient, File
@@ -36,54 +37,63 @@ class ApprovedFilesAPITestCase(TestCase):
         # Clean up the temporary media directory
         shutil.rmtree(cls.test_media_root, ignore_errors=True)
 
-    def setUp(self):
-        """Set up test data for approved_files API tests."""
-        self.client = APIClient()
+    @classmethod
+    def setUpTestData(cls):
+        # Reuse client-independent data across tests
+        # Use a separate APIClient instance because Django TestCase sets self.client
+        # to a django.test.Client in setUp(), which doesn't have force_authenticate.
+        cls.api_client = APIClient()
 
-        # Get or create groups (they are created by migration core.0001_create_user_roles)
-        self.student_group, _ = Group.objects.get_or_create(name="student")
-        self.instructor_group, _ = Group.objects.get_or_create(name="instructor")
+        # Get or create groups
+        cls.student_group, _ = Group.objects.get_or_create(name="student")
+        cls.instructor_group, _ = Group.objects.get_or_create(name="instructor")
 
         # Create users
-        self.student_user = User.objects.create_user(
+        cls.student_user = User.objects.create_user(
             username="student1", password="testpass123"
         )
-        self.student_user.groups.add(self.student_group)
+        cls.student_user.groups.add(cls.student_group)
 
-        self.instructor_user = User.objects.create_user(
+        cls.instructor_user = User.objects.create_user(
             username="instructor1", password="testpass123"
         )
-        self.instructor_user.groups.add(self.instructor_group)
+        cls.instructor_user.groups.add(cls.instructor_group)
 
         # Create a patient
-        self.patient = Patient.objects.create(
+        cls.patient = Patient.objects.create(
             first_name="John",
             last_name="Doe",
             date_of_birth="1990-01-01",
+            mrn="MRN200",
+            ward="Ward C",
+            bed="Bed 3",
             email="john.doe@example.com",
             phone_number="1234567890",
         )
 
-        # Create test files
-        self.file1 = File.objects.create(
-            patient=self.patient,
-            file=self._create_dummy_file("test_file1.pdf"),
+        # Create test files once for reuse
+        cls.file1 = File.objects.create(
+            patient=cls.patient,
+            file=SimpleUploadedFile(
+                "test_file1.pdf", b"pdf1", content_type="application/pdf"
+            ),
             display_name="Test File 1.pdf",
             requires_pagination=True,
-            category="IMAGING",
+            category=File.Category.IMAGING,
         )
 
-        self.file2 = File.objects.create(
-            patient=self.patient,
-            file=self._create_dummy_file("test_file2.pdf"),
+        cls.file2 = File.objects.create(
+            patient=cls.patient,
+            file=SimpleUploadedFile(
+                "test_file2.pdf", b"pdf2", content_type="application/pdf"
+            ),
             display_name="Test File 2.pdf",
             requires_pagination=False,
-            category="LAB_RESULT",
+            category=File.Category.LAB_RESULTS,
         )
 
     def _create_dummy_file(self, filename):
         """Create a valid dummy PDF file for testing."""
-        from django.core.files.uploadedfile import SimpleUploadedFile
         from tests.test_utils import create_test_pdf
 
         content = create_test_pdf(num_pages=1)
@@ -96,7 +106,9 @@ class ApprovedFilesAPITestCase(TestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="X-Ray",
-            reason="Test reason",
+            details="Test reason",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
             status="completed",
             name="Dr. Smith",
             role="Radiologist",
@@ -114,11 +126,11 @@ class ApprovedFilesAPITestCase(TestCase):
             page_range="",
         )
 
-        # Authenticate as instructor
-        self.client.force_authenticate(user=self.instructor_user)
+        # Authenticate as instructor using DRF APIClient
+        self.api_client.force_authenticate(user=self.instructor_user)
 
         # Retrieve the request
-        response = self.client.get(
+        response = self.api_client.get(
             f"/api/instructors/imaging-requests/{imaging_request.id}/"
         )
 
@@ -145,7 +157,7 @@ class ApprovedFilesAPITestCase(TestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="CBC",
-            reason="Test reason",
+            details="Test reason",
             status="completed",
             name="Dr. Johnson",
             role="Lab Director",
@@ -158,11 +170,11 @@ class ApprovedFilesAPITestCase(TestCase):
             page_range="",
         )
 
-        # Authenticate as instructor
-        self.client.force_authenticate(user=self.instructor_user)
+        # Authenticate as instructor using DRF APIClient
+        self.api_client.force_authenticate(user=self.instructor_user)
 
         # Retrieve the request
-        response = self.client.get(
+        response = self.api_client.get(
             f"/api/instructors/blood-test-requests/{blood_test_request.id}/"
         )
 
@@ -183,7 +195,9 @@ class ApprovedFilesAPITestCase(TestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="CT Scan",
-            reason="Test reason",
+            details="Test reason",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Abdomen",
             status="completed",
             name="Dr. Smith",
             role="Radiologist",
@@ -196,11 +210,11 @@ class ApprovedFilesAPITestCase(TestCase):
             page_range="1-3",
         )
 
-        # Authenticate as student
-        self.client.force_authenticate(user=self.student_user)
+        # Authenticate as student using DRF APIClient
+        self.api_client.force_authenticate(user=self.student_user)
 
         # Retrieve the request
-        response = self.client.get(
+        response = self.api_client.get(
             f"/api/student-groups/imaging-requests/{imaging_request.id}/"
         )
 
@@ -221,7 +235,9 @@ class ApprovedFilesAPITestCase(TestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="X-Ray",
-            reason="Test reason 1",
+            details="Test reason 1",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Leg",
             status="completed",
             name="Dr. Smith",
             role="Radiologist",
@@ -236,17 +252,18 @@ class ApprovedFilesAPITestCase(TestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="MRI",
-            reason="Test reason 2",
+            details="Test reason 2",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Spine",
             status="pending",
             name="Dr. Jones",
             role="Radiologist",
         )
-
-        # Authenticate as instructor
-        self.client.force_authenticate(user=self.instructor_user)
+        # Authenticate as instructor using DRF APIClient
+        self.api_client.force_authenticate(user=self.instructor_user)
 
         # List all requests
-        response = self.client.get("/api/instructors/imaging-requests/")
+        response = self.api_client.get("/api/instructors/imaging-requests/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = response.data["results"]
@@ -269,17 +286,19 @@ class ApprovedFilesAPITestCase(TestCase):
             patient=self.patient,
             user=self.student_user,
             test_type="Ultrasound",
-            reason="Test reason",
+            details="Test reason",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Abdomen",
             status="pending",
             name="Dr. Williams",
             role="Radiologist",
         )
 
-        # Authenticate as instructor
-        self.client.force_authenticate(user=self.instructor_user)
+        # Authenticate as instructor using DRF APIClient
+        self.api_client.force_authenticate(user=self.instructor_user)
 
         # Retrieve the request
-        response = self.client.get(
+        response = self.api_client.get(
             f"/api/instructors/imaging-requests/{imaging_request.id}/"
         )
 
