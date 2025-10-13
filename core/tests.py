@@ -100,6 +100,105 @@ class CoreUtilsTest(RoleFixtureMixin, TestCase):
         self.assertEqual(get_user_role(superuser), Role.ADMIN.value)
 
 
+class AuthenticationTest(RoleFixtureMixin, APITestCase):
+    """Test multi-device authentication with independent logout"""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.test_user = cls.create_user("testuser", Role.STUDENT)
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_login_creates_new_token(self):
+        """Test that each login creates a new token for multi-device support"""
+        # First login
+        response1 = self.client.post(
+            reverse("auth-login"),
+            {"username": "testuser", "password": "test123"},
+        )
+        self.assertEqual(response1.status_code, status.HTTP_200_OK)
+        token1 = response1.data["token"]
+
+        # Second login (simulating a different device)
+        response2 = self.client.post(
+            reverse("auth-login"),
+            {"username": "testuser", "password": "test123"},
+        )
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+        token2 = response2.data["token"]
+
+        # Tokens should be different
+        self.assertNotEqual(token1, token2)
+
+    def test_multiple_tokens_work_simultaneously(self):
+        """Test that multiple tokens for the same user can be used simultaneously"""
+        # Login from device 1
+        response1 = self.client.post(
+            reverse("auth-login"),
+            {"username": "testuser", "password": "test123"},
+        )
+        token1 = response1.data["token"]
+
+        # Login from device 2
+        response2 = self.client.post(
+            reverse("auth-login"),
+            {"username": "testuser", "password": "test123"},
+        )
+        token2 = response2.data["token"]
+
+        # Both tokens should work
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token1}")
+        profile1 = self.client.get(reverse("auth-profile"))
+        self.assertEqual(profile1.status_code, status.HTTP_200_OK)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token2}")
+        profile2 = self.client.get(reverse("auth-profile"))
+        self.assertEqual(profile2.status_code, status.HTTP_200_OK)
+
+    def test_logout_only_affects_current_token(self):
+        """Test that logging out from one device doesn't affect other devices"""
+        # Login from device 1
+        response1 = self.client.post(
+            reverse("auth-login"),
+            {"username": "testuser", "password": "test123"},
+        )
+        token1 = response1.data["token"]
+
+        # Login from device 2
+        response2 = self.client.post(
+            reverse("auth-login"),
+            {"username": "testuser", "password": "test123"},
+        )
+        token2 = response2.data["token"]
+
+        # Logout from device 1
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token1}")
+        logout_response = self.client.post(reverse("auth-logout"))
+        self.assertEqual(logout_response.status_code, status.HTTP_200_OK)
+
+        # Token1 should no longer work
+        profile1 = self.client.get(reverse("auth-profile"))
+        self.assertEqual(profile1.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # Token2 should still work
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token2}")
+        profile2 = self.client.get(reverse("auth-profile"))
+        self.assertEqual(profile2.status_code, status.HTTP_200_OK)
+
+    def test_login_returns_user_info(self):
+        """Test that login returns both token and user information"""
+        response = self.client.post(
+            reverse("auth-login"),
+            {"username": "testuser", "password": "test123"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("token", response.data)
+        self.assertIn("user", response.data)
+        self.assertEqual(response.data["user"]["username"], "testuser")
+
+
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class FilePermissionsTest(RoleFixtureMixin, TestCase):
     """Test file access permissions with approval-based logic"""

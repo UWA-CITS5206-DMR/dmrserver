@@ -2,8 +2,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.authtoken.models import Token
 from drf_spectacular.utils import extend_schema, OpenApiExample
+from .models import MultiDeviceToken
 from .serializers import LoginSerializer, UserSerializer, AuthTokenSerializer
 
 # Create your views here.
@@ -30,12 +30,16 @@ class AuthViewSet(viewsets.GenericViewSet):
     )
     @action(detail=False, methods=["post"], permission_classes=[AllowAny])
     def login(self, request):
-        """Login user and return token with user information"""
+        """Login user and return token with user information.
+        
+        Creates a new token for each login, allowing multiple devices to be logged in simultaneously.
+        """
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         user = serializer.validated_data["user"]
-        token, created = Token.objects.get_or_create(user=user)
+        # Create a new token for each login to support multi-device access
+        token = MultiDeviceToken.objects.create(user=user)
 
         response_data = {"token": token.key, "user": UserSerializer(user).data}
 
@@ -48,15 +52,24 @@ class AuthViewSet(viewsets.GenericViewSet):
     )
     @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
     def logout(self, request):
-        """Logout user by deleting token"""
+        """Logout user by deleting the current device token.
+        
+        Only deletes the token used in this request, allowing other devices to remain logged in.
+        """
         try:
-            request.user.auth_token.delete()
+            # Delete only the current token (from request.auth), not all user tokens
+            if request.auth:
+                request.auth.delete()
+                return Response(
+                    {"detail": "Successfully logged out"}, status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {"error": "No active token found"}, status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
             return Response(
-                {"detail": "Successfully logged out"}, status=status.HTTP_200_OK
-            )
-        except Token.DoesNotExist:
-            return Response(
-                {"error": "No active session found"}, status=status.HTTP_400_BAD_REQUEST
+                {"error": f"Logout failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST
             )
 
     @extend_schema(
