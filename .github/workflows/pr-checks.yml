@@ -34,4 +34,5 @@ jobs:
           DJANGO_SETTINGS_MODULE: dmr.settings
           DJANGO_CONFIGURATION: Development
         run: |
+          cp .env.example .env
           uv run python manage.py test --verbosity=2
