@@ -32,6 +32,7 @@ ignore = [
     "E501",
     "ERA001",
     "COM812",
+    "PT027",
 ]
 fixable = ["ALL"]
 

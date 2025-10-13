@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
@@ -159,7 +158,7 @@ class BodyTemperatureModelTest(TestCase):
         )
 
     def test_body_temperature_validation(self) -> None:
-        with pytest.raises(ValidationError):
+        with self.assertRaises(ValidationError):
             BodyTemperature.objects.create(
                 patient=self.patient,
                 user=self.user,
@@ -811,7 +810,7 @@ class PainScoreModelTest(TestCase):
         # Test invalid scores
         for score in [-1, 11, 15]:
             pain_score = PainScore(patient=self.patient, user=self.user, score=score)
-            with pytest.raises(ValidationError):
+            with self.assertRaises(ValidationError):
                 pain_score.clean()
 
 
