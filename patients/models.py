@@ -6,9 +6,22 @@ from django.core.exceptions import ValidationError
 
 
 class Patient(models.Model):
+    class Gender(models.TextChoices):
+        FEMALE = "female", "Female"
+        MALE = "male", "Male"
+        OTHER = "other", "Other"
+        UNSPECIFIED = "unspecified", "Unspecified"
+
     first_name = models.CharField(max_length=100, verbose_name="First Name")
     last_name = models.CharField(max_length=100, verbose_name="Last Name")
     date_of_birth = models.DateField(verbose_name="Date of Birth")
+    gender = models.CharField(
+        max_length=20,
+        choices=Gender.choices,
+        default=Gender.UNSPECIFIED,
+        verbose_name="Gender",
+        help_text="Patient's gender",
+    )
     mrn = models.CharField(
         max_length=50, unique=True, verbose_name="Medical Record Number (MRN)"
     )

@@ -59,6 +59,7 @@ TEST_CONFIG = {
         "first_name": "John",
         "last_name": "TestPatient",
         "date_of_birth": "1990-01-01",
+        "gender": "unspecified",
         "mrn": "MRN900",
         "ward": "Ward Test",
         "bed": "Bed T1",

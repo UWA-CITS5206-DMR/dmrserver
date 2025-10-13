@@ -32,10 +32,11 @@ class PatientAdmin(admin.ModelAdmin):
         "email",
         "phone_number",
         "date_of_birth",
+        "gender",
         "created_at",
         "updated_at",
     )
-    list_filter = ("created_at", "updated_at")
+    list_filter = ("gender", "created_at", "updated_at")
     search_fields = (
         "mrn",
         "first_name",
@@ -50,7 +51,15 @@ class PatientAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Basic Information",
-            {"fields": ("mrn", "first_name", "last_name", "date_of_birth")},
+            {
+                "fields": (
+                    "mrn",
+                    "first_name",
+                    "last_name",
+                    "date_of_birth",
+                    "gender",
+                )
+            },
         ),
         ("Contact Information", {"fields": ("email", "phone_number")}),
         ("Location", {"fields": ("ward", "bed")}),

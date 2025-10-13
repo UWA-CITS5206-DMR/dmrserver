@@ -49,6 +49,7 @@ class PatientApiTests(APITestCase):
             "first_name": "John",
             "last_name": "Doe",
             "date_of_birth": "1990-01-01",
+            "gender": Patient.Gender.MALE,
             "email": "john.doe@example.com",
             "phone_number": "+1234567890",
         }
@@ -90,6 +91,7 @@ class PatientApiTests(APITestCase):
         self.assertEqual(patient.first_name, "John")
         self.assertEqual(patient.last_name, "Doe")
         self.assertEqual(patient.email, "john.doe@example.com")
+        self.assertEqual(patient.gender, Patient.Gender.MALE)
 
     def test_list_and_retrieve_patient(self):
         p = Patient.objects.create(**self._patient_payload())
@@ -250,6 +252,7 @@ class FileManagementTestCase(APITestCase):
             first_name="Test",
             last_name="Patient",
             date_of_birth="1990-01-01",
+            gender=Patient.Gender.FEMALE,
             mrn="MRN_PATIENTS_001",
             ward="Ward Patients",
             bed="Bed 1",
