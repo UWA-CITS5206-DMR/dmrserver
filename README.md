@@ -38,7 +38,7 @@ uv sync
 The project provides optional development extras (for example, `ruff`) under the `dev` extras in `pyproject.toml`. To install the optional dev dependencies with `uv` run:
 
 ```bash
-uv sync --extras dev
+uv sync --extra dev
 ```
 
 Or, if you prefer pip/PEP 621 style installation from source (after activating a virtualenv):
