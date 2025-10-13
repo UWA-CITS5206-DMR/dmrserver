@@ -5,6 +5,7 @@ This module provides common utility functions used across test files.
 """
 
 from io import BytesIO
+
 from PyPDF2 import PdfWriter
 
 

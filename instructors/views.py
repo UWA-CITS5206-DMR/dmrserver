@@ -1,3 +1,5 @@
+from typing import Any, ClassVar
+
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
@@ -7,6 +9,7 @@ from core.context import ViewContext
 from core.permissions import InstructorManagementPermission
 from patients.models import Patient
 from student_groups.models import BloodTestRequest, ImagingRequest
+
 from .serializers import (
     BloodTestRequestSerializer,
     BloodTestRequestStatusUpdateSerializer,
@@ -25,14 +28,14 @@ class ImagingRequestViewSet(
 ):
     queryset = ImagingRequest.objects.select_related("user", "patient").all()
     serializer_class = ImagingRequestSerializer
-    permission_classes = [InstructorManagementPermission]
+    permission_classes: ClassVar[list[Any]] = [InstructorManagementPermission]
 
-    def get_serializer_context(self):
+    def get_serializer_context(self) -> dict:
         context = super().get_serializer_context()
         context[ViewContext.INSTRUCTOR_READ.value] = True
         return context
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type:
         if self.action in ["update", "partial_update"]:
             return ImagingRequestStatusUpdateSerializer
         return ImagingRequestSerializer
@@ -42,7 +45,7 @@ class ImagingRequestViewSet(
         description="Get all imaging requests with pending status",
     )
     @action(detail=False, methods=["get"])
-    def pending(self, request):
+    def pending(self, _request: object) -> Response:
         pending_requests = self.queryset.filter(status="pending")
         page = self.paginate_queryset(pending_requests)
         if page is not None:
@@ -56,7 +59,7 @@ class ImagingRequestViewSet(
         description="Get counts of imaging requests by status",
     )
     @action(detail=False, methods=["get"])
-    def stats(self, request):
+    def stats(self, _request: object) -> Response:
         stats = {
             "total": self.queryset.count(),
             "pending": self.queryset.filter(status="pending").count(),
@@ -75,14 +78,14 @@ class BloodTestRequestViewSet(
 ):
     queryset = BloodTestRequest.objects.select_related("user", "patient").all()
     serializer_class = BloodTestRequestSerializer
-    permission_classes = [InstructorManagementPermission]
+    permission_classes: ClassVar[list[Any]] = [InstructorManagementPermission]
 
-    def get_serializer_context(self):
+    def get_serializer_context(self) -> dict:
         context = super().get_serializer_context()
         context[ViewContext.INSTRUCTOR_READ.value] = True
         return context
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type:
         if self.action in ["update", "partial_update"]:
             return BloodTestRequestStatusUpdateSerializer
         return BloodTestRequestSerializer
@@ -92,7 +95,7 @@ class BloodTestRequestViewSet(
         description="Get all blood test requests with pending status",
     )
     @action(detail=False, methods=["get"])
-    def pending(self, request):
+    def pending(self, _request: object) -> Response:
         pending_requests = self.queryset.filter(status="pending")
         page = self.paginate_queryset(pending_requests)
         if page is not None:
@@ -106,7 +109,7 @@ class BloodTestRequestViewSet(
         description="Get counts of blood test requests by status",
     )
     @action(detail=False, methods=["get"])
-    def stats(self, request):
+    def stats(self, _request: object) -> Response:
         stats = {
             "total": self.queryset.count(),
             "pending": self.queryset.filter(status="pending").count(),
@@ -120,28 +123,28 @@ class DashboardViewSet(viewsets.GenericViewSet):
     Instructor dashboard data endpoints.
     """
 
-    permission_classes = [InstructorManagementPermission]
+    permission_classes: ClassVar[list[Any]] = [InstructorManagementPermission]
 
     @extend_schema(
         summary="Get dashboard overview",
         description="Get overview statistics for instructor dashboard",
     )
-    def list(self, request):
+    def list(self, _request: object) -> Response:
         data = {
             "patients_count": Patient.objects.count(),
             "total_imaging_requests": ImagingRequest.objects.count(),
             "pending_imaging_requests": ImagingRequest.objects.filter(
-                status="pending"
+                status="pending",
             ).count(),
             "completed_imaging_requests": ImagingRequest.objects.filter(
-                status="completed"
+                status="completed",
             ).count(),
             "total_blood_test_requests": BloodTestRequest.objects.count(),
             "pending_blood_test_requests": BloodTestRequest.objects.filter(
-                status="pending"
+                status="pending",
             ).count(),
             "completed_blood_test_requests": BloodTestRequest.objects.filter(
-                status="completed"
+                status="completed",
             ).count(),
         }
         return Response(data)

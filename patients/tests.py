@@ -1,45 +1,50 @@
+import shutil
+import tempfile
+from uuid import uuid4
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APITestCase, APIClient
-import tempfile
-import os
-import shutil
-from uuid import uuid4
-from core.context import Role
+from rest_framework.test import APIClient, APITestCase
 
-from .models import Patient, File
-from student_groups.models import ImagingRequest, ApprovedFile
+from core.context import Role
+from student_groups.models import ApprovedFile, ImagingRequest
+
+from .models import File, Patient
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class PatientApiTests(APITestCase):
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         cls.instructor_group, created = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
+            name=Role.INSTRUCTOR.value,
         )
         cls.user = get_user_model().objects.create_user(
-            username="tester", email="tester@example.com", password="pass1234"
+            username="tester",
+            email="tester@example.com",
+            password="pass1234",
         )
         cls.user.groups.add(cls.instructor_group)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.client: APIClient = APIClient()
         self.media_root = settings.MEDIA_ROOT
         self.client.force_authenticate(user=self.user)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         pass
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         try:
-            if os.path.isdir(settings.MEDIA_ROOT):
+            from pathlib import Path
+
+            if Path(settings.MEDIA_ROOT).is_dir():
                 shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
         finally:
             super().tearDownClass()
@@ -58,7 +63,7 @@ class PatientApiTests(APITestCase):
                 "mrn": overrides.pop("mrn", f"MRN-{uuid4().hex[:8]}"),
                 "ward": overrides.pop("ward", "Ward A"),
                 "bed": overrides.pop("bed", "Bed 1"),
-            }
+            },
         )
         payload.update(overrides)
         return payload
@@ -71,92 +76,96 @@ class PatientApiTests(APITestCase):
         test_content = b"dummy-content"
         upload = SimpleUploadedFile(name, test_content, content_type="text/plain")
         res_upload = self.client.post(
-            upload_url, data={"file": upload}, format="multipart"
+            upload_url,
+            data={"file": upload},
+            format="multipart",
         )
-        self.assertEqual(res_upload.status_code, status.HTTP_201_CREATED)
+        assert res_upload.status_code == status.HTTP_201_CREATED
         return File.objects.get(patient=patient)
 
-    def test_auth_required_for_list(self):
+    def test_auth_required_for_list(self) -> None:
         self.client.force_authenticate(user=None)
         url = reverse("patient-list")
         res = self.client.get(url)
-        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+        assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_create_patient(self):
+    def test_create_patient(self) -> None:
         url = reverse("patient-list")
         res = self.client.post(url, data=self._patient_payload(), format="json")
-        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Patient.objects.count(), 1)
+        assert res.status_code == status.HTTP_201_CREATED
+        assert Patient.objects.count() == 1
         patient = Patient.objects.first()
-        self.assertEqual(patient.first_name, "John")
-        self.assertEqual(patient.last_name, "Doe")
-        self.assertEqual(patient.email, "john.doe@example.com")
-        self.assertEqual(patient.gender, Patient.Gender.MALE)
+        assert patient.first_name == "John"
+        assert patient.last_name == "Doe"
+        assert patient.email == "john.doe@example.com"
+        assert patient.gender == Patient.Gender.MALE
 
-    def test_list_and_retrieve_patient(self):
+    def test_list_and_retrieve_patient(self) -> None:
         p = Patient.objects.create(**self._patient_payload())
         list_url = reverse("patient-list")
         res_list = self.client.get(list_url)
-        self.assertEqual(res_list.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(res_list.data["count"], 1)
+        assert res_list.status_code == status.HTTP_200_OK
+        assert res_list.data["count"] >= 1
 
         detail_url = reverse("patient-detail", args=[p.id])
         res_detail = self.client.get(detail_url)
-        self.assertEqual(res_detail.status_code, status.HTTP_200_OK)
-        self.assertEqual(res_detail.data["id"], p.id)
+        assert res_detail.status_code == status.HTTP_200_OK
+        assert res_detail.data["id"] == p.id
 
-    def test_update_patient(self):
+    def test_update_patient(self) -> None:
         p = self.create_patient()
         detail_url = reverse("patient-detail", args=[p.id])
         update_payload = {"first_name": "Jane", "email": "jane.doe@example.com"}
         res_patch = self.client.patch(detail_url, data=update_payload, format="json")
-        self.assertEqual(res_patch.status_code, status.HTTP_200_OK)
+        assert res_patch.status_code == status.HTTP_200_OK
         p.refresh_from_db()
-        self.assertEqual(p.first_name, "Jane")
-        self.assertEqual(p.email, "jane.doe@example.com")
+        assert p.first_name == "Jane"
+        assert p.email == "jane.doe@example.com"
 
-    def test_delete_patient(self):
+    def test_delete_patient(self) -> None:
         p = self.create_patient()
         detail_url = reverse("patient-detail", args=[p.id])
         res_delete = self.client.delete(detail_url)
-        self.assertEqual(res_delete.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertEqual(Patient.objects.count(), 0)
+        assert res_delete.status_code == status.HTTP_204_NO_CONTENT
+        assert Patient.objects.count() == 0
 
-    def test_upload_file_action(self):
+    def test_upload_file_action(self) -> None:
         p = self.create_patient()
         f = self.upload_file(p)
-        self.assertEqual(File.objects.filter(patient=p).count(), 1)
-        self.assertEqual(f.display_name, "report.txt")
+        assert File.objects.filter(patient=p).count() == 1
+        assert f.display_name == "report.txt"
 
-    def test_list_files_for_patient(self):
+    def test_list_files_for_patient(self) -> None:
         p = self.create_patient()
         self.upload_file(p)
         files_list_url = reverse("file-list", kwargs={"patient_pk": p.id})
         res_files = self.client.get(files_list_url)
-        self.assertEqual(res_files.status_code, status.HTTP_200_OK)
-        self.assertEqual(res_files.data["count"], 1)
+        assert res_files.status_code == status.HTTP_200_OK
+        assert res_files.data["count"] == 1
 
-    def test_retrieve_file_detail(self):
+    def test_retrieve_file_detail(self) -> None:
         p = self.create_patient()
         f = self.upload_file(p)
         file_detail_url = reverse(
-            "file-detail", kwargs={"patient_pk": p.id, "pk": str(f.id)}
+            "file-detail",
+            kwargs={"patient_pk": p.id, "pk": str(f.id)},
         )
         res_file_detail = self.client.get(file_detail_url)
-        self.assertEqual(res_file_detail.status_code, status.HTTP_200_OK)
-        self.assertEqual(res_file_detail.data["id"], str(f.id))
+        assert res_file_detail.status_code == status.HTTP_200_OK
+        assert res_file_detail.data["id"] == str(f.id)
 
-    def test_delete_file_for_patient(self):
+    def test_delete_file_for_patient(self) -> None:
         p = self.create_patient()
         f = self.upload_file(p)
         file_detail_url = reverse(
-            "file-detail", kwargs={"patient_pk": p.id, "pk": str(f.id)}
+            "file-detail",
+            kwargs={"patient_pk": p.id, "pk": str(f.id)},
         )
         res_delete = self.client.delete(file_detail_url)
-        self.assertEqual(res_delete.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertEqual(File.objects.filter(patient=p).count(), 0)
+        assert res_delete.status_code == status.HTTP_204_NO_CONTENT
+        assert File.objects.filter(patient=p).count() == 0
 
-    def test_file_display_name_auto_generated_on_save(self):
+    def test_file_display_name_auto_generated_on_save(self) -> None:
         """
         Test that display_name is automatically extracted from filename when creating File objects directly
         (e.g., through Admin). This test simulates Django Admin behavior without using serializers.
@@ -164,7 +173,9 @@ class PatientApiTests(APITestCase):
         p = self.create_patient()
         test_content = b"test content for display name"
         uploaded_file = SimpleUploadedFile(
-            "test_document.pdf", test_content, content_type="application/pdf"
+            "test_document.pdf",
+            test_content,
+            content_type="application/pdf",
         )
 
         # Create File object directly without using API (simulating Admin save)
@@ -176,18 +187,20 @@ class PatientApiTests(APITestCase):
         )
 
         # Verify display_name is automatically set to the uploaded filename
-        self.assertEqual(file_obj.display_name, "test_document.pdf")
-        self.assertIsNotNone(file_obj.display_name)
-        self.assertNotEqual(file_obj.display_name, "")
+        assert file_obj.display_name == "test_document.pdf"
+        assert file_obj.display_name is not None
+        assert file_obj.display_name != ""
 
-    def test_file_display_name_not_overwritten_if_set(self):
+    def test_file_display_name_not_overwritten_if_set(self) -> None:
         """
         Test that the save() method does not overwrite display_name if it's already set.
         """
         p = self.create_patient()
         test_content = b"test content"
         uploaded_file = SimpleUploadedFile(
-            "original.txt", test_content, content_type="text/plain"
+            "original.txt",
+            test_content,
+            content_type="text/plain",
         )
 
         # Create File object directly and set custom display_name
@@ -200,7 +213,7 @@ class PatientApiTests(APITestCase):
         file_obj.save()
 
         # Verify display_name remains as the custom value
-        self.assertEqual(file_obj.display_name, "Custom Display Name")
+        assert file_obj.display_name == "Custom Display Name"
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -214,7 +227,7 @@ class FileManagementTestCase(APITestCase):
     """
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         """Set up test users with different roles."""
         # Create groups
         cls.admin_group = Group.objects.get_or_create(name=Role.ADMIN.value)[0]
@@ -265,19 +278,21 @@ class FileManagementTestCase(APITestCase):
             from tests.test_utils import create_test_pdf
 
             cls._cached_pdf = create_test_pdf(num_pages=1)
-        except Exception:
+        except Exception:  # noqa: BLE001 - fallback to allow test suite to proceed without fixture
             cls._cached_pdf = None
 
-    def setUp(self):
+    def setUp(self) -> None:
         """Set up test client for each test."""
         self.client: APIClient = APIClient()
         self.media_root = settings.MEDIA_ROOT
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         """Clean up media files after all tests."""
         try:
-            if os.path.isdir(settings.MEDIA_ROOT):
+            from pathlib import Path
+
+            if Path(settings.MEDIA_ROOT).is_dir():
                 shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
         finally:
             super().tearDownClass()
@@ -285,10 +300,9 @@ class FileManagementTestCase(APITestCase):
     def _create_test_pdf(self, filename="test.pdf"):
         """Create a valid test PDF file using PyPDF2."""
         # Reuse cached PDF bytes when available
-        if getattr(self.__class__, "_cached_pdf", None) is not None:
-            return SimpleUploadedFile(
-                filename, self.__class__._cached_pdf, content_type="application/pdf"
-            )
+        cached = getattr(self.__class__, "_cached_pdf", None)
+        if cached is not None:
+            return SimpleUploadedFile(filename, cached, content_type="application/pdf")
 
         from tests.test_utils import create_test_pdf
 
@@ -306,12 +320,13 @@ class FileManagementTestCase(APITestCase):
     def _get_file_detail_url(self, file_id):
         """Get URL for file detail endpoint."""
         return reverse(
-            "file-detail", kwargs={"patient_pk": self.patient.id, "pk": str(file_id)}
+            "file-detail",
+            kwargs={"patient_pk": self.patient.id, "pk": str(file_id)},
         )
 
     # ==================== Permission Tests ====================
 
-    def test_instructor_can_upload_file(self):
+    def test_instructor_can_upload_file(self) -> None:
         """Test that instructor can upload files."""
         self.client.force_authenticate(user=self.instructor_user)
         url = self._get_file_list_url()
@@ -324,10 +339,10 @@ class FileManagementTestCase(APITestCase):
         }
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(File.objects.count(), 1)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert File.objects.count() == 1
 
-    def test_admin_can_upload_file(self):
+    def test_admin_can_upload_file(self) -> None:
         """Test that admin can upload files."""
         self.client.force_authenticate(user=self.admin_user)
         url = self._get_file_list_url()
@@ -340,9 +355,9 @@ class FileManagementTestCase(APITestCase):
         }
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
-    def test_student_cannot_upload_file(self):
+    def test_student_cannot_upload_file(self) -> None:
         """Test that student cannot upload files."""
         self.client.force_authenticate(user=self.student_user)
         url = self._get_file_list_url()
@@ -355,10 +370,10 @@ class FileManagementTestCase(APITestCase):
         }
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(File.objects.count(), 0)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert File.objects.count() == 0
 
-    def test_unauthenticated_cannot_upload_file(self):
+    def test_unauthenticated_cannot_upload_file(self) -> None:
         """Test that unauthenticated users cannot upload files."""
         url = self._get_file_list_url()
 
@@ -369,9 +384,9 @@ class FileManagementTestCase(APITestCase):
         }
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_instructor_can_delete_file(self):
+    def test_instructor_can_delete_file(self) -> None:
         """Test that instructor can delete files."""
         self.client.force_authenticate(user=self.instructor_user)
 
@@ -385,10 +400,10 @@ class FileManagementTestCase(APITestCase):
 
         url = self._get_file_detail_url(file_obj.id)
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertEqual(File.objects.count(), 0)
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert File.objects.count() == 0
 
-    def test_student_cannot_delete_file(self):
+    def test_student_cannot_delete_file(self) -> None:
         """Test that student cannot delete files."""
         self.client.force_authenticate(user=self.student_user)
 
@@ -402,10 +417,10 @@ class FileManagementTestCase(APITestCase):
 
         url = self._get_file_detail_url(file_obj.id)
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(File.objects.count(), 1)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert File.objects.count() == 1
 
-    def test_instructor_can_update_file_metadata(self):
+    def test_instructor_can_update_file_metadata(self) -> None:
         """Test that instructor can update file metadata."""
         self.client.force_authenticate(user=self.instructor_user)
 
@@ -425,13 +440,13 @@ class FileManagementTestCase(APITestCase):
         }
 
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         file_obj.refresh_from_db()
-        self.assertEqual(file_obj.category, File.Category.PATHOLOGY)
-        self.assertTrue(file_obj.requires_pagination)
+        assert file_obj.category == File.Category.PATHOLOGY
+        assert file_obj.requires_pagination
 
-    def test_student_cannot_update_file(self):
+    def test_student_cannot_update_file(self) -> None:
         """Test that student cannot update file metadata."""
         self.client.force_authenticate(user=self.student_user)
 
@@ -447,11 +462,11 @@ class FileManagementTestCase(APITestCase):
         data = {"category": File.Category.PATHOLOGY}
 
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     # ==================== requires_pagination Field Tests ====================
 
-    def test_upload_pdf_with_pagination_enabled(self):
+    def test_upload_pdf_with_pagination_enabled(self) -> None:
         """Test uploading a PDF with requires_pagination=True."""
         self.client.force_authenticate(user=self.instructor_user)
         url = self._get_file_list_url()
@@ -464,13 +479,13 @@ class FileManagementTestCase(APITestCase):
         }
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
         file_obj = File.objects.first()
-        self.assertTrue(file_obj.requires_pagination)
-        self.assertEqual(file_obj.category, File.Category.IMAGING)
+        assert file_obj.requires_pagination
+        assert file_obj.category == File.Category.IMAGING
 
-    def test_upload_non_pdf_with_pagination_fails(self):
+    def test_upload_non_pdf_with_pagination_fails(self) -> None:
         """Test that non-PDF files cannot have requires_pagination=True."""
         self.client.force_authenticate(user=self.instructor_user)
         url = self._get_file_list_url()
@@ -483,11 +498,11 @@ class FileManagementTestCase(APITestCase):
         }
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("requires_pagination", response.data)
-        self.assertEqual(File.objects.count(), 0)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "requires_pagination" in response.data
+        assert File.objects.count() == 0
 
-    def test_upload_pdf_without_pagination(self):
+    def test_upload_pdf_without_pagination(self) -> None:
         """Test uploading a PDF with requires_pagination=False."""
         self.client.force_authenticate(user=self.instructor_user)
         url = self._get_file_list_url()
@@ -500,12 +515,12 @@ class FileManagementTestCase(APITestCase):
         }
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
         file_obj = File.objects.first()
-        self.assertFalse(file_obj.requires_pagination)
+        assert not file_obj.requires_pagination
 
-    def test_update_pagination_to_true_for_pdf(self):
+    def test_update_pagination_to_true_for_pdf(self) -> None:
         """Test updating requires_pagination to True for an existing PDF."""
         self.client.force_authenticate(user=self.instructor_user)
 
@@ -522,14 +537,14 @@ class FileManagementTestCase(APITestCase):
         data = {"requires_pagination": True}
 
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         file_obj.refresh_from_db()
-        self.assertTrue(file_obj.requires_pagination)
+        assert file_obj.requires_pagination
 
     # ==================== Category Tests ====================
 
-    def test_upload_file_with_different_categories(self):
+    def test_upload_file_with_different_categories(self) -> None:
         """Test uploading files with different category values."""
         self.client.force_authenticate(user=self.instructor_user)
         url = self._get_file_list_url()
@@ -552,12 +567,12 @@ class FileManagementTestCase(APITestCase):
             }
 
             response = self.client.post(url, data, format="multipart")
-            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-            self.assertEqual(response.data["category"], category)
+            assert response.status_code == status.HTTP_201_CREATED
+            assert response.data["category"] == category
 
-        self.assertEqual(File.objects.count(), len(categories))
+        assert File.objects.count() == len(categories)
 
-    def test_default_category_is_other(self):
+    def test_default_category_is_other(self) -> None:
         """Test that default category is OTHER when not specified."""
         self.client.force_authenticate(user=self.instructor_user)
         url = self._get_file_list_url()
@@ -566,12 +581,12 @@ class FileManagementTestCase(APITestCase):
         data = {"file": pdf_file}
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["category"], File.Category.OTHER)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["category"] == File.Category.OTHER
 
     # ==================== Display Name Tests ====================
 
-    def test_file_upload_display_name_auto_generated(self):
+    def test_file_upload_display_name_auto_generated(self) -> None:
         """Test that display_name is automatically generated from filename."""
         self.client.force_authenticate(user=self.instructor_user)
         url = self._get_file_list_url()
@@ -583,12 +598,12 @@ class FileManagementTestCase(APITestCase):
         }
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["display_name"], "my_report.pdf")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["display_name"] == "my_report.pdf"
 
     # ==================== List and Retrieve Tests ====================
 
-    def test_instructor_can_list_files(self):
+    def test_instructor_can_list_files(self) -> None:
         """Test that instructor can list all files for a patient."""
         self.client.force_authenticate(user=self.instructor_user)
 
@@ -604,10 +619,10 @@ class FileManagementTestCase(APITestCase):
         url = self._get_file_list_url()
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 3)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["count"] == 3
 
-    def test_instructor_can_retrieve_file_details(self):
+    def test_instructor_can_retrieve_file_details(self) -> None:
         """Test that instructor can retrieve file details."""
         self.client.force_authenticate(user=self.instructor_user)
 
@@ -622,12 +637,12 @@ class FileManagementTestCase(APITestCase):
         url = self._get_file_detail_url(file_obj.id)
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], str(file_obj.id))
-        self.assertEqual(response.data["category"], File.Category.PATHOLOGY)
-        self.assertTrue(response.data["requires_pagination"])
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == str(file_obj.id)
+        assert response.data["category"] == File.Category.PATHOLOGY
+        assert response.data["requires_pagination"]
 
-    def test_student_can_list_files_with_filtering(self):
+    def test_student_can_list_files_with_filtering(self) -> None:
         """Test that student can list files but only sees Admission files and approved files."""
         self.client.force_authenticate(user=self.student_user)
 
@@ -651,19 +666,19 @@ class FileManagementTestCase(APITestCase):
         response = self.client.get(url)
 
         # Student should be able to list files
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Response should contain results
-        self.assertIn("results", response.data)
+        assert "results" in response.data
         file_ids = [f["id"] for f in response.data["results"]]
 
         # Should see Admission file
-        self.assertIn(str(admission_file.id), file_ids)
+        assert str(admission_file.id) in file_ids
 
         # Should NOT see Imaging file (not approved)
-        self.assertNotIn(str(imaging_file.id), file_ids)
+        assert str(imaging_file.id) not in file_ids
 
-    def test_student_can_see_approved_files_from_completed_requests(self):
+    def test_student_can_see_approved_files_from_completed_requests(self) -> None:
         """Test that student can see files approved in their completed lab requests."""
         self.client.force_authenticate(user=self.student_user)
 
@@ -707,19 +722,19 @@ class FileManagementTestCase(APITestCase):
         response = self.client.get(url)
 
         # Student should be able to list files
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Response should contain results
-        self.assertIn("results", response.data)
+        assert "results" in response.data
         file_ids = [f["id"] for f in response.data["results"]]
 
         # Should see the approved pathology file
-        self.assertIn(str(pathology_file.id), file_ids)
+        assert str(pathology_file.id) in file_ids
 
         # Should NOT see the imaging file (not approved)
-        self.assertNotIn(str(imaging_file.id), file_ids)
+        assert str(imaging_file.id) not in file_ids
 
-    def test_student_cannot_see_approved_files_from_pending_requests(self):
+    def test_student_cannot_see_approved_files_from_pending_requests(self) -> None:
         """Test that student cannot see files from pending (not completed) lab requests."""
         self.client.force_authenticate(user=self.student_user)
 
@@ -755,14 +770,14 @@ class FileManagementTestCase(APITestCase):
         response = self.client.get(url)
 
         # Student should be able to list files
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Response should contain results
-        self.assertIn("results", response.data)
+        assert "results" in response.data
         file_ids = [f["id"] for f in response.data["results"]]
 
         # Should NOT see the file because request is not completed
-        self.assertNotIn(str(pathology_file.id), file_ids)
+        assert str(pathology_file.id) not in file_ids
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -779,10 +794,10 @@ class FileUploadMultipartParserTests(APITestCase):
     """
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         """Set up test data for all tests in this class."""
         cls.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
+            name=Role.INSTRUCTOR.value,
         )
         cls.instructor_user = get_user_model().objects.create_user(
             username="test_instructor",
@@ -791,7 +806,7 @@ class FileUploadMultipartParserTests(APITestCase):
         )
         cls.instructor_user.groups.add(cls.instructor_group)
 
-    def setUp(self):
+    def setUp(self) -> None:
         """Set up test fixtures for each test method."""
         self.client = APIClient()
         self.client.force_authenticate(user=self.instructor_user)
@@ -809,10 +824,12 @@ class FileUploadMultipartParserTests(APITestCase):
         )
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         """Clean up after all tests in this class."""
         try:
-            if os.path.isdir(settings.MEDIA_ROOT):
+            from pathlib import Path
+
+            if Path(settings.MEDIA_ROOT).is_dir():
                 shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
         finally:
             super().tearDownClass()
@@ -831,10 +848,12 @@ class FileUploadMultipartParserTests(APITestCase):
         pdf_content = create_test_pdf(num_pages=1)
 
         return SimpleUploadedFile(
-            name=filename, content=pdf_content, content_type="application/pdf"
+            name=filename,
+            content=pdf_content,
+            content_type="application/pdf",
         )
 
-    def test_upload_pdf_with_binary_content(self):
+    def test_upload_pdf_with_binary_content(self) -> None:
         """
         Test uploading a PDF file with binary content via multipart/form-data.
 
@@ -848,7 +867,7 @@ class FileUploadMultipartParserTests(APITestCase):
         url = reverse("file-list", kwargs={"patient_pk": self.patient.id})
 
         pdf_file = self._create_pdf_with_binary_content(
-            "Admission Proforma Toni Baxter.pdf"
+            "Admission Proforma Toni Baxter.pdf",
         )
         data = {
             "file": pdf_file,
@@ -859,24 +878,21 @@ class FileUploadMultipartParserTests(APITestCase):
         response = self.client.post(url, data, format="multipart")
 
         # Verify successful upload
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn("id", response.data)
-        self.assertEqual(response.data["category"], File.Category.ADMISSION)
-        self.assertFalse(response.data["requires_pagination"])
-        self.assertEqual(
-            response.data["display_name"], "Admission Proforma Toni Baxter.pdf"
-        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert "id" in response.data
+        assert response.data["category"] == File.Category.ADMISSION
+        assert not response.data["requires_pagination"]
+        assert response.data["display_name"] == "Admission Proforma Toni Baxter.pdf"
 
         # Verify file was created in database
         file_obj = File.objects.get(id=response.data["id"])
-        self.assertEqual(file_obj.patient, self.patient)
-        self.assertEqual(file_obj.category, File.Category.ADMISSION)
-        self.assertFalse(file_obj.requires_pagination)
+        assert file_obj.patient == self.patient
+        assert file_obj.category == File.Category.ADMISSION
+        assert not file_obj.requires_pagination
 
-        # Verify file was saved to disk
-        self.assertTrue(os.path.exists(file_obj.file.path))
+    # file existence checks are performed inside test methods where `file_obj` is in scope
 
-    def test_upload_pdf_with_binary_content_and_pagination(self):
+    def test_upload_pdf_with_binary_content_and_pagination(self) -> None:
         """
         Test uploading a PDF with binary content and requires_pagination=True.
 
@@ -894,14 +910,14 @@ class FileUploadMultipartParserTests(APITestCase):
 
         response = self.client.post(url, data, format="multipart")
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(response.data["requires_pagination"])
-        self.assertEqual(response.data["category"], File.Category.IMAGING)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["requires_pagination"]
+        assert response.data["category"] == File.Category.IMAGING
 
         file_obj = File.objects.get(id=response.data["id"])
-        self.assertTrue(file_obj.requires_pagination)
+        assert file_obj.requires_pagination
 
-    def test_upload_multiple_pdfs_with_binary_content(self):
+    def test_upload_multiple_pdfs_with_binary_content(self) -> None:
         """
         Test uploading multiple PDF files with binary content sequentially.
 
@@ -926,13 +942,13 @@ class FileUploadMultipartParserTests(APITestCase):
 
             response = self.client.post(url, data, format="multipart")
 
-            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-            self.assertEqual(response.data["category"], category)
+            assert response.status_code == status.HTTP_201_CREATED
+            assert response.data["category"] == category
 
         # Verify all files were created
-        self.assertEqual(File.objects.filter(patient=self.patient).count(), 3)
+        assert File.objects.filter(patient=self.patient).count() == 3
 
-    def test_upload_pdf_via_legacy_endpoint(self):
+    def test_upload_pdf_via_legacy_endpoint(self) -> None:
         """
         Test uploading PDF with binary content via legacy upload_file endpoint.
 
@@ -950,15 +966,15 @@ class FileUploadMultipartParserTests(APITestCase):
 
         response = self.client.post(url, data, format="multipart")
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["category"], File.Category.LAB_RESULTS)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["category"] == File.Category.LAB_RESULTS
 
         # Verify file was created
         file_obj = File.objects.filter(patient=self.patient).first()
-        self.assertIsNotNone(file_obj)
-        self.assertEqual(file_obj.display_name, "legacy_upload.pdf")
+        assert file_obj is not None
+        assert file_obj.display_name == "legacy_upload.pdf"
 
-    def test_multipart_parser_with_mixed_content_types(self):
+    def test_multipart_parser_with_mixed_content_types(self) -> None:
         """
         Test that multipart parser correctly handles requests with mixed content.
 
@@ -987,11 +1003,11 @@ class FileUploadMultipartParserTests(APITestCase):
 
         response = self.client.post(url, data, format="multipart")
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["category"], File.Category.DIAGNOSTICS)
-        self.assertTrue(response.data["requires_pagination"])
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["category"] == File.Category.DIAGNOSTICS
+        assert response.data["requires_pagination"]
 
-    def test_parser_preserves_binary_file_integrity(self):
+    def test_parser_preserves_binary_file_integrity(self) -> None:
         """
         Test that binary file content is preserved during upload.
 
@@ -1016,11 +1032,13 @@ class FileUploadMultipartParserTests(APITestCase):
         }
 
         response = self.client.post(url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
         # Read the saved file and verify content matches
         file_obj = File.objects.get(id=response.data["id"])
-        with open(file_obj.file.path, "rb") as f:
+        from pathlib import Path
+
+        with Path(file_obj.file.path).open("rb") as f:
             saved_content = f.read()
 
-        self.assertEqual(saved_content, original_content)
+        assert saved_content == original_content

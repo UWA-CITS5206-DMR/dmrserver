@@ -1,6 +1,10 @@
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.response import Response
 from collections import OrderedDict
+from collections.abc import Iterable, Mapping
+from typing import Any
+
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.request import Request
+from rest_framework.response import Response
 
 
 class ObservationsPagination(PageNumberPagination):
@@ -16,7 +20,12 @@ class ObservationsPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 100
 
-    def paginate_observations(self, observations_dict, request, view=None):
+    def paginate_observations(
+        self,
+        observations_dict: Mapping[str, Iterable[Any]],
+        request: Request,
+        _view: object | None = None,
+    ) -> dict[str, list[Any]]:
         """
         Paginate a dictionary of observation querysets.
 
@@ -36,7 +45,7 @@ class ObservationsPagination(PageNumberPagination):
             page_size = self.page_size
 
         # Apply page_size limit to each observation type
-        paginated_observations = {}
+        paginated_observations: dict[str, list[Any]] = {}
         total_count = 0
 
         for key, queryset in observations_dict.items():
@@ -53,7 +62,7 @@ class ObservationsPagination(PageNumberPagination):
 
         return paginated_observations
 
-    def get_paginated_response(self, data):
+    def get_paginated_response(self, data: dict[str, Any]) -> Response:
         """
         Return paginated response in standard DRF format.
 
@@ -73,6 +82,6 @@ class ObservationsPagination(PageNumberPagination):
                     ("next", None),  # Currently not supporting page navigation
                     ("previous", None),  # Currently not supporting page navigation
                     ("results", data),
-                ]
-            )
+                ],
+            ),
         )

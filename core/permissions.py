@@ -1,5 +1,4 @@
-"""
-Role-based access control (RBAC) permissions for DMR server.
+"""Role-based access control (RBAC) permissions for DMR server.
 
 This module defines permissions based on user roles:
 - admin: Full access to all resources and operations
@@ -7,12 +6,17 @@ This module defines permissions based on user roles:
 - student: Can create/modify their own observations and notes, read patient data (view-only), create lab requests
 """
 
-from rest_framework.permissions import BasePermission, SAFE_METHODS
+from typing import ClassVar
+
+from rest_framework.permissions import SAFE_METHODS, BasePermission
+from rest_framework.request import Request
+
 from student_groups.models import ApprovedFile
+
 from .context import Role
 
 
-def get_user_role(user):
+def get_user_role(user: object | None) -> str | None:
     """
     Get the primary role of a user based on group membership.
 
@@ -50,9 +54,9 @@ class BaseRolePermission(BasePermission):
     """
 
     # Override in subclasses: {role: [allowed_methods]}
-    role_permissions = {}
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {}
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, _view: object) -> bool:
         """Check if user has permission to access the endpoint"""
         if not request.user.is_authenticated:
             return False
@@ -71,9 +75,11 @@ class BaseRolePermission(BasePermission):
         allowed_methods = self.role_permissions.get(user_role, [])
         return request.method in allowed_methods
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(
+        self, request: Request, _view: object, _obj: object
+    ) -> bool:
         """Default object permission - same as has_permission"""
-        return self.has_permission(request, view)
+        return self.has_permission(request, _view)
 
 
 class InstructorManagementPermission(BaseRolePermission):
@@ -94,7 +100,7 @@ class InstructorManagementPermission(BaseRolePermission):
     - Any instructor-specific management features
     """
 
-    role_permissions = {
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
         Role.INSTRUCTOR.value: [
             "GET",
             "POST",
@@ -115,7 +121,7 @@ class PatientPermission(BaseRolePermission):
     - Admin: full access (inherited)
     """
 
-    role_permissions = {
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
         Role.STUDENT.value: SAFE_METHODS,
         Role.INSTRUCTOR.value: [
             "GET",
@@ -137,7 +143,7 @@ class ObservationPermission(BaseRolePermission):
     - Admin: full access (inherited)
     """
 
-    role_permissions = {
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
         Role.STUDENT.value: [
             "GET",
             "POST",
@@ -150,7 +156,9 @@ class ObservationPermission(BaseRolePermission):
         Role.INSTRUCTOR.value: SAFE_METHODS,
     }
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(
+        self, request: Request, _view: object, obj: object
+    ) -> bool:
         """Students can only access their own observations"""
         if not request.user.is_authenticated:
             return False
@@ -181,12 +189,14 @@ class FileAccessPermission(BaseRolePermission):
     - Students: can only access files from their approved lab requests
     """
 
-    role_permissions = {
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
         Role.STUDENT.value: SAFE_METHODS,
         Role.INSTRUCTOR.value: SAFE_METHODS,
     }
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(
+        self, request: Request, _view: object, obj: object
+    ) -> bool:
         """Check file access permissions"""
         user = request.user
 
@@ -227,7 +237,7 @@ class FileManagementPermission(BaseRolePermission):
     Only instructors and admins can manage files.
     """
 
-    role_permissions = {
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
         Role.INSTRUCTOR.value: [
             "GET",
             "POST",
@@ -257,7 +267,7 @@ class FileListPermission(BaseRolePermission):
     - Instructors/Admins: All files
     """
 
-    role_permissions = {
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
         Role.STUDENT.value: SAFE_METHODS,
         Role.INSTRUCTOR.value: [
             "GET",
@@ -288,7 +298,7 @@ class LabRequestPermission(BaseRolePermission):
     Instructor-side endpoints should use InstructorManagementPermission.
     """
 
-    role_permissions = {
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
         Role.STUDENT.value: [
             "GET",
             "POST",
@@ -297,7 +307,9 @@ class LabRequestPermission(BaseRolePermission):
         ],
     }
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(
+        self, request: Request, _view: object, obj: object
+    ) -> bool:
         """
         Check object-level permissions for lab requests.
         Students can only access their own requests.

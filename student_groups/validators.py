@@ -1,94 +1,154 @@
 from django.core.exceptions import ValidationError
 
+# Reasonable clinical ranges/constants
+_TEMP_MIN = 30.0
+_TEMP_MAX = 45.0
+_RESP_RATE_MIN = 5
+_RESP_RATE_MAX = 60
+_BLOOD_SUGAR_MIN = 40.0
+_BLOOD_SUGAR_MAX = 600.0
+_OXY_MIN = 50
+_OXY_MAX = 100
+_PAIN_MIN = 0
+_PAIN_MAX = 10
+
 
 class ObservationValidator:
     @staticmethod
-    def validate_blood_pressure(patient, user, systolic, diastolic):
+    def validate_blood_pressure(
+        patient: object | None,
+        user: object | None,
+        systolic: int,
+        diastolic: int,
+    ) -> None:
         if not patient:
-            raise ValidationError("Patient is required")
+            msg = "Patient is required"
+            raise ValidationError(msg)
         if not user:
-            raise ValidationError("User is required")
+            msg = "User is required"
+            raise ValidationError(msg)
         if not isinstance(systolic, int) or systolic <= 0:
-            raise ValidationError("Systolic pressure must be a positive integer")
+            msg = "Systolic pressure must be a positive integer"
+            raise ValidationError(msg)
         if not isinstance(diastolic, int) or diastolic <= 0:
-            raise ValidationError("Diastolic pressure must be a positive integer")
+            msg = "Diastolic pressure must be a positive integer"
+            raise ValidationError(msg)
         if systolic < diastolic:
-            raise ValidationError(
-                "Systolic pressure cannot be less than diastolic pressure"
-            )
+            msg = "Systolic pressure cannot be less than diastolic pressure"
+            raise ValidationError(msg)
 
     @staticmethod
-    def validate_heart_rate(patient, user, heart_rate):
+    def validate_heart_rate(
+        patient: object | None,
+        user: object | None,
+        heart_rate: int,
+    ) -> None:
         if not patient:
-            raise ValidationError("Patient is required")
+            msg = "Patient is required"
+            raise ValidationError(msg)
         if not user:
-            raise ValidationError("User is required")
+            msg = "User is required"
+            raise ValidationError(msg)
         if not isinstance(heart_rate, int) or heart_rate <= 0:
-            raise ValidationError("Heart rate must be a positive integer")
+            msg = "Heart rate must be a positive integer"
+            raise ValidationError(msg)
 
     @staticmethod
-    def validate_body_temperature(patient, user, temperature):
+    def validate_body_temperature(
+        patient: object | None,
+        user: object | None,
+        temperature: object,
+    ) -> None:
         if not patient:
-            raise ValidationError("Patient is required")
+            msg = "Patient is required"
+            raise ValidationError(msg)
         if not user:
-            raise ValidationError("User is required")
+            msg = "User is required"
+            raise ValidationError(msg)
         try:
             temp = float(temperature)
-            if temp < 30.0 or temp > 45.0:
-                raise ValidationError(
-                    "Temperature value out of reasonable range (30.0-45.0°C)"
-                )
-        except (ValueError, TypeError):
-            raise ValidationError("Temperature must be a valid number")
+            if temp < _TEMP_MIN or temp > _TEMP_MAX:
+                msg = f"Temperature value out of reasonable range ({_TEMP_MIN}-{_TEMP_MAX}°C)"
+                raise ValidationError(msg)
+        except (ValueError, TypeError) as err:
+            # Distinguish parsing errors from errors during exception handling
+            msg = "Temperature must be a valid number"
+            raise ValidationError(msg) from err
 
     @staticmethod
-    def validate_respiratory_rate(patient, user, respiratory_rate):
+    def validate_respiratory_rate(
+        patient: object | None,
+        user: object | None,
+        respiratory_rate: int,
+    ) -> None:
         if not patient:
-            raise ValidationError("Patient is required")
+            msg = "Patient is required"
+            raise ValidationError(msg)
         if not user:
-            raise ValidationError("User is required")
+            msg = "User is required"
+            raise ValidationError(msg)
         if not isinstance(respiratory_rate, int) or respiratory_rate <= 0:
-            raise ValidationError("Respiratory rate must be a positive integer")
-        if respiratory_rate < 5 or respiratory_rate > 60:
-            raise ValidationError(
-                "Respiratory rate value out of reasonable range (5-60 breaths/min)"
-            )
+            msg = "Respiratory rate must be a positive integer"
+            raise ValidationError(msg)
+        if respiratory_rate < _RESP_RATE_MIN or respiratory_rate > _RESP_RATE_MAX:
+            msg = f"Respiratory rate value out of reasonable range ({_RESP_RATE_MIN}-{_RESP_RATE_MAX} breaths/min)"
+            raise ValidationError(msg)
 
     @staticmethod
-    def validate_blood_sugar(patient, user, sugar_level):
+    def validate_blood_sugar(
+        patient: object | None,
+        user: object | None,
+        sugar_level: object,
+    ) -> None:
         if not patient:
-            raise ValidationError("Patient is required")
+            msg = "Patient is required"
+            raise ValidationError(msg)
         if not user:
-            raise ValidationError("User is required")
+            msg = "User is required"
+            raise ValidationError(msg)
         try:
             sugar = float(sugar_level)
-            if sugar < 40.0 or sugar > 600.0:
-                raise ValidationError(
-                    "Blood sugar level out of reasonable range (40.0-600.0 mg/dL)"
-                )
-        except (ValueError, TypeError):
-            raise ValidationError("Blood sugar level must be a valid number")
+            if sugar < _BLOOD_SUGAR_MIN or sugar > _BLOOD_SUGAR_MAX:
+                msg = f"Blood sugar level out of reasonable range ({_BLOOD_SUGAR_MIN}-{_BLOOD_SUGAR_MAX} mg/dL)"
+                raise ValidationError(msg)
+        except (ValueError, TypeError) as err:
+            msg = "Blood sugar level must be a valid number"
+            raise ValidationError(msg) from err
 
     @staticmethod
-    def validate_oxygen_saturation(patient, user, saturation_percentage):
+    def validate_oxygen_saturation(
+        patient: object | None,
+        user: object | None,
+        saturation_percentage: int,
+    ) -> None:
         if not patient:
-            raise ValidationError("Patient is required")
+            msg = "Patient is required"
+            raise ValidationError(msg)
         if not user:
-            raise ValidationError("User is required")
+            msg = "User is required"
+            raise ValidationError(msg)
         if not isinstance(saturation_percentage, int) or saturation_percentage <= 0:
-            raise ValidationError("Oxygen saturation must be a positive integer")
-        if saturation_percentage < 50 or saturation_percentage > 100:
-            raise ValidationError(
-                "Oxygen saturation value out of reasonable range (50-100%)"
-            )
+            msg = "Oxygen saturation must be a positive integer"
+            raise ValidationError(msg)
+        if saturation_percentage < _OXY_MIN or saturation_percentage > _OXY_MAX:
+            msg = f"Oxygen saturation value out of reasonable range ({_OXY_MIN}-{_OXY_MAX}%)"
+            raise ValidationError(msg)
 
     @staticmethod
-    def validate_pain_score(patient, user, score):
+    def validate_pain_score(
+        patient: object | None,
+        user: object | None,
+        score: int,
+    ) -> None:
         if not patient:
-            raise ValidationError("Patient is required")
+            msg = "Patient is required"
+            raise ValidationError(msg)
         if not user:
-            raise ValidationError("User is required")
-        if not isinstance(score, int) or score < 0:
-            raise ValidationError("Pain score must be a non-negative integer")
-        if score < 0 or score > 10:
-            raise ValidationError("Pain score must be between 0 and 10")
+            msg = "User is required"
+            raise ValidationError(msg)
+        if not isinstance(score, int) or score < _PAIN_MIN:
+            msg = "Pain score must be a non-negative integer"
+            raise ValidationError(msg)
+        if score < _PAIN_MIN or score > _PAIN_MAX:
+            msg = f"Pain score must be between {_PAIN_MIN} and {_PAIN_MAX}"
+            raise ValidationError(msg)

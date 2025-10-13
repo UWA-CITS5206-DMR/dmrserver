@@ -1,5 +1,6 @@
 import binascii
 import os
+
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -24,14 +25,14 @@ class MultiDeviceToken(models.Model):
         verbose_name = _("Token")
         verbose_name_plural = _("Tokens")
 
-    def save(self, *args, **kwargs):
+    def __str__(self) -> str:
+        return self.key
+
+    def save(self, *args: object, **kwargs: object) -> None:
         if not self.key:
             self.key = self.generate_key()
         return super().save(*args, **kwargs)
 
     @classmethod
-    def generate_key(cls):
+    def generate_key(cls) -> str:
         return binascii.hexlify(os.urandom(20)).decode()
-
-    def __str__(self):
-        return self.key

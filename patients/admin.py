@@ -1,5 +1,7 @@
 """Admin configuration for the patients app."""
 
+from typing import Any, ClassVar
+
 from django.contrib import admin
 
 from .models import File, Patient
@@ -44,9 +46,9 @@ class PatientAdmin(admin.ModelAdmin):
         "email",
         "phone_number",
     )
-    ordering = ("last_name", "first_name")
-    readonly_fields = ("created_at", "updated_at")
-    inlines = [FileInline]
+    ordering: ClassVar[tuple[str, ...]] = ("last_name", "first_name")
+    readonly_fields: ClassVar[tuple[str, ...]] = ("created_at", "updated_at")
+    inlines: ClassVar[list[Any]] = [FileInline]
 
     fieldsets = (
         (
@@ -58,7 +60,7 @@ class PatientAdmin(admin.ModelAdmin):
                     "last_name",
                     "date_of_birth",
                     "gender",
-                )
+                ),
             },
         ),
         ("Contact Information", {"fields": ("email", "phone_number")}),

@@ -7,16 +7,17 @@ Tests verify that:
 3. Instructors can see approved_files when managing requests
 """
 
-import tempfile
 import shutil
-from django.test import TestCase, override_settings
-from django.contrib.auth.models import User, Group
-from django.core.files.uploadedfile import SimpleUploadedFile
-from rest_framework.test import APIClient
-from rest_framework import status
-from patients.models import Patient, File
-from student_groups.models import ImagingRequest, BloodTestRequest, ApprovedFile
+import tempfile
 
+from django.contrib.auth.models import Group, User
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
+from rest_framework import status
+from rest_framework.test import APIClient
+
+from patients.models import File, Patient
+from student_groups.models import ApprovedFile, BloodTestRequest, ImagingRequest
 
 # Create a temporary directory for test media files
 TEST_MEDIA_ROOT = tempfile.mkdtemp()
@@ -27,18 +28,18 @@ class ApprovedFilesAPITestCase(TestCase):
     """Test that approved_files are correctly returned in API responses."""
 
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         super().setUpClass()
         cls.test_media_root = TEST_MEDIA_ROOT
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         super().tearDownClass()
         # Clean up the temporary media directory
         shutil.rmtree(cls.test_media_root, ignore_errors=True)
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         # Reuse client-independent data across tests
         # Use a separate APIClient instance because Django TestCase sets self.client
         # to a django.test.Client in setUp(), which doesn't have force_authenticate.
@@ -50,12 +51,14 @@ class ApprovedFilesAPITestCase(TestCase):
 
         # Create users
         cls.student_user = User.objects.create_user(
-            username="student1", password="testpass123"
+            username="student1",
+            password="testpass123",
         )
         cls.student_user.groups.add(cls.student_group)
 
         cls.instructor_user = User.objects.create_user(
-            username="instructor1", password="testpass123"
+            username="instructor1",
+            password="testpass123",
         )
         cls.instructor_user.groups.add(cls.instructor_group)
 
@@ -75,7 +78,9 @@ class ApprovedFilesAPITestCase(TestCase):
         cls.file1 = File.objects.create(
             patient=cls.patient,
             file=SimpleUploadedFile(
-                "test_file1.pdf", b"pdf1", content_type="application/pdf"
+                "test_file1.pdf",
+                b"pdf1",
+                content_type="application/pdf",
             ),
             display_name="Test File 1.pdf",
             requires_pagination=True,
@@ -85,7 +90,9 @@ class ApprovedFilesAPITestCase(TestCase):
         cls.file2 = File.objects.create(
             patient=cls.patient,
             file=SimpleUploadedFile(
-                "test_file2.pdf", b"pdf2", content_type="application/pdf"
+                "test_file2.pdf",
+                b"pdf2",
+                content_type="application/pdf",
             ),
             display_name="Test File 2.pdf",
             requires_pagination=False,
@@ -99,7 +106,7 @@ class ApprovedFilesAPITestCase(TestCase):
         content = create_test_pdf(num_pages=1)
         return SimpleUploadedFile(filename, content, content_type="application/pdf")
 
-    def test_imaging_request_returns_approved_files_for_instructor(self):
+    def test_imaging_request_returns_approved_files_for_instructor(self) -> None:
         """Test that instructors can see approved_files in ImagingRequest."""
         # Create an imaging request
         imaging_request = ImagingRequest.objects.create(
@@ -131,26 +138,26 @@ class ApprovedFilesAPITestCase(TestCase):
 
         # Retrieve the request
         response = self.api_client.get(
-            f"/api/instructors/imaging-requests/{imaging_request.id}/"
+            f"/api/instructors/imaging-requests/{imaging_request.id}/",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("approved_files", response.data)
-        self.assertEqual(len(response.data["approved_files"]), 2)
+        assert response.status_code == status.HTTP_200_OK
+        assert "approved_files" in response.data
+        assert len(response.data["approved_files"]) == 2
 
         # Verify approved_files structure
         approved_files = response.data["approved_files"]
-        self.assertEqual(str(approved_files[0]["file_id"]), str(self.file1.id))
-        self.assertEqual(approved_files[0]["page_range"], "1-5")
-        self.assertEqual(approved_files[0]["display_name"], "Test File 1.pdf")
-        self.assertTrue(approved_files[0]["requires_pagination"])
+        assert str(approved_files[0]["file_id"]) == str(self.file1.id)
+        assert approved_files[0]["page_range"] == "1-5"
+        assert approved_files[0]["display_name"] == "Test File 1.pdf"
+        assert approved_files[0]["requires_pagination"]
 
-        self.assertEqual(str(approved_files[1]["file_id"]), str(self.file2.id))
-        self.assertEqual(approved_files[1]["page_range"], "")
-        self.assertEqual(approved_files[1]["display_name"], "Test File 2.pdf")
-        self.assertFalse(approved_files[1]["requires_pagination"])
+        assert str(approved_files[1]["file_id"]) == str(self.file2.id)
+        assert approved_files[1]["page_range"] == ""
+        assert approved_files[1]["display_name"] == "Test File 2.pdf"
+        assert not approved_files[1]["requires_pagination"]
 
-    def test_blood_test_request_returns_approved_files_for_instructor(self):
+    def test_blood_test_request_returns_approved_files_for_instructor(self) -> None:
         """Test that instructors can see approved_files in BloodTestRequest."""
         # Create a blood test request
         blood_test_request = BloodTestRequest.objects.create(
@@ -175,20 +182,20 @@ class ApprovedFilesAPITestCase(TestCase):
 
         # Retrieve the request
         response = self.api_client.get(
-            f"/api/instructors/blood-test-requests/{blood_test_request.id}/"
+            f"/api/instructors/blood-test-requests/{blood_test_request.id}/",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("approved_files", response.data)
-        self.assertEqual(len(response.data["approved_files"]), 1)
+        assert response.status_code == status.HTTP_200_OK
+        assert "approved_files" in response.data
+        assert len(response.data["approved_files"]) == 1
 
         # Verify approved_files structure
         approved_files = response.data["approved_files"]
-        self.assertEqual(str(approved_files[0]["file_id"]), str(self.file2.id))
-        self.assertEqual(approved_files[0]["page_range"], "")
-        self.assertEqual(approved_files[0]["display_name"], "Test File 2.pdf")
+        assert str(approved_files[0]["file_id"]) == str(self.file2.id)
+        assert approved_files[0]["page_range"] == ""
+        assert approved_files[0]["display_name"] == "Test File 2.pdf"
 
-    def test_student_can_see_approved_files_in_completed_imaging_request(self):
+    def test_student_can_see_approved_files_in_completed_imaging_request(self) -> None:
         """Test that students can see approved_files in their completed imaging requests."""
         # Create an imaging request for the student
         imaging_request = ImagingRequest.objects.create(
@@ -215,20 +222,20 @@ class ApprovedFilesAPITestCase(TestCase):
 
         # Retrieve the request
         response = self.api_client.get(
-            f"/api/student-groups/imaging-requests/{imaging_request.id}/"
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("approved_files", response.data)
-        self.assertEqual(len(response.data["approved_files"]), 1)
+        assert response.status_code == status.HTTP_200_OK
+        assert "approved_files" in response.data
+        assert len(response.data["approved_files"]) == 1
 
         # Verify approved_files structure
         approved_files = response.data["approved_files"]
-        self.assertEqual(str(approved_files[0]["file_id"]), str(self.file1.id))
-        self.assertEqual(approved_files[0]["page_range"], "1-3")
-        self.assertIn("file_url", approved_files[0])
+        assert str(approved_files[0]["file_id"]) == str(self.file1.id)
+        assert approved_files[0]["page_range"] == "1-3"
+        assert "file_url" in approved_files[0]
 
-    def test_imaging_request_list_returns_approved_files(self):
+    def test_imaging_request_list_returns_approved_files(self) -> None:
         """Test that listing imaging requests includes approved_files."""
         # Create multiple imaging requests
         imaging_request1 = ImagingRequest.objects.create(
@@ -265,21 +272,21 @@ class ApprovedFilesAPITestCase(TestCase):
         # List all requests
         response = self.api_client.get("/api/instructors/imaging-requests/")
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         results = response.data["results"]
-        self.assertEqual(len(results), 2)
+        assert len(results) == 2
 
         # Find the completed request in results
         completed_request = next(r for r in results if r["status"] == "completed")
-        self.assertIn("approved_files", completed_request)
-        self.assertEqual(len(completed_request["approved_files"]), 1)
+        assert "approved_files" in completed_request
+        assert len(completed_request["approved_files"]) == 1
 
         # Find the pending request in results
         pending_request = next(r for r in results if r["status"] == "pending")
-        self.assertIn("approved_files", pending_request)
-        self.assertEqual(len(pending_request["approved_files"]), 0)
+        assert "approved_files" in pending_request
+        assert len(pending_request["approved_files"]) == 0
 
-    def test_empty_approved_files_list_when_no_files_approved(self):
+    def test_empty_approved_files_list_when_no_files_approved(self) -> None:
         """Test that approved_files is an empty list when no files are approved."""
         # Create a pending imaging request
         imaging_request = ImagingRequest.objects.create(
@@ -299,9 +306,9 @@ class ApprovedFilesAPITestCase(TestCase):
 
         # Retrieve the request
         response = self.api_client.get(
-            f"/api/instructors/imaging-requests/{imaging_request.id}/"
+            f"/api/instructors/imaging-requests/{imaging_request.id}/",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("approved_files", response.data)
-        self.assertEqual(response.data["approved_files"], [])
+        assert response.status_code == status.HTTP_200_OK
+        assert "approved_files" in response.data
+        assert response.data["approved_files"] == []

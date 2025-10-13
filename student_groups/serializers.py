@@ -1,23 +1,29 @@
+from collections.abc import Mapping
+from typing import Any, ClassVar
+
 from rest_framework import serializers
+
+from core.context import ViewContext
 from core.serializers import BaseModelSerializer
+from patients.models import File
+
 from .models import (
-    Note,
+    ApprovedFile,
     BloodPressure,
-    HeartRate,
-    BodyTemperature,
-    RespiratoryRate,
     BloodSugar,
+    BloodTestRequest,
+    BodyTemperature,
+    DischargeSummary,
+    HeartRate,
+    ImagingRequest,
+    MedicationOrder,
+    Note,
+    ObservationManager,
     OxygenSaturation,
     PainScore,
-    ImagingRequest,
-    BloodTestRequest,
-    MedicationOrder,
-    DischargeSummary,
-    ApprovedFile,
-    ObservationManager,
+    RespiratoryRate,
 )
 from .validators import ObservationValidator
-from core.context import ViewContext
 
 
 class ApprovedFileSerializer(serializers.ModelSerializer):
@@ -34,13 +40,14 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
     file_id = serializers.UUIDField(write_only=True, required=False)
     display_name = serializers.CharField(source="file.display_name", read_only=True)
     requires_pagination = serializers.BooleanField(
-        source="file.requires_pagination", read_only=True
+        source="file.requires_pagination",
+        read_only=True,
     )
     file_url = serializers.SerializerMethodField()
 
     class Meta:
         model = ApprovedFile
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "file_id",
             "file",
@@ -49,11 +56,11 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
             "requires_pagination",
             "file_url",
         ]
-        extra_kwargs = {
+        extra_kwargs: ClassVar[dict[str, Any]] = {
             "file": {"write_only": True},
         }
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: ApprovedFile) -> dict[str, Any]:
         """
         Override to include file_id in read operations.
         """
@@ -61,7 +68,7 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
         representation["file_id"] = str(instance.file.id)
         return representation
 
-    def get_fields(self):
+    def get_fields(self) -> dict[str, Any]:
         fields = super().get_fields()
         context = self.context or {}
 
@@ -77,15 +84,15 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
 
         return fields
 
-    def get_file_url(self, obj):
+    def get_file_url(self, obj: ApprovedFile) -> str | None:
         request = self.context.get("request")
         if request and self.context.get(ViewContext.STUDENT_READ.value):
             return request.build_absolute_uri(
-                f"/api/patients/{obj.file.patient.id}/files/{obj.file.id}/view/"
+                f"/api/patients/{obj.file.patient.id}/files/{obj.file.id}/view/",
             )
         return None
 
-    def to_internal_value(self, data):
+    def to_internal_value(self, data: Mapping[str, Any]) -> dict[str, Any]:
         """
         Handle flat file_id structure by treating it as the file field.
         """
@@ -99,12 +106,10 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
 
         return super().to_internal_value(data)
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Validate that the file exists and pagination requirements are met.
         """
-        from patients.models import File
-
         # Get the file instance
         file_instance = data.get("file")
         page_range = data.get("page_range")
@@ -114,14 +119,14 @@ class ApprovedFileSerializer(serializers.ModelSerializer):
             if page_range and not file_instance.requires_pagination:
                 raise serializers.ValidationError(
                     {
-                        "page_range": f"File {file_instance.display_name} does not require pagination, but a page range was provided."
-                    }
+                        "page_range": f"File {file_instance.display_name} does not require pagination, but a page range was provided.",
+                    },
                 )
             if file_instance.requires_pagination and not page_range:
                 raise serializers.ValidationError(
                     {
-                        "page_range": f"File {file_instance.display_name} requires pagination, but no page range was provided."
-                    }
+                        "page_range": f"File {file_instance.display_name} requires pagination, but no page range was provided.",
+                    },
                 )
 
         return data
@@ -136,12 +141,14 @@ class ImagingRequestSerializer(BaseModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approved_files_through", many=True, required=False
+        source="approved_files_through",
+        many=True,
+        required=False,
     )
 
     class Meta:
         model = ImagingRequest
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "patient",
             "user",
@@ -156,7 +163,7 @@ class ImagingRequestSerializer(BaseModelSerializer):
             "updated_at",
             "approved_files",
         ]
-        read_only_fields = [
+        read_only_fields: ClassVar[list[str]] = [
             "id",
             "user",
             "status",
@@ -165,7 +172,7 @@ class ImagingRequestSerializer(BaseModelSerializer):
             "approved_files",
         ]
 
-    def get_fields(self):
+    def get_fields(self) -> dict[str, Any]:
         fields = super().get_fields()
         context = self.context or {}
 
@@ -183,12 +190,14 @@ class ImagingRequestSerializer(BaseModelSerializer):
         if context.get(ViewContext.INSTRUCTOR_READ.value):
             # Add a field for managing approved files by their IDs
             fields["approved_file_ids"] = serializers.ListField(
-                child=serializers.UUIDField(), write_only=True, required=False
+                child=serializers.UUIDField(),
+                write_only=True,
+                required=False,
             )
 
         return fields
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: ImagingRequest) -> dict[str, Any]:
         # Customize representation for student read view
         context = self.context or {}
         if context.get(ViewContext.STUDENT_READ.value):
@@ -204,7 +213,7 @@ class ImagingRequestSerializer(BaseModelSerializer):
 class NoteSerializer(BaseModelSerializer):
     class Meta:
         model = Note
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "patient",
             "user",
@@ -214,18 +223,33 @@ class NoteSerializer(BaseModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "user", "created_at", "updated_at"]
+        read_only_fields: ClassVar[list[str]] = [
+            "id",
+            "user",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class BloodPressureSerializer(BaseModelSerializer):
     class Meta:
         model = BloodPressure
-        fields = ["id", "patient", "user", "systolic", "diastolic", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "systolic",
+            "diastolic",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         ObservationValidator.validate_blood_pressure(
-            data["patient"], data["user"], data["systolic"], data["diastolic"]
+            data["patient"],
+            data["user"],
+            data["systolic"],
+            data["diastolic"],
         )
         return data
 
@@ -233,12 +257,20 @@ class BloodPressureSerializer(BaseModelSerializer):
 class HeartRateSerializer(BaseModelSerializer):
     class Meta:
         model = HeartRate
-        fields = ["id", "patient", "user", "heart_rate", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "heart_rate",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         ObservationValidator.validate_heart_rate(
-            data["patient"], data["user"], data["heart_rate"]
+            data["patient"],
+            data["user"],
+            data["heart_rate"],
         )
         return data
 
@@ -246,12 +278,20 @@ class HeartRateSerializer(BaseModelSerializer):
 class BodyTemperatureSerializer(BaseModelSerializer):
     class Meta:
         model = BodyTemperature
-        fields = ["id", "patient", "user", "temperature", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "temperature",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         ObservationValidator.validate_body_temperature(
-            data["patient"], data["user"], data["temperature"]
+            data["patient"],
+            data["user"],
+            data["temperature"],
         )
         return data
 
@@ -259,12 +299,20 @@ class BodyTemperatureSerializer(BaseModelSerializer):
 class RespiratoryRateSerializer(BaseModelSerializer):
     class Meta:
         model = RespiratoryRate
-        fields = ["id", "patient", "user", "respiratory_rate", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "respiratory_rate",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         ObservationValidator.validate_respiratory_rate(
-            data["patient"], data["user"], data["respiratory_rate"]
+            data["patient"],
+            data["user"],
+            data["respiratory_rate"],
         )
         return data
 
@@ -272,12 +320,20 @@ class RespiratoryRateSerializer(BaseModelSerializer):
 class BloodSugarSerializer(BaseModelSerializer):
     class Meta:
         model = BloodSugar
-        fields = ["id", "patient", "user", "sugar_level", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "sugar_level",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         ObservationValidator.validate_blood_sugar(
-            data["patient"], data["user"], data["sugar_level"]
+            data["patient"],
+            data["user"],
+            data["sugar_level"],
         )
         return data
 
@@ -285,12 +341,20 @@ class BloodSugarSerializer(BaseModelSerializer):
 class OxygenSaturationSerializer(BaseModelSerializer):
     class Meta:
         model = OxygenSaturation
-        fields = ["id", "patient", "user", "saturation_percentage", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "saturation_percentage",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         ObservationValidator.validate_oxygen_saturation(
-            data["patient"], data["user"], data["saturation_percentage"]
+            data["patient"],
+            data["user"],
+            data["saturation_percentage"],
         )
         return data
 
@@ -298,24 +362,28 @@ class OxygenSaturationSerializer(BaseModelSerializer):
 class PainScoreSerializer(BaseModelSerializer):
     class Meta:
         model = PainScore
-        fields = ["id", "patient", "user", "score", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        fields: ClassVar[list[str]] = ["id", "patient", "user", "score", "created_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         ObservationValidator.validate_pain_score(
-            data["patient"], data["user"], data["score"]
+            data["patient"],
+            data["user"],
+            data["score"],
         )
         return data
 
 
 class BloodTestRequestSerializer(BaseModelSerializer):
     approved_files = ApprovedFileSerializer(
-        source="approved_files_through", many=True, required=False
+        source="approved_files_through",
+        many=True,
+        required=False,
     )
 
     class Meta:
         model = BloodTestRequest
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "patient",
             "user",
@@ -328,7 +396,7 @@ class BloodTestRequestSerializer(BaseModelSerializer):
             "updated_at",
             "approved_files",
         ]
-        read_only_fields = [
+        read_only_fields: ClassVar[list[str]] = [
             "id",
             "user",
             "status",
@@ -342,64 +410,78 @@ class MedicationOrderSerializer(BaseModelSerializer):
     class Meta:
         model = MedicationOrder
         fields = "__all__"
-        read_only_fields = ["id", "user", "created_at", "updated_at"]
+        read_only_fields: ClassVar[list[str]] = [
+            "id",
+            "user",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class DischargeSummarySerializer(BaseModelSerializer):
     class Meta:
         model = DischargeSummary
         fields = "__all__"
-        read_only_fields = ["id", "user", "created_at", "updated_at"]
+        read_only_fields: ClassVar[list[str]] = [
+            "id",
+            "user",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class ObservationsSerializer(serializers.Serializer):
     blood_pressure = BloodPressureSerializer(
-        required=False, help_text="Blood pressure data"
+        required=False,
+        help_text="Blood pressure data",
     )
     heart_rate = HeartRateSerializer(required=False, help_text="Heart rate data")
     body_temperature = BodyTemperatureSerializer(
-        required=False, help_text="Body temperature data"
+        required=False,
+        help_text="Body temperature data",
     )
     respiratory_rate = RespiratoryRateSerializer(
-        required=False, help_text="Respiratory rate data"
+        required=False,
+        help_text="Respiratory rate data",
     )
     blood_sugar = BloodSugarSerializer(required=False, help_text="Blood sugar data")
     oxygen_saturation = OxygenSaturationSerializer(
-        required=False, help_text="Oxygen saturation data"
+        required=False,
+        help_text="Oxygen saturation data",
     )
     pain_score = PainScoreSerializer(required=False, help_text="Pain score data")
 
-    def create(self, validated_data):
+    def create(self, validated_data: dict[str, Any]) -> dict[str, Any]:
         instances = ObservationManager.create_observations(validated_data)
 
         created_data = {}
         if "blood_pressure" in instances:
             created_data["blood_pressure"] = BloodPressureSerializer(
-                instances["blood_pressure"]
+                instances["blood_pressure"],
             ).data
         if "heart_rate" in instances:
             created_data["heart_rate"] = HeartRateSerializer(
-                instances["heart_rate"]
+                instances["heart_rate"],
             ).data
         if "body_temperature" in instances:
             created_data["body_temperature"] = BodyTemperatureSerializer(
-                instances["body_temperature"]
+                instances["body_temperature"],
             ).data
         if "respiratory_rate" in instances:
             created_data["respiratory_rate"] = RespiratoryRateSerializer(
-                instances["respiratory_rate"]
+                instances["respiratory_rate"],
             ).data
         if "blood_sugar" in instances:
             created_data["blood_sugar"] = BloodSugarSerializer(
-                instances["blood_sugar"]
+                instances["blood_sugar"],
             ).data
         if "oxygen_saturation" in instances:
             created_data["oxygen_saturation"] = OxygenSaturationSerializer(
-                instances["oxygen_saturation"]
+                instances["oxygen_saturation"],
             ).data
         if "pain_score" in instances:
             created_data["pain_score"] = PainScoreSerializer(
-                instances["pain_score"]
+                instances["pain_score"],
             ).data
 
         return created_data
@@ -423,19 +505,23 @@ class HeartRateOutputSerializer(BaseObservationOutputSerializer):
 
 class BodyTemperatureOutputSerializer(BaseObservationOutputSerializer):
     temperature = serializers.DecimalField(
-        max_digits=4, decimal_places=1, help_text="Body temperature (°C)"
+        max_digits=4,
+        decimal_places=1,
+        help_text="Body temperature (°C)",
     )
 
 
 class RespiratoryRateOutputSerializer(BaseObservationOutputSerializer):
     respiratory_rate = serializers.IntegerField(
-        help_text="Respiratory rate (breaths per minute)"
+        help_text="Respiratory rate (breaths per minute)",
     )
 
 
 class BloodSugarOutputSerializer(BaseObservationOutputSerializer):
     sugar_level = serializers.DecimalField(
-        max_digits=5, decimal_places=1, help_text="Blood sugar level (mg/dL)"
+        max_digits=5,
+        decimal_places=1,
+        help_text="Blood sugar level (mg/dL)",
     )
 
 
@@ -453,7 +539,8 @@ class ObservationDataSerializer(serializers.Serializer):
         help_text="List of blood pressure records",
     )
     heart_rates = serializers.ListField(
-        child=HeartRateOutputSerializer(), help_text="List of heart rate records"
+        child=HeartRateOutputSerializer(),
+        help_text="List of heart rate records",
     )
     body_temperatures = serializers.ListField(
         child=BodyTemperatureOutputSerializer(),

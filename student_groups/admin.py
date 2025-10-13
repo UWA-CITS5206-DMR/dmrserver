@@ -1,28 +1,30 @@
+from typing import Any, ClassVar
+
 from django.contrib import admin
 
 from .models import (
     ApprovedFile,
     BloodPressure,
-    HeartRate,
-    BodyTemperature,
-    RespiratoryRate,
     BloodSugar,
+    BloodTestRequest,
+    BodyTemperature,
+    DischargeSummary,
+    HeartRate,
+    ImagingRequest,
+    MedicationOrder,
+    Note,
     OxygenSaturation,
     PainScore,
-    Note,
-    ImagingRequest,
-    BloodTestRequest,
-    MedicationOrder,
-    DischargeSummary,
+    RespiratoryRate,
 )
 
 
 class ObservationAdmin(admin.ModelAdmin):
     """Generic vitals observation admin configuration."""
 
-    autocomplete_fields = ["patient", "user"]
-    readonly_fields = ["created_at"]
-    search_fields = [
+    autocomplete_fields: ClassVar[list[str]] = ["patient", "user"]
+    readonly_fields: ClassVar[list[str]] = ["created_at"]
+    search_fields: ClassVar[list[str]] = [
         "patient__first_name",
         "patient__last_name",
         "user__username",
@@ -33,7 +35,7 @@ class ObservationAdmin(admin.ModelAdmin):
         ("Timestamps", {"fields": ("created_at",)}),
     )
 
-    def get_fieldsets(self, request, obj=None):
+    def get_fieldsets(self, _request: object, _obj: object | None = None) -> tuple:
         # Allow subclasses to override observation fields
         observation_fields = getattr(self, "observation_fields", ())
         return (
@@ -48,14 +50,14 @@ class ApprovedFileInline(admin.TabularInline):
 
     model = ApprovedFile
     extra = 1
-    autocomplete_fields = ["file"]
+    autocomplete_fields: ClassVar[list[str]] = ["file"]
 
 
 @admin.register(Note)
 class NoteAdmin(admin.ModelAdmin):
     """Admin display for clinical notes."""
 
-    list_display = [
+    list_display: ClassVar[list[str]] = [
         "patient",
         "user",
         "name",
@@ -63,8 +65,8 @@ class NoteAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
-    list_filter = ["user", "role", "created_at", "updated_at"]
-    search_fields = [
+    list_filter: ClassVar[list[str]] = ["user", "role", "created_at", "updated_at"]
+    search_fields: ClassVar[list[str]] = [
         "patient__first_name",
         "patient__last_name",
         "user__username",
@@ -72,8 +74,8 @@ class NoteAdmin(admin.ModelAdmin):
         "role",
         "content",
     ]
-    autocomplete_fields = ["patient", "user"]
-    readonly_fields = ["created_at", "updated_at"]
+    autocomplete_fields: ClassVar[list[str]] = ["patient", "user"]
+    readonly_fields: ClassVar[list[str]] = ["created_at", "updated_at"]
 
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
@@ -90,70 +92,86 @@ class NoteAdmin(admin.ModelAdmin):
 class BloodPressureAdmin(ObservationAdmin):
     """Admin for blood pressure observations."""
 
-    list_display = ["patient", "user", "systolic", "diastolic", "created_at"]
-    list_filter = ["user", "created_at", "systolic", "diastolic"]
-    observation_fields = ("systolic", "diastolic")
+    list_display: ClassVar[list[str]] = [
+        "patient",
+        "user",
+        "systolic",
+        "diastolic",
+        "created_at",
+    ]
+    list_filter: ClassVar[list[str]] = ["user", "created_at", "systolic", "diastolic"]
+    observation_fields: ClassVar[tuple[str, ...]] = ("systolic", "diastolic")
 
 
 @admin.register(HeartRate)
 class HeartRateAdmin(ObservationAdmin):
     """Admin for heart rate observations."""
 
-    list_display = ["patient", "user", "heart_rate", "created_at"]
-    list_filter = ["user", "created_at", "heart_rate"]
-    observation_fields = ("heart_rate",)
+    list_display: ClassVar[list[str]] = ["patient", "user", "heart_rate", "created_at"]
+    list_filter: ClassVar[list[str]] = ["user", "created_at", "heart_rate"]
+    observation_fields: ClassVar[tuple[str, ...]] = ("heart_rate",)
 
 
 @admin.register(BodyTemperature)
 class BodyTemperatureAdmin(ObservationAdmin):
     """Admin for body temperature observations."""
 
-    list_display = ["patient", "user", "temperature", "created_at"]
-    list_filter = ["user", "created_at", "temperature"]
-    observation_fields = ("temperature",)
+    list_display: ClassVar[list[str]] = ["patient", "user", "temperature", "created_at"]
+    list_filter: ClassVar[list[str]] = ["user", "created_at", "temperature"]
+    observation_fields: ClassVar[tuple[str, ...]] = ("temperature",)
 
 
 @admin.register(RespiratoryRate)
 class RespiratoryRateAdmin(ObservationAdmin):
     """Admin for respiratory rate observations."""
 
-    list_display = ["patient", "user", "respiratory_rate", "created_at"]
-    list_filter = ["user", "created_at", "respiratory_rate"]
-    observation_fields = ("respiratory_rate",)
+    list_display: ClassVar[list[str]] = [
+        "patient",
+        "user",
+        "respiratory_rate",
+        "created_at",
+    ]
+    list_filter: ClassVar[list[str]] = ["user", "created_at", "respiratory_rate"]
+    observation_fields: ClassVar[tuple[str, ...]] = ("respiratory_rate",)
 
 
 @admin.register(BloodSugar)
 class BloodSugarAdmin(ObservationAdmin):
     """Admin for blood sugar observations."""
 
-    list_display = ["patient", "user", "sugar_level", "created_at"]
-    list_filter = ["user", "created_at", "sugar_level"]
-    observation_fields = ("sugar_level",)
+    list_display: ClassVar[list[str]] = ["patient", "user", "sugar_level", "created_at"]
+    list_filter: ClassVar[list[str]] = ["user", "created_at", "sugar_level"]
+    observation_fields: ClassVar[tuple[str, ...]] = ("sugar_level",)
 
 
 @admin.register(OxygenSaturation)
 class OxygenSaturationAdmin(ObservationAdmin):
     """Admin for oxygen saturation observations."""
 
-    list_display = ["patient", "user", "saturation_percentage", "created_at"]
-    list_filter = ["user", "created_at", "saturation_percentage"]
-    observation_fields = ("saturation_percentage",)
+    list_display: ClassVar[list[str]] = [
+        "patient",
+        "user",
+        "saturation_percentage",
+        "created_at",
+    ]
+    list_filter: ClassVar[list[str]] = ["user", "created_at", "saturation_percentage"]
+    observation_fields: ClassVar[tuple[str, ...]] = ("saturation_percentage",)
 
 
 @admin.register(PainScore)
 class PainScoreAdmin(ObservationAdmin):
     """Admin for pain score observations."""
 
-    list_display = ["patient", "user", "score", "created_at"]
-    list_filter = ["user", "created_at", "score"]
-    observation_fields = ("score",)
+    list_display: ClassVar[list[str]] = ["patient", "user", "score", "created_at"]
+    list_filter: ClassVar[list[str]] = ["user", "created_at", "score"]
+    observation_fields: ClassVar[tuple[str, ...]] = ("score",)
 
 
 @admin.register(ImagingRequest)
 class ImagingRequestAdmin(admin.ModelAdmin):
     """Admin for imaging requests."""
 
-    list_display = [
+    list_display: ClassVar[list[str]] = [
         "patient",
         "user",
         "test_type",
@@ -161,8 +179,14 @@ class ImagingRequestAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
-    list_filter = ["user", "status", "test_type", "created_at", "updated_at"]
-    search_fields = [
+    list_filter: ClassVar[list[str]] = [
+        "user",
+        "status",
+        "test_type",
+        "created_at",
+        "updated_at",
+    ]
+    search_fields: ClassVar[list[str]] = [
         "patient__first_name",
         "patient__last_name",
         "user__username",
@@ -170,9 +194,9 @@ class ImagingRequestAdmin(admin.ModelAdmin):
         "name",
         "role",
     ]
-    autocomplete_fields = ["patient", "user"]
-    readonly_fields = ["created_at", "updated_at"]
-    inlines = [ApprovedFileInline]
+    autocomplete_fields: ClassVar[list[str]] = ["patient", "user"]
+    readonly_fields: ClassVar[list[str]] = ["created_at", "updated_at"]
+    inlines: ClassVar[list[Any]] = [ApprovedFileInline]
 
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
@@ -187,7 +211,7 @@ class ImagingRequestAdmin(admin.ModelAdmin):
                     "infection_control_precautions",
                     "imaging_focus",
                     "status",
-                )
+                ),
             },
         ),
         (
@@ -203,14 +227,14 @@ class ApprovedFileBloodTestInline(admin.TabularInline):
     model = ApprovedFile
     fk_name = "blood_test_request"
     extra = 1
-    autocomplete_fields = ["file"]
+    autocomplete_fields: ClassVar[list[str]] = ["file"]
 
 
 @admin.register(BloodTestRequest)
 class BloodTestRequestAdmin(admin.ModelAdmin):
     """Admin for blood test requests."""
 
-    list_display = [
+    list_display: ClassVar[list[str]] = [
         "patient",
         "user",
         "test_type",
@@ -218,8 +242,14 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
-    list_filter = ["user", "status", "test_type", "created_at", "updated_at"]
-    search_fields = [
+    list_filter: ClassVar[list[str]] = [
+        "user",
+        "status",
+        "test_type",
+        "created_at",
+        "updated_at",
+    ]
+    search_fields: ClassVar[list[str]] = [
         "patient__first_name",
         "patient__last_name",
         "user__username",
@@ -227,9 +257,9 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
         "name",
         "role",
     ]
-    autocomplete_fields = ["patient", "user"]
-    readonly_fields = ["created_at", "updated_at"]
-    inlines = [ApprovedFileBloodTestInline]
+    autocomplete_fields: ClassVar[list[str]] = ["patient", "user"]
+    readonly_fields: ClassVar[list[str]] = ["created_at", "updated_at"]
+    inlines: ClassVar[list[Any]] = [ApprovedFileBloodTestInline]
 
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
@@ -242,7 +272,7 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
                     "test_type",
                     "details",
                     "status",
-                )
+                ),
             },
         ),
         (
@@ -256,7 +286,7 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
 class MedicationOrderAdmin(admin.ModelAdmin):
     """Admin for medication orders."""
 
-    list_display = [
+    list_display: ClassVar[list[str]] = [
         "patient",
         "user",
         "medication_name",
@@ -264,15 +294,20 @@ class MedicationOrderAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
-    list_filter = ["user", "medication_name", "created_at", "updated_at"]
-    search_fields = [
+    list_filter: ClassVar[list[str]] = [
+        "user",
+        "medication_name",
+        "created_at",
+        "updated_at",
+    ]
+    search_fields: ClassVar[list[str]] = [
         "patient__first_name",
         "patient__last_name",
         "user__username",
         "medication_name",
     ]
-    autocomplete_fields = ["patient", "user"]
-    readonly_fields = ["created_at", "updated_at"]
+    autocomplete_fields: ClassVar[list[str]] = ["patient", "user"]
+    readonly_fields: ClassVar[list[str]] = ["created_at", "updated_at"]
 
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
@@ -285,7 +320,7 @@ class MedicationOrderAdmin(admin.ModelAdmin):
                     "medication_name",
                     "dosage",
                     "instructions",
-                )
+                ),
             },
         ),
         (
@@ -299,15 +334,15 @@ class MedicationOrderAdmin(admin.ModelAdmin):
 class DischargeSummaryAdmin(admin.ModelAdmin):
     """Admin for discharge summaries."""
 
-    list_display = [
+    list_display: ClassVar[list[str]] = [
         "patient",
         "user",
         "diagnosis",
         "created_at",
         "updated_at",
     ]
-    list_filter = ["user", "created_at", "updated_at"]
-    search_fields = [
+    list_filter: ClassVar[list[str]] = ["user", "created_at", "updated_at"]
+    search_fields: ClassVar[list[str]] = [
         "patient__first_name",
         "patient__last_name",
         "user__username",
@@ -316,8 +351,8 @@ class DischargeSummaryAdmin(admin.ModelAdmin):
         "name",
         "role",
     ]
-    autocomplete_fields = ["patient", "user"]
-    readonly_fields = ["created_at", "updated_at"]
+    autocomplete_fields: ClassVar[list[str]] = ["patient", "user"]
+    readonly_fields: ClassVar[list[str]] = ["created_at", "updated_at"]
 
     fieldsets = (
         ("Patient Information", {"fields": ("patient", "user")}),
@@ -337,10 +372,10 @@ class DischargeSummaryAdmin(admin.ModelAdmin):
 class ApprovedFileAdmin(admin.ModelAdmin):
     """Admin for approved files."""
 
-    list_display = ["imaging_request", "file", "page_range"]
-    search_fields = [
+    list_display: ClassVar[list[str]] = ["imaging_request", "file", "page_range"]
+    search_fields: ClassVar[list[str]] = [
         "imaging_request__patient__first_name",
         "imaging_request__patient__last_name",
         "file__id",
     ]
-    autocomplete_fields = ["imaging_request", "file"]
+    autocomplete_fields: ClassVar[list[str]] = ["imaging_request", "file"]

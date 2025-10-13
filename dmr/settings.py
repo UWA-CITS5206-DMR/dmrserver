@@ -12,8 +12,10 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 import os
 from pathlib import Path
+from typing import Any
+
+from corsheaders.defaults import default_headers, default_methods
 from dotenv import load_dotenv
-from corsheaders.defaults import default_methods, default_headers
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -30,25 +32,21 @@ load_dotenv(BASE_DIR / ".env")
 
 
 # Helper function to parse database URL
-def parse_database_url(database_url):
+def parse_database_url(database_url: str) -> dict[str, Any]:
     """Parse database URL into Django database configuration."""
     if database_url.startswith("sqlite://"):
         db_path = database_url.replace("sqlite://", "")
-        if db_path.startswith("/"):
-            db_file = Path(db_path)
-        else:
-            db_file = DATA_DIR / db_path
+        db_file = Path(db_path) if db_path.startswith("/") else DATA_DIR / db_path
         return {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": db_file,
         }
     # Add other database types as needed (PostgreSQL, MySQL, etc.)
-    else:
-        # Default to SQLite if URL format is not recognized
-        return {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": DATA_DIR / "db.sqlite3",
-        }
+    # Default to SQLite if URL format is not recognized
+    return {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": DATA_DIR / "db.sqlite3",
+    }
 
 
 # Quick-start development settings - unsuitable for production
@@ -57,7 +55,8 @@ def parse_database_url(database_url):
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
-    raise ValueError("The SECRET_KEY environment variable is not set!")
+    msg = "The SECRET_KEY environment variable is not set!"
+    raise ValueError(msg)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes", "on")
@@ -200,7 +199,8 @@ CORS_ALLOWED_METHODS = default_methods
 # Parse CORS allowed origins from environment
 _cors_allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
 if _cors_allowed_origins == "*" or os.getenv(
-    "CORS_ALLOW_ALL_ORIGINS", "True"
+    "CORS_ALLOW_ALL_ORIGINS",
+    "True",
 ).lower() in ("true", "1", "yes", "on"):
     CORS_ALLOW_ALL_ORIGINS = True
     CORS_ALLOWED_ORIGINS = []
@@ -225,7 +225,8 @@ else:
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
-        "CSRF_TRUSTED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000",
     ).split(",")
     if origin.strip()
 ]
