@@ -201,7 +201,7 @@ class BloodTestRequestViewSetTestCase(APITestCase):
         self.blood_test_request = BloodTestRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
-            test_type="Complete Blood Count",
+            test_type=BloodTestRequest.TestType.FBC,
             details="Routine checkup",
             name="Dr. Smith",
             role="Physician",
@@ -394,7 +394,7 @@ class ApprovedFilesTestCase(APITestCase):
         )
         assert approved_files.count() == 1
         assert approved_files.first().file.id == self.file1.id
-        assert approved_files.first().page_range is None
+        assert approved_files.first().page_range == ""
 
     def test_blood_test_request_approval_with_flat_file_id(self) -> None:
         """

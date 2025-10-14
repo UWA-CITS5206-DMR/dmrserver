@@ -13,6 +13,7 @@ from patients.models import Patient
 from student_groups.models import (
     BloodPressure,
     BloodSugar,
+    BloodTestRequest,
     BodyTemperature,
     HeartRate,
     Note,
@@ -22,6 +23,28 @@ from student_groups.models import (
     RespiratoryRate,
 )
 from student_groups.serializers import NoteSerializer, ObservationsSerializer
+
+
+class BloodTestRequestChoicesTest(TestCase):
+    def test_required_blood_test_types_available(self) -> None:
+        required_codes = {
+            BloodTestRequest.TestType.FBC,
+            BloodTestRequest.TestType.EUC,
+            BloodTestRequest.TestType.LFTS,
+            BloodTestRequest.TestType.LIPASE,
+            BloodTestRequest.TestType.TROPONIN,
+            BloodTestRequest.TestType.COAG,
+            BloodTestRequest.TestType.D_DIMER,
+            BloodTestRequest.TestType.CRP,
+            BloodTestRequest.TestType.VBG,
+            BloodTestRequest.TestType.HAPTOGLOBIN,
+            BloodTestRequest.TestType.LDH,
+            BloodTestRequest.TestType.GROUP_AND_HOLD,
+            BloodTestRequest.TestType.CROSSMATCH,
+            BloodTestRequest.TestType.BLOOD_CULTURE,
+        }
+        available_codes = {choice for choice, _ in BloodTestRequest.TestType.choices}
+        assert required_codes.issubset(available_codes)
 
 
 class NoteModelTest(TestCase):
