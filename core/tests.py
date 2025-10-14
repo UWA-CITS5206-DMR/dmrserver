@@ -65,7 +65,7 @@ class RoleFixtureMixin:
             "mrn": f"MRN_CORE_{suffix}",
             "ward": "Ward Core",
             "bed": "Bed 1",
-            "email": f"test-{suffix}@example.com",
+            "phone_number": f"+7000{suffix[:6]}",
         }
         defaults.update(overrides)
         return Patient.objects.create(**defaults)
@@ -354,7 +354,6 @@ class PatientRBACTest(RoleFixtureMixin, APITestCase):
             "last_name": "Patient",
             "date_of_birth": "1985-01-01",
             "gender": Patient.Gender.FEMALE,
-            "email": "new@example.com",
             "mrn": "MRN_CORE_INSTR_CREATE",
             "ward": "Ward Core",
             "bed": "Bed 3",
@@ -382,7 +381,6 @@ class PatientRBACTest(RoleFixtureMixin, APITestCase):
             "last_name": "Patient",
             "date_of_birth": "1985-01-01",
             "gender": Patient.Gender.MALE,
-            "email": "new@example.com",
             "mrn": "MRN_CORE_ADMIN_CREATE",
             "ward": "Ward Core",
             "bed": "Bed 4",

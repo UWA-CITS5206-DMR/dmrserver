@@ -61,7 +61,7 @@ class NoteModelTest(TestCase):
             mrn="MRN_SG_001",
             ward="Ward SG",
             bed="Bed 1",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
 
     def test_create_note(self) -> None:
@@ -98,7 +98,7 @@ class BloodPressureModelTest(TestCase):
             mrn="MRN_SG_002",
             ward="Ward SG",
             bed="Bed 2",
-            email="john.doe@example.com",
+            phone_number="+5222222222",
         )
 
     def test_create_blood_pressure(self) -> None:
@@ -133,7 +133,7 @@ class HeartRateModelTest(TestCase):
             mrn="MRN_SG_003",
             ward="Ward SG",
             bed="Bed 3",
-            email="john.doe@example.com",
+            phone_number="+5333333333",
         )
 
     def test_create_heart_rate(self) -> None:
@@ -163,7 +163,7 @@ class BodyTemperatureModelTest(TestCase):
             mrn="MRN_SG_004",
             ward="Ward SG",
             bed="Bed 4",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
 
     def test_create_body_temperature(self) -> None:
@@ -203,7 +203,7 @@ class ObservationManagerTest(TestCase):
             mrn="MRN_SG_005",
             ward="Ward SG",
             bed="Bed 5",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
         BloodPressure.objects.create(
             patient=cls.patient,
@@ -341,7 +341,7 @@ class NoteSerializerTest(TestCase):
             mrn="MRN_SG_006",
             ward="Ward SG",
             bed="Bed 6",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
         cls.note_data = {
             "patient": cls.patient.id,
@@ -384,7 +384,7 @@ class ObservationsSerializerTest(TestCase):
             mrn="MRN_SG_007",
             ward="Ward SG",
             bed="Bed 7",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
         cls.observation_data = {
             "blood_pressure": {
@@ -462,7 +462,7 @@ class NoteViewSetTest(APITestCase):
             mrn="MRN400",
             ward="Ward G",
             bed="Bed 7",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
         cls.note = Note.objects.create(
             patient=cls.patient,
@@ -535,7 +535,7 @@ class ObservationsViewSetTest(APITestCase):
             mrn="MRN401",
             ward="Ward H",
             bed="Bed 8",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
 
     def setUp(self) -> None:
@@ -710,7 +710,7 @@ class RespiratoryRateModelTest(TestCase):
             mrn="MRN_SG_008",
             ward="Ward SG",
             bed="Bed 8",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
 
     def test_create_respiratory_rate(self) -> None:
@@ -743,7 +743,7 @@ class BloodSugarModelTest(TestCase):
             mrn="MRN_SG_009",
             ward="Ward SG",
             bed="Bed 9",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
 
     def test_create_blood_sugar(self) -> None:
@@ -773,7 +773,7 @@ class OxygenSaturationModelTest(TestCase):
             mrn="MRN_SG_010",
             ward="Ward SG",
             bed="Bed 10",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
 
     def test_create_oxygen_saturation(self) -> None:
@@ -803,7 +803,7 @@ class PainScoreModelTest(TestCase):
             mrn="MRN_SG_011",
             ward="Ward SG",
             bed="Bed 11",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
 
     def test_create_pain_score(self) -> None:
@@ -855,7 +855,7 @@ class ImagingRequestViewSetTest(APITestCase):
             mrn="MRN_SG_012",
             ward="Ward SG",
             bed="Bed 12",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
 
     def setUp(self) -> None:
@@ -959,7 +959,7 @@ class PainScoreViewSetTest(APITestCase):
             mrn="MRN_SG_013",
             ward="Ward SG",
             bed="Bed 13",
-            email="john.doe@example.com",
+            phone_number="+5111111111",
         )
 
     def setUp(self) -> None:

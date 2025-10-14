@@ -49,7 +49,7 @@ class PatientFilteringTestCase(TestCase):
             mrn="MRN001",
             ward="Ward A",
             bed="Bed 1",
-            email="john.doe@test.com",
+            phone_number="+1111111111",
         )
         cls.patient2 = Patient.objects.create(
             first_name="Jane",
@@ -58,7 +58,7 @@ class PatientFilteringTestCase(TestCase):
             mrn="MRN002",
             ward="Ward B",
             bed="Bed 2",
-            email="jane.smith@test.com",
+            phone_number="+2222222222",
         )
 
         # Create observations for student1

@@ -156,9 +156,13 @@ class TestDataManager:
         """Create a test patient"""
         patient_data = get_test_data("patient")
 
-        # Check if patient already exists
-        if self.Patient.objects.filter(email=patient_data["email"]).exists():
-            return self.Patient.objects.get(email=patient_data["email"])
+        # Ensure unique MRN used for lookup if provided
+        mrn = patient_data.get("mrn")
+        if mrn and self.Patient.objects.filter(mrn=mrn).exists():
+            return self.Patient.objects.get(mrn=mrn)
+
+        # Remove email key if present (field removed)
+        patient_data.pop("email", None)
 
         # Create new patient
         patient = self.Patient.objects.create(**patient_data)
@@ -174,7 +178,10 @@ class TestDataManager:
                 user.delete()
 
         for patient in self.created_patients:
-            if "test" in patient.email.lower():
+            # Prefer checking MRN or phone_number for test-created patients
+            mrn = getattr(patient, "mrn", "") or ""
+            phone = getattr(patient, "phone_number", "") or ""
+            if "test" in mrn.lower() or "test" in phone.lower():
                 patient.delete()
 
 

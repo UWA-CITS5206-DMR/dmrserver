@@ -55,16 +55,12 @@ class PatientApiTests(APITestCase):
             "last_name": "Doe",
             "date_of_birth": "1990-01-01",
             "gender": Patient.Gender.MALE,
-            "email": "john.doe@example.com",
+            "mrn": overrides.get("mrn", f"MRN-{uuid4().hex[:8]}"),
+            "ward": overrides.get("ward", "Ward A"),
+            "bed": overrides.get("bed", "Bed 1"),
             "phone_number": "+1234567890",
         }
-        payload.update(
-            {
-                "mrn": overrides.pop("mrn", f"MRN-{uuid4().hex[:8]}"),
-                "ward": overrides.pop("ward", "Ward A"),
-                "bed": overrides.pop("bed", "Bed 1"),
-            },
-        )
+        # Allow callers to override defaults
         payload.update(overrides)
         return payload
 
@@ -97,7 +93,6 @@ class PatientApiTests(APITestCase):
         patient = Patient.objects.first()
         assert patient.first_name == "John"
         assert patient.last_name == "Doe"
-        assert patient.email == "john.doe@example.com"
         assert patient.gender == Patient.Gender.MALE
 
     def test_list_and_retrieve_patient(self) -> None:
@@ -115,12 +110,12 @@ class PatientApiTests(APITestCase):
     def test_update_patient(self) -> None:
         p = self.create_patient()
         detail_url = reverse("patient-detail", args=[p.id])
-        update_payload = {"first_name": "Jane", "email": "jane.doe@example.com"}
+        update_payload = {"first_name": "Jane", "phone_number": "+1999999999"}
         res_patch = self.client.patch(detail_url, data=update_payload, format="json")
         assert res_patch.status_code == status.HTTP_200_OK
         p.refresh_from_db()
         assert p.first_name == "Jane"
-        assert p.email == "jane.doe@example.com"
+        assert p.phone_number == "+1999999999"
 
     def test_delete_patient(self) -> None:
         p = self.create_patient()
@@ -269,7 +264,6 @@ class FileManagementTestCase(APITestCase):
             mrn="MRN_PATIENTS_001",
             ward="Ward Patients",
             bed="Bed 1",
-            email="patient@example.com",
             phone_number="+1234567890",
         )
 
@@ -820,7 +814,6 @@ class FileUploadMultipartParserTests(APITestCase):
             mrn="MRN_PATIENTS_002",
             ward="Ward Patients",
             bed="Bed 2",
-            email="test@example.com",
         )
 
     @classmethod
