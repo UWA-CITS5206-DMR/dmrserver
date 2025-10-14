@@ -3,7 +3,7 @@ from typing import ClassVar
 
 from rest_framework import serializers
 
-from .models import File, Patient
+from .models import File, GoogleFormLink, Patient
 
 
 class FileSerializer(serializers.ModelSerializer):
@@ -131,3 +131,30 @@ class PatientSerializer(serializers.ModelSerializer):
         )
         instance.save()
         return instance
+
+
+class GoogleFormLinkSerializer(serializers.ModelSerializer):
+    """
+    Serializer for GoogleFormLink model.
+
+    Provides read-only access to Google Form links that are displayed to all users.
+    Only active forms are typically shown in the frontend.
+    """
+
+    class Meta:
+        model = GoogleFormLink
+        fields: ClassVar[list[str]] = [
+            "id",
+            "title",
+            "url",
+            "description",
+            "display_order",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = [
+            "id",
+            "created_at",
+            "updated_at",
+        ]

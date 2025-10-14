@@ -4,7 +4,7 @@ from typing import Any, ClassVar
 
 from django.contrib import admin
 
-from .models import File, Patient
+from .models import File, GoogleFormLink, Patient
 
 
 class FileInline(admin.TabularInline):
@@ -102,5 +102,48 @@ class FileAdmin(admin.ModelAdmin):
         (
             "Metadata",
             {"fields": ("id", "created_at"), "classes": ("collapse",)},
+        ),
+    )
+
+
+@admin.register(GoogleFormLink)
+class GoogleFormLinkAdmin(admin.ModelAdmin):
+    """Admin configuration for Google Form links."""
+
+    list_display = (
+        "title",
+        "display_order",
+        "is_active",
+        "created_at",
+        "updated_at",
+    )
+    list_filter = ("is_active", "created_at")
+    search_fields = ("title", "description", "url")
+    ordering: ClassVar[tuple[str, ...]] = ("display_order", "created_at")
+    readonly_fields: ClassVar[tuple[str, ...]] = ("created_at", "updated_at")
+
+    fieldsets = (
+        (
+            "Form Information",
+            {
+                "fields": (
+                    "title",
+                    "url",
+                    "description",
+                ),
+            },
+        ),
+        (
+            "Display Settings",
+            {
+                "fields": (
+                    "display_order",
+                    "is_active",
+                ),
+            },
+        ),
+        (
+            "Timestamps",
+            {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
         ),
     )
