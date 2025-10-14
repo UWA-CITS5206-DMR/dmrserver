@@ -4,7 +4,7 @@ from wsgiref.util import FileWrapper
 
 from django.db.models import Q, QuerySet
 from django.http import Http404, HttpResponse
-from drf_spectacular.utils import OpenApiExample, extend_schema
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -21,7 +21,13 @@ from core.permissions import (
 from student_groups.models import ApprovedFile
 
 from .models import File, GoogleFormLink, Patient
-from .serializers import FileSerializer, GoogleFormLinkSerializer, PatientSerializer
+from .serializers import (
+    FileSerializer,
+    GoogleFormLinkSerializer,
+    ManualFileReleaseResponseSerializer,
+    ManualFileReleaseSerializer,
+    PatientSerializer,
+)
 from .services import PdfPaginationService
 
 
@@ -160,7 +166,8 @@ class FileViewSet(viewsets.ModelViewSet):
                     | Q(
                         blood_test_request__user=self.request.user,
                         blood_test_request__status="completed",
-                    ),
+                    )
+                    | Q(released_to_user=self.request.user)
                 ).values_list("file_id", flat=True)
 
                 # Filter: Admission category OR in approved files
@@ -259,6 +266,46 @@ class FileViewSet(viewsets.ModelViewSet):
     )
     def destroy(self, request: Request, *args: object, **kwargs: object) -> Response:
         return super().destroy(request, *args, **kwargs)
+
+    @extend_schema(
+        summary="Manually release file access to student groups",
+        description=(
+            "Grant one or more student group accounts access to this file without requiring "
+            "an investigation request. For paginated PDF files, a page range must be supplied."
+        ),
+        request=ManualFileReleaseSerializer,
+        responses={
+            200: OpenApiResponse(response=ManualFileReleaseResponseSerializer),
+        },
+    )
+    @action(
+        detail=True, methods=["post"], permission_classes=[FileManagementPermission]
+    )
+    def release(
+        self,
+        request: Request,
+        *_args: object,
+        **_kwargs: object,
+    ) -> Response:
+        file_instance = self.get_object()
+        serializer = ManualFileReleaseSerializer(
+            data=request.data,
+            context={"file": file_instance},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        approved_files = serializer.save(released_by=request.user)
+        released_users = [
+            obj.released_to_user for obj in approved_files if obj.released_to_user
+        ]
+
+        response_payload = {
+            "file_id": str(file_instance.id),
+            "released_to": released_users,
+            "page_range": serializer.validated_data.get("page_range", ""),
+        }
+        response_serializer = ManualFileReleaseResponseSerializer(response_payload)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
     def perform_create(self, serializer: object) -> None:
         """

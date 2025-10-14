@@ -163,6 +163,19 @@ class InstructorViewSetTestCase(APITestCase):
         assert "first_name" in first_item["patient"]
         assert first_item["patient"]["first_name"] == "John"
 
+    def test_instructor_can_list_student_groups(self) -> None:
+        self.client.force_authenticate(user=self.instructor_user)
+        response = self.client.get("/api/instructors/student-groups/")
+        assert response.status_code == status.HTTP_200_OK
+        assert isinstance(response.data, list)
+        usernames = [entry["username"] for entry in response.data]
+        assert "student1" in usernames
+
+    def test_student_cannot_list_student_groups(self) -> None:
+        self.client.force_authenticate(user=self.student_user)
+        response = self.client.get("/api/instructors/student-groups/")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
 
 class BloodTestRequestViewSetTestCase(APITestCase):
     """

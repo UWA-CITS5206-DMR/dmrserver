@@ -372,10 +372,35 @@ class DischargeSummaryAdmin(admin.ModelAdmin):
 class ApprovedFileAdmin(admin.ModelAdmin):
     """Admin for approved files."""
 
-    list_display: ClassVar[list[str]] = ["imaging_request", "file", "page_range"]
+    list_display: ClassVar[list[str]] = [
+        "file",
+        "imaging_request",
+        "blood_test_request",
+        "released_to_user",
+        "released_by",
+        "page_range",
+        "created_at",
+    ]
+    list_filter: ClassVar[list[str]] = [
+        "created_at",
+        "released_by",
+        "imaging_request__status",
+        "blood_test_request__status",
+    ]
     search_fields: ClassVar[list[str]] = [
         "imaging_request__patient__first_name",
         "imaging_request__patient__last_name",
         "file__id",
+        "blood_test_request__patient__first_name",
+        "blood_test_request__patient__last_name",
+        "released_to_user__username",
+        "released_by__username",
     ]
-    autocomplete_fields: ClassVar[list[str]] = ["imaging_request", "file"]
+    autocomplete_fields: ClassVar[list[str]] = [
+        "imaging_request",
+        "blood_test_request",
+        "released_to_user",
+        "released_by",
+        "file",
+    ]
+    readonly_fields: ClassVar[list[str]] = ["created_at"]

@@ -224,6 +224,86 @@ class FileAccessIntegrationTest(TestCase):
         # Should be successful
         assert response.status_code == status.HTTP_200_OK
 
+    def test_manual_release_makes_file_visible_to_student(self) -> None:
+        """Instructors can manually release files to student groups."""
+        # Remove existing approved file to ensure manual release is required
+        self.approved_file.delete()
+
+        self.client.force_authenticate(user=self.instructor)
+        release_url = reverse(
+            "file-release",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
+        )
+        response = self.client.post(
+            release_url,
+            {"student_group_ids": [self.student.id]},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        payload = response.json()
+        assert payload["released_to"][0]["id"] == self.student.id
+
+        # Student should now see the file in their list view
+        self.client.force_authenticate(user=self.student)
+        list_url = reverse("file-list", kwargs={"patient_pk": self.patient.id})
+        list_response = self.client.get(list_url)
+        assert list_response.status_code == status.HTTP_200_OK
+        file_ids = {item["id"] for item in list_response.data["results"]}
+        assert str(self.file.id) in file_ids
+
+    def test_manual_release_requires_page_range_for_paginated_file(self) -> None:
+        """Manual releases for paginated files must include a page range."""
+        self.approved_file.delete()
+        self.file.requires_pagination = True
+        self.file.save()
+
+        self.client.force_authenticate(user=self.instructor)
+        release_url = reverse(
+            "file-release",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
+        )
+        response = self.client.post(
+            release_url,
+            {"student_group_ids": [self.student.id]},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_manual_release_page_range_limits_student_access(self) -> None:
+        """Students are constrained to the manual release page range."""
+        self.approved_file.delete()
+        self.file.requires_pagination = True
+        self.file.save()
+
+        self.client.force_authenticate(user=self.instructor)
+        release_url = reverse(
+            "file-release",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
+        )
+        response = self.client.post(
+            release_url,
+            {
+                "student_group_ids": [self.student.id],
+                "page_range": "2-3",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        self.client.force_authenticate(user=self.student)
+        view_url = reverse(
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
+        )
+
+        allowed = self.client.get(view_url, {"page_range": "2"})
+        assert allowed.status_code == status.HTTP_200_OK
+
+        forbidden = self.client.get(view_url, {"page_range": "1"})
+        assert forbidden.status_code == status.HTTP_403_FORBIDDEN
+
     def test_instructor_custom_page_range_access(self) -> None:
         """
         Test that instructors can specify custom page ranges for paginated files.
