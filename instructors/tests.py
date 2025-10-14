@@ -41,7 +41,7 @@ class InstructorViewSetTestCase(APITestCase):
             mrn="MRN300",
             ward="Ward D",
             bed="Bed 4",
-            email="john@example.com",
+            phone_number="+6000000000",
         )
 
     def setUp(self) -> None:
@@ -138,7 +138,8 @@ class InstructorViewSetTestCase(APITestCase):
         assert "id" in response.data["patient"]
         assert "first_name" in response.data["patient"]
         assert "last_name" in response.data["patient"]
-        assert "email" in response.data["patient"]
+        assert "mrn" in response.data["patient"]
+        assert "phone_number" in response.data["patient"]
         assert response.data["patient"]["first_name"] == "John"
         assert response.data["patient"]["last_name"] == "Doe"
 
@@ -193,7 +194,6 @@ class BloodTestRequestViewSetTestCase(APITestCase):
             mrn="MRN301",
             ward="Ward E",
             bed="Bed 5",
-            email="jane@example.com",
         )
 
     def setUp(self) -> None:
@@ -312,7 +312,6 @@ class ApprovedFilesTestCase(APITestCase):
             mrn="MRN302",
             ward="Ward F",
             bed="Bed 6",
-            email="test@example.com",
         )
 
         # Create test files once for the class to avoid repeated file writes

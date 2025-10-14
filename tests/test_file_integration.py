@@ -60,7 +60,7 @@ class FileAccessIntegrationTest(TestCase):
             mrn="MRN100",
             ward="Ward X",
             bed="Bed 10",
-            email="john.doe@example.com",
+            phone_number="+4000000000",
         )
 
         # Create a single PDF file stored in media root and reused by tests

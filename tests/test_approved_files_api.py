@@ -70,8 +70,7 @@ class ApprovedFilesAPITestCase(TestCase):
             mrn="MRN200",
             ward="Ward C",
             bed="Bed 3",
-            email="john.doe@example.com",
-            phone_number="1234567890",
+            phone_number="+3000000000",
         )
 
         # Create test files once for reuse

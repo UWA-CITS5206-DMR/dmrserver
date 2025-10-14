@@ -31,7 +31,6 @@ class Patient(models.Model):
     )
     ward = models.CharField(max_length=100, verbose_name="Ward")
     bed = models.CharField(max_length=20, verbose_name="Bed")
-    email = models.EmailField(unique=True, verbose_name="Email Address")
     phone_number = models.CharField(
         max_length=15,
         blank=True,

@@ -102,7 +102,6 @@ class PatientSerializer(serializers.ModelSerializer):
             "mrn",
             "ward",
             "bed",
-            "email",
             "phone_number",
             "created_at",
             "updated_at",
@@ -124,7 +123,6 @@ class PatientSerializer(serializers.ModelSerializer):
         instance.mrn = validated_data.get("mrn", instance.mrn)
         instance.ward = validated_data.get("ward", instance.ward)
         instance.bed = validated_data.get("bed", instance.bed)
-        instance.email = validated_data.get("email", instance.email)
         instance.phone_number = validated_data.get(
             "phone_number",
             instance.phone_number,

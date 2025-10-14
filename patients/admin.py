@@ -31,7 +31,6 @@ class PatientAdmin(admin.ModelAdmin):
         "mrn",
         "first_name",
         "last_name",
-        "email",
         "phone_number",
         "date_of_birth",
         "gender",
@@ -43,7 +42,6 @@ class PatientAdmin(admin.ModelAdmin):
         "mrn",
         "first_name",
         "last_name",
-        "email",
         "phone_number",
     )
     ordering: ClassVar[tuple[str, ...]] = ("last_name", "first_name")
@@ -63,8 +61,8 @@ class PatientAdmin(admin.ModelAdmin):
                 ),
             },
         ),
-        ("Contact Information", {"fields": ("email", "phone_number")}),
         ("Location", {"fields": ("ward", "bed")}),
+        ("Contact", {"fields": ("phone_number",)}),
         (
             "Timestamps",
             {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
