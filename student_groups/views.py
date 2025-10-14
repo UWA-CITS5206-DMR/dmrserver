@@ -224,20 +224,19 @@ class ObservationsViewSet(viewsets.GenericViewSet):
             try:
                 created_objects = serializer.save()
             except ValidationError as e:
+                # Use DRF standard 'detail' for error messages
                 return Response(
-                    {"error": "Validation error", "detail": e.message},
+                    {"detail": e.message},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             except Exception as e:  # noqa: BLE001  (fallback for unexpected errors)
                 return Response(
-                    {"error": "Error occurred during creation", "detail": str(e)},
+                    {"detail": str(e)},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
             return Response(created_objects, status=status.HTTP_201_CREATED)
-        return Response(
-            {"error": "Data validation failed", "detail": serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        # Return serializer.errors directly under standard validation response
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
         summary="List observations",
@@ -335,7 +334,7 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         patient_id = request.query_params.get("patient_id")
         if not patient_id:
             return Response(
-                {"error": "patient_id is required"},
+                {"detail": "patient_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

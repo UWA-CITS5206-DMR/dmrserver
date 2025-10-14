@@ -8,8 +8,10 @@ making the code more testable and maintainable.
 
 import io
 
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpResponse
 from PyPDF2 import PdfReader, PdfWriter
+from rest_framework import status
+from rest_framework.response import Response
 
 from core.context import Role
 from core.permissions import get_user_role
@@ -130,7 +132,7 @@ class PdfPaginationService:
         file_instance: object,
         user: object,
         page_range_query: str,
-    ) -> HttpResponse:
+    ) -> Response:
         """
         Serve specific pages of a PDF file based on user authorization.
 
@@ -143,7 +145,7 @@ class PdfPaginationService:
                          "1-5,7,10-12" (multiple ranges)
 
         Returns:
-            HttpResponse with PDF content or HttpResponseForbidden
+            Response with PDF content or Response with error message
 
         Authorization rules:
             - Instructors/Admins: Can access any page range
@@ -158,8 +160,9 @@ class PdfPaginationService:
 
             # Check if student has any access to this file
             if authorized_range is None and user_role == Role.STUDENT.value:
-                return HttpResponseForbidden(
-                    "No authorized page range found for this file.",
+                return Response(
+                    {"detail": "No authorized page range found for this file."},
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
             # Parse requested pages
@@ -169,7 +172,10 @@ class PdfPaginationService:
                 # Students without explicit query get their approved range
                 requested_pages = self.parser.parse(authorized_range)
             else:
-                return HttpResponseForbidden("No page range specified.")
+                return Response(
+                    {"detail": "No page range specified."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
             # Validate and extract pages
             return self._process_pdf_pages(
@@ -180,7 +186,10 @@ class PdfPaginationService:
             )
 
         except Exception as exc:  # noqa: BLE001 - fallback to forbid on unexpected PDF processing errors
-            return HttpResponseForbidden(f"Error processing PDF: {exc!s}")
+            return Response(
+                {"detail": f"Error processing PDF: {exc!s}"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
     def _process_pdf_pages(
         self,
@@ -188,7 +197,7 @@ class PdfPaginationService:
         requested_pages: list[int],
         authorized_range: str | None,
         user_role: str,
-    ) -> HttpResponse:
+    ) -> Response:
         """
         Process and extract requested pages from PDF.
 
@@ -199,7 +208,7 @@ class PdfPaginationService:
             user_role: Role of the requesting user
 
         Returns:
-            HttpResponse with extracted PDF pages or HttpResponseForbidden
+            Response with extracted PDF pages or Response with error message
         """
         with file_instance.file.open("rb") as pdf_file:
             reader = PdfReader(pdf_file)
@@ -228,7 +237,7 @@ class PdfPaginationService:
         total_pages: int,
         authorized_range: str | None,
         user_role: str,
-    ) -> HttpResponseForbidden | None:
+    ) -> Response | None:
         """
         Validate that requested pages exist and are authorized.
 
@@ -239,18 +248,24 @@ class PdfPaginationService:
             user_role: Role of the requesting user
 
         Returns:
-            HttpResponseForbidden if validation fails, None if valid
+            Response with error message if validation fails, None if valid
         """
         # Check if pages exist in PDF
         invalid_pages = [
             page for page in requested_pages if page < 1 or page > total_pages
         ]
         if invalid_pages:
-            return HttpResponseForbidden(
-                "Invalid page range. Valid pages: 1-{}. Invalid pages requested: {}".format(
-                    total_pages,
-                    ", ".join(map(str, invalid_pages)),
-                ),
+            return Response(
+                {
+                    "detail": (
+                        "Invalid page range. Valid pages: 1-{total_pages}. "
+                        "Invalid pages requested: {invalid}".format(
+                            total_pages=total_pages,
+                            invalid=", ".join(map(str, invalid_pages)),
+                        )
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         # For students, verify requested pages are within authorized range
@@ -260,11 +275,17 @@ class PdfPaginationService:
                 page for page in requested_pages if page not in authorized_pages
             ]
             if unauthorized_pages:
-                return HttpResponseForbidden(
-                    "Requested pages are not authorized. Your approved range is: {}. Unauthorized pages: {}".format(
-                        authorized_range,
-                        ", ".join(map(str, unauthorized_pages)),
-                    ),
+                return Response(
+                    {
+                        "detail": (
+                            "Requested pages are not authorized. Your approved range is: {auth}. "
+                            "Unauthorized pages: {unauth}".format(
+                                auth=authorized_range,
+                                unauth=", ".join(map(str, unauthorized_pages)),
+                            )
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
         return None
