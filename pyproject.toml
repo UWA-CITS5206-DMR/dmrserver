@@ -35,6 +35,9 @@ ignore = [
     "PT027",
 ]
 fixable = ["ALL"]
+exclude = [
+  "**/migrations/*",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests.py" = [

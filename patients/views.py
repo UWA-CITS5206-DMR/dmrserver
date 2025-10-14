@@ -20,8 +20,8 @@ from core.permissions import (
 )
 from student_groups.models import ApprovedFile
 
-from .models import File, Patient
-from .serializers import FileSerializer, PatientSerializer
+from .models import File, GoogleFormLink, Patient
+from .serializers import FileSerializer, GoogleFormLinkSerializer, PatientSerializer
 from .services import PdfPaginationService
 
 
@@ -339,3 +339,29 @@ class FileViewSet(viewsets.ModelViewSet):
                 f"inline; filename={file_instance.display_name}"
             )
             return response
+
+
+class GoogleFormLinkViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Google Form links.
+
+    Provides read-only access to Google Form links.
+    These links are global and shown to all users across all patient records.
+
+    - List: GET /api/patients/google-forms/
+    - Retrieve: GET /api/patients/google-forms/{id}/
+
+    Only active forms are returned by default.
+    """
+
+    serializer_class = GoogleFormLinkSerializer
+    permission_classes: ClassVar[
+        list[object]
+    ] = []  # Public access for authenticated users
+    pagination_class = None  # Disable pagination for simple list of forms
+
+    def get_queryset(self) -> QuerySet:
+        """
+        Return only active Google Form links, ordered by display_order.
+        """
+        return GoogleFormLink.objects.filter(is_active=True)

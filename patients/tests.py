@@ -14,7 +14,7 @@ from rest_framework.test import APIClient, APITestCase
 from core.context import Role
 from student_groups.models import ApprovedFile, ImagingRequest
 
-from .models import File, Patient
+from .models import File, GoogleFormLink, Patient
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -1042,3 +1042,129 @@ class FileUploadMultipartParserTests(APITestCase):
             saved_content = f.read()
 
         assert saved_content == original_content
+
+
+class GoogleFormLinkApiTests(APITestCase):
+    """Test cases for GoogleFormLink API endpoints."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.instructor_group, created = Group.objects.get_or_create(
+            name=Role.INSTRUCTOR.value,
+        )
+        cls.user = get_user_model().objects.create_user(
+            username="tester",
+            email="tester@example.com",
+            password="pass1234",
+        )
+        cls.user.groups.add(cls.instructor_group)
+
+    def setUp(self) -> None:
+        self.client: APIClient = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+        # Create test Google Form links
+        self.form1 = GoogleFormLink.objects.create(
+            title="Patient Feedback Form",
+            url="https://forms.google.com/feedback",
+            description="Please provide your feedback",
+            display_order=1,
+            is_active=True,
+        )
+        self.form2 = GoogleFormLink.objects.create(
+            title="Health Survey",
+            url="https://forms.google.com/health-survey",
+            description="Complete this health survey",
+            display_order=2,
+            is_active=True,
+        )
+        self.inactive_form = GoogleFormLink.objects.create(
+            title="Inactive Form",
+            url="https://forms.google.com/inactive",
+            description="This form is inactive",
+            display_order=3,
+            is_active=False,
+        )
+
+    def test_list_google_forms(self) -> None:
+        """Test listing all active Google Form links."""
+        url = reverse("google-form-list")
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        # Should only return active forms
+        assert len(response.data) == 2
+        assert response.data[0]["title"] == "Patient Feedback Form"
+        assert response.data[1]["title"] == "Health Survey"
+
+    def test_list_google_forms_ordered_by_display_order(self) -> None:
+        """Test that Google Forms are ordered by display_order."""
+        url = reverse("google-form-list")
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data[0]["display_order"] == 1
+        assert response.data[1]["display_order"] == 2
+
+    def test_retrieve_google_form(self) -> None:
+        """Test retrieving a specific Google Form link."""
+        url = reverse("google-form-detail", args=[self.form1.id])
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["title"] == "Patient Feedback Form"
+        assert response.data["url"] == "https://forms.google.com/feedback"
+        assert response.data["description"] == "Please provide your feedback"
+        assert response.data["is_active"] is True
+
+    def test_list_excludes_inactive_forms(self) -> None:
+        """Test that inactive forms are not included in the list."""
+        url = reverse("google-form-list")
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        # Verify inactive form is not in results
+        form_titles = [form["title"] for form in response.data]
+        assert "Inactive Form" not in form_titles
+
+    def test_google_form_read_only(self) -> None:
+        """Test that Google Form links are read-only via API."""
+        url = reverse("google-form-list")
+
+        # Attempt to create via POST
+        data = {
+            "title": "New Form",
+            "url": "https://forms.google.com/new",
+            "description": "New form description",
+            "display_order": 10,
+            "is_active": True,
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+        # Attempt to update via PUT
+        url = reverse("google-form-detail", args=[self.form1.id])
+        response = self.client.put(url, data, format="json")
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+        # Attempt to delete
+        response = self.client.delete(url)
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+    def test_google_form_response_structure(self) -> None:
+        """Test that Google Form response includes all expected fields."""
+        url = reverse("google-form-detail", args=[self.form1.id])
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        expected_fields = {
+            "id",
+            "title",
+            "url",
+            "description",
+            "display_order",
+            "is_active",
+            "created_at",
+            "updated_at",
+        }
+        assert set(response.data.keys()) == expected_fields

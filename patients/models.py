@@ -144,3 +144,46 @@ class File(models.Model):
     def delete(self, *args: object, **kwargs: object) -> None:
         self.file.delete(save=False)
         super().delete(*args, **kwargs)
+
+
+class GoogleFormLink(models.Model):
+    """
+    Model for storing Google Form links that are displayed to all patients.
+    These forms are global and not patient-specific.
+    """
+
+    title = models.CharField(
+        max_length=255,
+        verbose_name="Form Title",
+        help_text="The title of the Google Form",
+    )
+    url = models.URLField(
+        max_length=500,
+        verbose_name="Form URL",
+        help_text="The complete URL to the Google Form",
+    )
+    description = models.TextField(
+        blank=True,
+        verbose_name="Description",
+        help_text="Optional description of the form's purpose",
+    )
+    display_order = models.IntegerField(
+        default=0,
+        verbose_name="Display Order",
+        help_text="Order in which the form appears (lower numbers first)",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Is Active",
+        help_text="Whether this form link is currently active and visible",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
+
+    class Meta:
+        verbose_name = "Google Form Link"
+        verbose_name_plural = "Google Form Links"
+        ordering: ClassVar[list[str]] = ["display_order", "created_at"]
+
+    def __str__(self) -> str:
+        return self.title
