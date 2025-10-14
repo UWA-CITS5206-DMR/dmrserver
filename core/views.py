@@ -11,8 +11,6 @@ from rest_framework.response import Response
 from .models import MultiDeviceToken
 from .serializers import AuthTokenSerializer, LoginSerializer, UserSerializer
 
-# Create your views here.
-
 
 class AuthViewSet(viewsets.GenericViewSet):
     """
@@ -67,7 +65,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 request.auth.delete()
             except (AttributeError, DatabaseError) as exc:
                 return Response(
-                    {"error": f"Logout failed: {exc!s}"},
+                    {"detail": f"Logout failed: {exc!s}"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             return Response(
@@ -76,7 +74,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             )
 
         return Response(
-            {"error": "No active token found"},
+            {"detail": "No active token found"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
