@@ -186,7 +186,7 @@ class FileAccessPermission(BaseRolePermission):
     """
     Custom permission for file access with role-based and approval-based logic:
     - Admins and instructors: full access to all files
-    - Students: can only access files from their approved lab requests
+    - Students: can access files approved via lab requests or manual releases
     """
 
     role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
@@ -226,7 +226,16 @@ class FileAccessPermission(BaseRolePermission):
                 blood_test_request__status="completed",
             ).exists()
 
-            return imaging_request_exists or blood_test_request_exists
+            manual_release_exists = ApprovedFile.objects.filter(
+                file=obj,
+                released_to_user=user,
+            ).exists()
+
+            return (
+                imaging_request_exists
+                or blood_test_request_exists
+                or manual_release_exists
+            )
 
         return False
 

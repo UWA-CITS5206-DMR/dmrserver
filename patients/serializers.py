@@ -1,7 +1,13 @@
 from pathlib import Path
 from typing import ClassVar
 
+from django.contrib.auth.models import User
 from rest_framework import serializers
+
+from core.context import Role
+from core.serializers import UserSerializer
+from patients.services.pdf_pagination import PdfPageRangeParser
+from student_groups.models import ApprovedFile
 
 from .models import File, GoogleFormLink, Patient
 
@@ -73,6 +79,93 @@ class FileSerializer(serializers.ModelSerializer):
         """
         validated_data["display_name"] = validated_data["file"].name
         return super().create(validated_data)
+
+
+class ManualFileReleaseSerializer(serializers.Serializer):
+    """Serializer for manually releasing a file to one or more student groups."""
+
+    student_group_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+        help_text="IDs of student group user accounts to receive file access.",
+    )
+    page_range = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Page range to expose when the file requires pagination (e.g. '1-3,5').",
+    )
+
+    def validate_student_group_ids(self, value: list[int]) -> list[int]:
+        """Ensure at least one unique student group id is provided."""
+        unique_ids = list(dict.fromkeys(value))
+        if not unique_ids:
+            msg = "At least one student group must be selected."
+            raise serializers.ValidationError(msg)
+        return unique_ids
+
+    def validate(self, attrs: dict) -> dict:
+        file_instance: File = self.context["file"]
+        ids: list[int] = attrs["student_group_ids"]
+
+        students = list(
+            User.objects.filter(id__in=ids, groups__name=Role.STUDENT.value).distinct()
+        )
+        found_ids = {user.id for user in students}
+        missing = sorted(set(ids) - found_ids)
+        if missing:
+            msg = f"Invalid student group IDs: {', '.join(map(str, missing))}."
+            raise serializers.ValidationError({"student_group_ids": msg})
+
+        attrs["students"] = students
+
+        page_range = attrs.get("page_range", "").strip()
+
+        if file_instance.requires_pagination:
+            if not page_range:
+                msg = "Page range is required for files that enforce pagination."
+                raise serializers.ValidationError({"page_range": msg})
+            try:
+                PdfPageRangeParser.parse(page_range)
+            except (
+                ValueError
+            ) as exc:  # pragma: no cover - ValueError raised by int conversion
+                msg = "Invalid page range format. Use values such as '1-3,5'."
+                raise serializers.ValidationError({"page_range": msg}) from exc
+            attrs["page_range"] = page_range
+        else:
+            if page_range:
+                msg = "Page range should only be provided for paginated files."
+                raise serializers.ValidationError({"page_range": msg})
+            attrs["page_range"] = ""
+
+        return attrs
+
+    def save(self, *, released_by: User) -> list[ApprovedFile]:
+        file_instance: File = self.context["file"]
+        students: list[User] = self.validated_data["students"]
+        page_range: str = self.validated_data.get("page_range", "")
+
+        approved_files: list[ApprovedFile] = []
+        for student in students:
+            approved_file, _created = ApprovedFile.objects.update_or_create(
+                file=file_instance,
+                released_to_user=student,
+                defaults={
+                    "page_range": page_range,
+                    "released_by": released_by,
+                    "imaging_request": None,
+                    "blood_test_request": None,
+                },
+            )
+            approved_files.append(approved_file)
+
+        return approved_files
+
+
+class ManualFileReleaseResponseSerializer(serializers.Serializer):
+    file_id = serializers.UUIDField()
+    page_range = serializers.CharField(allow_blank=True)
+    released_to = UserSerializer(many=True, read_only=True)
 
 
 class PatientSerializer(serializers.ModelSerializer):

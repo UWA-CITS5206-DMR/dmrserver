@@ -50,7 +50,7 @@ The system follows RBAC (Role-Based Access Control) principles. Each resource ha
 **Patient and File Management:**
 
 - `PatientPermission`: Students read-only; instructors and admins have full CRUD.
-- `FileAccessPermission`: Admins/instructors access all files; students only access `ApprovedFile` associated with their completed requests, restricted by `page_range`.
+- `FileAccessPermission`: Admins/instructors access all files; students access is granted via either (a) `ApprovedFile` linked to their completed requests, or (b) manual releases recorded in `ApprovedFile.released_to_user`; access may be restricted by `page_range`.
 - `FileManagementPermission`: Only instructors and admins can manage files (upload, update, delete).
 
 **Observation Data:**
@@ -79,7 +79,7 @@ For permission development guidelines, see [DEVELOPMENT_STANDARDS.md](./DEVELOPM
   - Permission Impact:
     - Observation Data: `ObservationPermission` performs an object-level check `obj.user == request.user`, so students can only CRUD their group's records; instructors have read-only access to observations, and admin has full access.
     - Diagnostic Requests: Student-side request views are restricted to `user=self.request.user`; instructor-side can manage all requests.
-    - File Access: Student file access requires the existence of an `ApprovedFile` associated with a completed request (e.g., `imaging_request__user=request.user, imaging_request__status="completed"`), and is restricted by `page_range`; instructor/admin can access all.
+    - File Access: Student access is allowed when an `ApprovedFile` exists associated with a completed request (e.g., `imaging_request__user=request.user, imaging_request__status="completed"`) or when a manual release exists (`released_to_user=request.user`); access can be restricted by `page_range`. Instructors/admins can access all.
   - Endpoint Practice:
     - Student-side creation APIs should fix `user=request.user` at the view layer (not trusting `user` in the request body) to prevent unauthorized access. `LabRequest` is currently enforced; `Observations` creation still requires `user` to be passed, the calling end must pass the current user, which can be overridden at the view layer for further convergence.
     - Query APIs for students must filter based on `request.user` to prevent reading data from other groups.
@@ -91,7 +91,7 @@ For permission development guidelines, see [DEVELOPMENT_STANDARDS.md](./DEVELOPM
   - `Patient`: Basic information model.
   - `File`: File record with optional categorization; `requires_pagination` controls whether "page-based authorization" is enabled. Override `delete()` to remove files from disk.
   - File Storage: `file = models.FileField(upload_to="upload_to")`, i.e., the path is `MEDIA_ROOT/upload_to/`.
-  - File Viewing: `FileViewSet.view` supports PDF output for specified pages; authorized page range comes from `ApprovedFile.page_range` and completed diagnostic requests.
+  - File Viewing: `FileViewSet.view` supports PDF output for specified pages; authorized page range comes from `ApprovedFile.page_range` via completed diagnostic requests or manual releases.
   - Upload: `PatientViewSet.upload_file` is an action route; controlled by `PatientPermission`, students cannot upload.
 
 - Observations and Bulk Creation (`student_groups`):
@@ -102,6 +102,7 @@ For permission development guidelines, see [DEVELOPMENT_STANDARDS.md](./DEVELOPM
 - Diagnostic Requests (`ImagingRequest`, `BloodTestRequest`, etc.):
   - Student-side: Request views in `student_groups.views` only operate on the current user's requests.
   - Instructor-side: Request views in `instructors.views` provide full CRUD functionality; status updates are constrained by serializer rules (e.g., `ImagingRequestStatusUpdateSerializer`); can manage approved files.
+  - Instructor-side: Request views in `instructors.views` provide full CRUD functionality; status updates are constrained by serializer rules (e.g., `ImagingRequestStatusUpdateSerializer`); can manage approved files. Instructors can also manually release file access to student group accounts without a request using the File API.
   - Additional request types: `MedicationOrder`, `DischargeSummary`, etc., follow similar patterns.
   - Dashboard views provide basic statistics on request status and completion.
 
@@ -145,3 +146,13 @@ For detailed testing standards and conventions, see [DEVELOPMENT_STANDARDS.md](.
 - Development Standards: [DEVELOPMENT_STANDARDS.md](./DEVELOPMENT_STANDARDS.md)
 - Docker Guide: [DOCKER_GUIDE.md](./DOCKER_GUIDE.md)
 - Development Guide: [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md)
+
+## 8. New: Manual File Release (Instructor)
+
+Instructors can grant student group accounts access to patient documents without a corresponding request.
+
+- API endpoints:
+  - Instructor list student groups: `GET /api/instructors/student-groups/` → returns user accounts in the student group role.
+  - File manual release: `POST /api/patients/patients/{patient_id}/files/{file_id}/release/` with body `{ "student_group_ids": [<userId>, ...], "page_range": "1-3,5"? }`. `page_range` is required for files with `requires_pagination=True`.
+- Data model: Manual releases are written to `student_groups.ApprovedFile` with `released_to_user` and optional `page_range`. A unique constraint prevents duplicate manual releases per (file, user).
+- Authorization effects: Students gain `FileAccessPermission` for the released file; for PDFs with pagination, access is limited to the specified `page_range`.

@@ -3,6 +3,7 @@ from typing import Any, ClassVar
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
+from django.db.models import BaseConstraint
 
 from patients.models import File, Patient
 
@@ -475,8 +476,14 @@ class ImagingRequest(models.Model):
 
 class ApprovedFile(models.Model):
     """
-    Approved file with page range support for both ImagingRequest and BloodTestRequest.
-    Each ApprovedFile must be associated with either an ImagingRequest OR a BloodTestRequest.
+    Approved file assignment with optional manual release support.
+
+    An ApprovedFile can originate from:
+    - An ImagingRequest when instructors approve imaging results
+    - A BloodTestRequest when instructors approve laboratory results
+    - A manual release to a student group (represented by a shared User account)
+
+    Exactly one origin must be set for each record.
     """
 
     imaging_request = models.ForeignKey(
@@ -493,6 +500,22 @@ class ApprovedFile(models.Model):
         blank=True,
         related_name="approved_files_through",
     )
+    released_to_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="manual_approved_files",
+        help_text="Student group account granted manual access.",
+    )
+    released_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="manual_file_releases",
+        help_text="Instructor or admin who granted manual access.",
+    )
     file = models.ForeignKey(File, on_delete=models.CASCADE)
     page_range = models.CharField(
         max_length=100,
@@ -500,23 +523,36 @@ class ApprovedFile(models.Model):
         default="",
         help_text="e.g., '1-5', '7', '10-12'. Only for paginated files.",
     )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
 
     class Meta:
         verbose_name = "Approved File"
         verbose_name_plural = "Approved Files"
-        constraints: ClassVar[list[models.CheckConstraint]] = [
+        constraints: ClassVar[list[BaseConstraint]] = [
             models.CheckConstraint(
                 check=(
                     models.Q(
                         imaging_request__isnull=False,
                         blood_test_request__isnull=True,
+                        released_to_user__isnull=True,
                     )
                     | models.Q(
                         imaging_request__isnull=True,
                         blood_test_request__isnull=False,
+                        released_to_user__isnull=True,
+                    )
+                    | models.Q(
+                        imaging_request__isnull=True,
+                        blood_test_request__isnull=True,
+                        released_to_user__isnull=False,
                     )
                 ),
-                name="approved_file_single_request_type",
+                name="approved_file_single_source",
+            ),
+            models.UniqueConstraint(
+                fields=["file", "released_to_user"],
+                condition=models.Q(released_to_user__isnull=False),
+                name="unique_manual_file_release",
             ),
         ]
 
@@ -525,6 +561,8 @@ class ApprovedFile(models.Model):
             return f"File {self.file.id} for imaging request {self.imaging_request.id}"
         if self.blood_test_request:
             return f"File {self.file.id} for blood test request {self.blood_test_request.id}"
+        if self.released_to_user:
+            return f"File {self.file.id} manually released to {self.released_to_user.username}"
         return f"File {self.file.id}"
 
     def save(self, *args: object, **kwargs: object) -> None:
@@ -533,13 +571,25 @@ class ApprovedFile(models.Model):
 
     def clean(self) -> None:
         """
-        Validate that exactly one request type is set.
+        Validate that exactly one source (imaging request, blood test request, or manual release)
+        is specified.
         """
-        if not self.imaging_request and not self.blood_test_request:
-            msg = "ApprovedFile must be associated with either an ImagingRequest or a BloodTestRequest."
+
+        sources_set = [
+            bool(self.imaging_request),
+            bool(self.blood_test_request),
+            bool(self.released_to_user),
+        ]
+
+        if sum(sources_set) == 0:
+            msg = (
+                "ApprovedFile must be associated with an ImagingRequest, a BloodTestRequest, "
+                "or be manually released to a student group."
+            )
             raise ValidationError(msg)
-        if self.imaging_request and self.blood_test_request:
-            msg = "ApprovedFile cannot be associated with both ImagingRequest and BloodTestRequest."
+
+        if sum(sources_set) > 1:
+            msg = "ApprovedFile cannot be associated with multiple sources simultaneously."
             raise ValidationError(msg)
 
 

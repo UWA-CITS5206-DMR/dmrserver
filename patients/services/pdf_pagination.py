@@ -111,6 +111,12 @@ class PdfAuthorizationService:
                 blood_test_request__status="completed",
             ).first()
 
+        if not approved_file:
+            approved_file = ApprovedFile.objects.filter(
+                file=file_instance,
+                released_to_user=user,
+            ).first()
+
         return approved_file.page_range if approved_file else None
 
 

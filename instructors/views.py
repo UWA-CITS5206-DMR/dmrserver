@@ -1,5 +1,6 @@
 from typing import Any, ClassVar
 
+from django.contrib.auth.models import User
 from django.db.models import QuerySet
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, viewsets
@@ -8,8 +9,9 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from core.context import ViewContext
+from core.context import Role, ViewContext
 from core.permissions import InstructorManagementPermission
+from core.serializers import UserSerializer
 from patients.models import Patient
 from student_groups.models import BloodTestRequest, ImagingRequest
 
@@ -222,3 +224,18 @@ class DashboardViewSet(viewsets.GenericViewSet):
             ).count(),
         }
         return Response(data)
+
+
+class StudentGroupViewSet(viewsets.ReadOnlyModelViewSet):
+    """Expose student group accounts to instructors for manual file releases."""
+
+    permission_classes: ClassVar[list[Any]] = [InstructorManagementPermission]
+    serializer_class = UserSerializer
+    pagination_class = None
+
+    def get_queryset(self) -> QuerySet:
+        return (
+            User.objects.filter(groups__name=Role.STUDENT.value)
+            .order_by("username")
+            .distinct()
+        )
