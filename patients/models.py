@@ -124,7 +124,9 @@ class File(models.Model):
 
     def clean(self) -> None:
         super().clean()
-        validate_pdf_for_pagination(self.file, self.requires_pagination)
+        validate_pdf_for_pagination(
+            file=self.file, requires_pagination=self.requires_pagination
+        )
 
     @staticmethod
     def upload_to(instance: object, filename: str) -> str:
