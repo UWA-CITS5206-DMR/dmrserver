@@ -5,9 +5,9 @@ This module contains configuration settings and utilities for login testing.
 """
 
 import os
+
 import django
 from django.conf import settings
-
 
 # Test Configuration
 TEST_CONFIG = {
@@ -74,7 +74,7 @@ TEST_CONFIG = {
 }
 
 
-def setup_django_for_testing():
+def setup_django_for_testing() -> None:
     """Setup Django environment for testing"""
     if not settings.configured:
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", "dmr.settings")
@@ -86,7 +86,7 @@ def get_test_user_credentials(role="doctor"):
     return TEST_CONFIG["TEST_USERS"].get(role, TEST_CONFIG["TEST_USERS"]["doctor"])
 
 
-def get_endpoint_url(endpoint_name, base_url=None):
+def get_endpoint_url(endpoint_name, base_url=None) -> str:
     """Get full URL for an endpoint"""
     if base_url is None:
         base_url = TEST_CONFIG["BASE_URL"]
@@ -99,18 +99,18 @@ def get_test_data(data_type):
     """Get test data by type"""
     if data_type == "patient":
         return TEST_CONFIG["TEST_PATIENT"].copy()
-    elif data_type in TEST_CONFIG["TEST_OBSERVATIONS"]:
+    if data_type in TEST_CONFIG["TEST_OBSERVATIONS"]:
         return TEST_CONFIG["TEST_OBSERVATIONS"][data_type].copy()
-    else:
-        return {}
+    return {}
 
 
 class TestDataManager:
     """Manages test data creation and cleanup"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         setup_django_for_testing()
         from django.contrib.auth.models import User
+
         from patients.models import Patient
 
         self.User = User
@@ -120,7 +120,7 @@ class TestDataManager:
 
     def create_test_users(self):
         """Create all test users"""
-        for role, user_data in TEST_CONFIG["TEST_USERS"].items():
+        for role in TEST_CONFIG["TEST_USERS"]:
             user = self.create_test_user(role)
             if user:
                 self.created_users.append(user)
@@ -132,7 +132,6 @@ class TestDataManager:
 
         # Check if user already exists
         if self.User.objects.filter(username=user_data["username"]).exists():
-            print(f"ℹ️ User already exists: {user_data['username']}")
             return self.User.objects.get(username=user_data["username"])
 
         # Create new user
@@ -151,7 +150,6 @@ class TestDataManager:
             user.is_superuser = True
         user.save()
 
-        print(f"✅ Created test user: {user.username} ({role})")
         return user
 
     def create_test_patient(self):
@@ -160,45 +158,37 @@ class TestDataManager:
 
         # Check if patient already exists
         if self.Patient.objects.filter(email=patient_data["email"]).exists():
-            print("ℹ️ Test patient already exists")
             return self.Patient.objects.get(email=patient_data["email"])
 
         # Create new patient
         patient = self.Patient.objects.create(**patient_data)
         self.created_patients.append(patient)
 
-        print(f"✅ Created test patient: {patient.first_name} {patient.last_name}")
         return patient
 
-    def cleanup_test_data(self):
+    def cleanup_test_data(self) -> None:
         """Clean up created test data"""
         # Note: Be careful with cleanup in production!
         for user in self.created_users:
             if user.username.startswith("test_"):
                 user.delete()
-                print(f"🧹 Cleaned up user: {user.username}")
 
         for patient in self.created_patients:
             if "test" in patient.email.lower():
                 patient.delete()
-                print(f"🧹 Cleaned up patient: {patient.email}")
 
 
 def run_test_setup():
     """Run complete test setup"""
-    print("🔧 Setting up test environment...")
 
     manager = TestDataManager()
 
     # Create test users
-    users = manager.create_test_users()
-    print(f"👥 Created {len(users)} test users")
+    manager.create_test_users()
 
     # Create test patient
-    patient = manager.create_test_patient()
-    print(f"🏥 Created test patient: {patient.id}")
+    manager.create_test_patient()
 
-    print("✅ Test setup completed")
     return manager
 
 

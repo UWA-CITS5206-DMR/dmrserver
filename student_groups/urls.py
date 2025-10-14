@@ -2,25 +2,27 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    NoteViewSet,
     BloodPressureViewSet,
-    HeartRateViewSet,
-    BodyTemperatureViewSet,
-    RespiratoryRateViewSet,
     BloodSugarViewSet,
+    BloodTestRequestViewSet,
+    BodyTemperatureViewSet,
+    DischargeSummaryViewSet,
+    HeartRateViewSet,
+    ImagingRequestViewSet,
+    MedicationOrderViewSet,
+    NoteViewSet,
+    ObservationsViewSet,
     OxygenSaturationViewSet,
     PainScoreViewSet,
-    ObservationsViewSet,
-    ImagingRequestViewSet,
-    BloodTestRequestViewSet,
-    MedicationOrderViewSet,
-    DischargeSummaryViewSet,
+    RespiratoryRateViewSet,
 )
 
 router = DefaultRouter()
 router.register(r"notes", NoteViewSet, basename="note")
 router.register(
-    r"observations/blood-pressures", BloodPressureViewSet, basename="blood-pressure"
+    r"observations/blood-pressures",
+    BloodPressureViewSet,
+    basename="blood-pressure",
 )
 router.register(r"observations/heart-rates", HeartRateViewSet, basename="heart-rate")
 router.register(
@@ -51,13 +53,19 @@ router.register(
 router.register(r"observations", ObservationsViewSet, basename="observation")
 router.register(r"imaging-requests", ImagingRequestViewSet, basename="imaging-request")
 router.register(
-    r"blood-test-requests", BloodTestRequestViewSet, basename="blood-test-request"
+    r"blood-test-requests",
+    BloodTestRequestViewSet,
+    basename="blood-test-request",
 )
 router.register(
-    r"medication-orders", MedicationOrderViewSet, basename="medication-order"
+    r"medication-orders",
+    MedicationOrderViewSet,
+    basename="medication-order",
 )
 router.register(
-    r"discharge-summaries", DischargeSummaryViewSet, basename="discharge-summary"
+    r"discharge-summaries",
+    DischargeSummaryViewSet,
+    basename="discharge-summary",
 )
 
 urlpatterns = [

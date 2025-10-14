@@ -1,6 +1,6 @@
 from rest_framework_nested import routers
 
-from .views import PatientViewSet, FileViewSet
+from .views import FileViewSet, PatientViewSet
 
 router = routers.SimpleRouter()
 router.register(r"patients", PatientViewSet)

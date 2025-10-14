@@ -7,31 +7,33 @@ once per class, which keeps the suite fast and avoids repeated boilerplate.
 
 import tempfile
 import uuid
-from django.contrib.auth.models import User, Group
+from unittest.mock import Mock
+
+from django.contrib.auth.models import Group, User
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
-from unittest.mock import Mock
 
-from core.permissions import get_user_role, FileAccessPermission
 from core.context import Role
-from patients.models import Patient, File
-from student_groups.models import ImagingRequest, ApprovedFile
+from core.permissions import FileAccessPermission, get_user_role
+from patients.models import File, Patient
+from student_groups.models import ApprovedFile, ImagingRequest
 
 
 class RoleFixtureMixin:
     """Reusable helpers for creating role-aware users and patients."""
 
-    password = "test123"
+    # Intentionally using a fixed test password for fixtures. Marked to ignore S105.
+    DEFAULT_PASSWORD = "test123"  # noqa: S105
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         super().setUpTestData()
         cls.role_groups = {
             Role.ADMIN.value: Group.objects.get_or_create(name=Role.ADMIN.value)[0],
             Role.INSTRUCTOR.value: Group.objects.get_or_create(
-                name=Role.INSTRUCTOR.value
+                name=Role.INSTRUCTOR.value,
             )[0],
             Role.STUDENT.value: Group.objects.get_or_create(name=Role.STUDENT.value)[0],
         }
@@ -42,7 +44,7 @@ class RoleFixtureMixin:
 
         user = User.objects.create_user(
             username=username,
-            password=extra.pop("password", cls.password),
+            password=extra.pop("password", cls.DEFAULT_PASSWORD),
             **extra,
         )
         if role:
@@ -73,52 +75,52 @@ class CoreUtilsTest(RoleFixtureMixin, TestCase):
     """Test core utility functions"""
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         super().setUpTestData()
         cls.admin_user = cls.create_user("admin", Role.ADMIN)
         cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
         cls.student_user = cls.create_user("student", Role.STUDENT)
         cls.no_role_user = cls.create_user("norole")
 
-    def test_get_user_role_unauthenticated(self):
+    def test_get_user_role_unauthenticated(self) -> None:
         """Test that an unauthenticated user has no role."""
         mock_user = Mock()
         mock_user.is_authenticated = False
-        self.assertIsNone(get_user_role(mock_user))
-        self.assertIsNone(get_user_role(None))
+        assert get_user_role(mock_user) is None
+        assert get_user_role(None) is None
 
-    def test_get_user_role(self):
+    def test_get_user_role(self) -> None:
         """Test role detection for different users."""
-        self.assertEqual(get_user_role(self.admin_user), Role.ADMIN.value)
-        self.assertEqual(get_user_role(self.instructor_user), Role.INSTRUCTOR.value)
-        self.assertEqual(get_user_role(self.student_user), Role.STUDENT.value)
-        self.assertIsNone(get_user_role(self.no_role_user))
+        assert get_user_role(self.admin_user) == Role.ADMIN.value
+        assert get_user_role(self.instructor_user) == Role.INSTRUCTOR.value
+        assert get_user_role(self.student_user) == Role.STUDENT.value
+        assert get_user_role(self.no_role_user) is None
 
-    def test_superuser_is_admin(self):
+    def test_superuser_is_admin(self) -> None:
         """Test that a superuser is automatically considered an admin."""
         superuser = User.objects.create_superuser(username="super", password="test123")
-        self.assertEqual(get_user_role(superuser), Role.ADMIN.value)
+        assert get_user_role(superuser) == Role.ADMIN.value
 
 
 class AuthenticationTest(RoleFixtureMixin, APITestCase):
     """Test multi-device authentication with independent logout"""
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         super().setUpTestData()
         cls.test_user = cls.create_user("testuser", Role.STUDENT)
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = APIClient()
 
-    def test_login_creates_new_token(self):
+    def test_login_creates_new_token(self) -> None:
         """Test that each login creates a new token for multi-device support"""
         # First login
         response1 = self.client.post(
             reverse("auth-login"),
             {"username": "testuser", "password": "test123"},
         )
-        self.assertEqual(response1.status_code, status.HTTP_200_OK)
+        assert response1.status_code == status.HTTP_200_OK
         token1 = response1.data["token"]
 
         # Second login (simulating a different device)
@@ -126,13 +128,13 @@ class AuthenticationTest(RoleFixtureMixin, APITestCase):
             reverse("auth-login"),
             {"username": "testuser", "password": "test123"},
         )
-        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+        assert response2.status_code == status.HTTP_200_OK
         token2 = response2.data["token"]
 
         # Tokens should be different
-        self.assertNotEqual(token1, token2)
+        assert token1 != token2
 
-    def test_multiple_tokens_work_simultaneously(self):
+    def test_multiple_tokens_work_simultaneously(self) -> None:
         """Test that multiple tokens for the same user can be used simultaneously"""
         # Login from device 1
         response1 = self.client.post(
@@ -151,13 +153,13 @@ class AuthenticationTest(RoleFixtureMixin, APITestCase):
         # Both tokens should work
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token1}")
         profile1 = self.client.get(reverse("auth-profile"))
-        self.assertEqual(profile1.status_code, status.HTTP_200_OK)
+        assert profile1.status_code == status.HTTP_200_OK
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token2}")
         profile2 = self.client.get(reverse("auth-profile"))
-        self.assertEqual(profile2.status_code, status.HTTP_200_OK)
+        assert profile2.status_code == status.HTTP_200_OK
 
-    def test_logout_only_affects_current_token(self):
+    def test_logout_only_affects_current_token(self) -> None:
         """Test that logging out from one device doesn't affect other devices"""
         # Login from device 1
         response1 = self.client.post(
@@ -176,27 +178,27 @@ class AuthenticationTest(RoleFixtureMixin, APITestCase):
         # Logout from device 1
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token1}")
         logout_response = self.client.post(reverse("auth-logout"))
-        self.assertEqual(logout_response.status_code, status.HTTP_200_OK)
+        assert logout_response.status_code == status.HTTP_200_OK
 
         # Token1 should no longer work
         profile1 = self.client.get(reverse("auth-profile"))
-        self.assertEqual(profile1.status_code, status.HTTP_401_UNAUTHORIZED)
+        assert profile1.status_code == status.HTTP_401_UNAUTHORIZED
 
         # Token2 should still work
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token2}")
         profile2 = self.client.get(reverse("auth-profile"))
-        self.assertEqual(profile2.status_code, status.HTTP_200_OK)
+        assert profile2.status_code == status.HTTP_200_OK
 
-    def test_login_returns_user_info(self):
+    def test_login_returns_user_info(self) -> None:
         """Test that login returns both token and user information"""
         response = self.client.post(
             reverse("auth-login"),
             {"username": "testuser", "password": "test123"},
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("token", response.data)
-        self.assertIn("user", response.data)
-        self.assertEqual(response.data["user"]["username"], "testuser")
+        assert response.status_code == status.HTTP_200_OK
+        assert "token" in response.data
+        assert "user" in response.data
+        assert response.data["user"]["username"] == "testuser"
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -204,7 +206,7 @@ class FilePermissionsTest(RoleFixtureMixin, TestCase):
     """Test file access permissions with approval-based logic"""
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         super().setUpTestData()
         # Create role-aware users once per class
         cls.admin_user = cls.create_user("admin", Role.ADMIN)
@@ -215,52 +217,46 @@ class FilePermissionsTest(RoleFixtureMixin, TestCase):
         cls.patient = cls.create_patient()
         cls.file = File.objects.create(file="test_file.pdf", patient=cls.patient)
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         # Lightweight per-test mocks
         self.mock_request = Mock()
         self.mock_view = Mock()
 
-    def test_admin_can_access_file(self):
+    def test_admin_can_access_file(self) -> None:
         """Test that an admin has full access to files."""
         permission = FileAccessPermission()
         self.mock_request.user = self.admin_user
         self.mock_request.method = "GET"
 
         # Admin should have access
-        self.assertTrue(
-            permission.has_object_permission(
-                self.mock_request, self.mock_view, self.file
-            )
+        assert permission.has_object_permission(
+            self.mock_request, self.mock_view, self.file
         )
 
-    def test_instructor_can_access_file(self):
+    def test_instructor_can_access_file(self) -> None:
         """Test that an instructor has full access to files."""
         permission = FileAccessPermission()
         self.mock_request.user = self.instructor_user
         self.mock_request.method = "GET"
 
         # Instructor should have access
-        self.assertTrue(
-            permission.has_object_permission(
-                self.mock_request, self.mock_view, self.file
-            )
+        assert permission.has_object_permission(
+            self.mock_request, self.mock_view, self.file
         )
 
-    def test_student_cannot_access_file_without_approval(self):
+    def test_student_cannot_access_file_without_approval(self) -> None:
         """Test that a student cannot access a file without an approved request."""
         permission = FileAccessPermission()
         self.mock_request.user = self.student_user
         self.mock_request.method = "GET"
 
         # Student should not have access without approval
-        self.assertFalse(
-            permission.has_object_permission(
-                self.mock_request, self.mock_view, self.file
-            )
+        assert not permission.has_object_permission(
+            self.mock_request, self.mock_view, self.file
         )
 
-    def test_student_can_access_file_with_approval(self):
+    def test_student_can_access_file_with_approval(self) -> None:
         """Test that a student can access a file if their request was approved."""
         permission = FileAccessPermission()
         self.mock_request.user = self.student_user
@@ -285,13 +281,11 @@ class FilePermissionsTest(RoleFixtureMixin, TestCase):
         )
 
         # Student should now have access
-        self.assertTrue(
-            permission.has_object_permission(
-                self.mock_request, self.mock_view, self.file
-            )
+        assert permission.has_object_permission(
+            self.mock_request, self.mock_view, self.file
         )
 
-    def test_instructor_safe_methods_allowed(self):
+    def test_instructor_safe_methods_allowed(self) -> None:
         """Instructors should have permission for safe HTTP methods."""
 
         permission = FileAccessPermission()
@@ -299,11 +293,9 @@ class FilePermissionsTest(RoleFixtureMixin, TestCase):
 
         for method in ["GET", "HEAD", "OPTIONS"]:
             self.mock_request.method = method
-            self.assertTrue(
-                permission.has_permission(self.mock_request, self.mock_view)
-            )
+            assert permission.has_permission(self.mock_request, self.mock_view)
 
-    def test_instructor_write_methods_denied_by_permission_class(self):
+    def test_instructor_write_methods_denied_by_permission_class(self) -> None:
         """Instructor write operations require the view to allow them explicitly."""
 
         permission = FileAccessPermission()
@@ -311,11 +303,9 @@ class FilePermissionsTest(RoleFixtureMixin, TestCase):
 
         for method in ["POST", "PUT", "PATCH", "DELETE"]:
             self.mock_request.method = method
-            self.assertFalse(
-                permission.has_permission(self.mock_request, self.mock_view)
-            )
+            assert not permission.has_permission(self.mock_request, self.mock_view)
 
-    def test_student_cannot_manage_files(self):
+    def test_student_cannot_manage_files(self) -> None:
         """Test that a student cannot create, update, or delete files."""
         permission = FileAccessPermission()
         self.mock_request.user = self.student_user
@@ -323,16 +313,14 @@ class FilePermissionsTest(RoleFixtureMixin, TestCase):
         # Test write methods - should be denied
         for method in ["POST", "PUT", "PATCH", "DELETE"]:
             self.mock_request.method = method
-            self.assertFalse(
-                permission.has_permission(self.mock_request, self.mock_view)
-            )
+            assert not permission.has_permission(self.mock_request, self.mock_view)
 
 
 class PatientRBACTest(RoleFixtureMixin, APITestCase):
     """Test RBAC for Patient operations"""
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         super().setUpTestData()
         # Create users and patient once per class to avoid repeated DB writes
         cls.admin_user = cls.create_user("admin", Role.ADMIN)
@@ -341,23 +329,23 @@ class PatientRBACTest(RoleFixtureMixin, APITestCase):
 
         cls.patient = cls.create_patient(bed="Bed 2")
 
-    def setUp(self):
+    def setUp(self) -> None:
         # Keep a fresh API client per test for authentication handling
         self.client = APIClient()
 
-    def test_student_can_read_patients(self):
+    def test_student_can_read_patients(self) -> None:
         """Test that students can read patient data"""
         self.client.force_authenticate(user=self.student_user)
 
         # Can list patients
         response = self.client.get(reverse("patient-list"))
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Can retrieve specific patient
         response = self.client.get(reverse("patient-detail", args=[self.patient.id]))
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
-    def test_instructor_can_modify_patients(self):
+    def test_instructor_can_modify_patients(self) -> None:
         """Test that instructors can modify patient data"""
         self.client.force_authenticate(user=self.instructor_user)
 
@@ -373,18 +361,19 @@ class PatientRBACTest(RoleFixtureMixin, APITestCase):
             "phone_number": "+61800000001",
         }
         response = self.client.post(reverse("patient-list"), create_payload)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
         update_payload = {"first_name": "Updated"}
         response = self.client.patch(
-            reverse("patient-detail", args=[self.patient.id]), update_payload
+            reverse("patient-detail", args=[self.patient.id]),
+            update_payload,
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         self.patient.refresh_from_db()
-        self.assertEqual(self.patient.first_name, "Updated")
+        assert self.patient.first_name == "Updated"
 
-    def test_admin_can_modify_patients(self):
+    def test_admin_can_modify_patients(self) -> None:
         """Test that admin users can modify patient data"""
         self.client.force_authenticate(user=self.admin_user)
 
@@ -400,23 +389,24 @@ class PatientRBACTest(RoleFixtureMixin, APITestCase):
             "phone_number": "+61800000002",
         }
         response = self.client.post(reverse("patient-list"), create_payload)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
         update_payload = {"first_name": "Updated Admin"}
         response = self.client.patch(
-            reverse("patient-detail", args=[self.patient.id]), update_payload
+            reverse("patient-detail", args=[self.patient.id]),
+            update_payload,
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         self.patient.refresh_from_db()
-        self.assertEqual(self.patient.first_name, "Updated Admin")
+        assert self.patient.first_name == "Updated Admin"
 
 
 class RequestRBACTest(RoleFixtureMixin, APITestCase):
     """Test RBAC for new request types (ImagingRequest, etc.)"""
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         super().setUpTestData()
         cls.admin_user = cls.create_user("admin", Role.ADMIN)
         cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
@@ -424,11 +414,11 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
 
         cls.patient = cls.create_patient(bed="Bed 5")
 
-    def setUp(self):
+    def setUp(self) -> None:
         # Fresh API client per test
         self.client = APIClient()
 
-    def test_student_can_create_imaging_request(self):
+    def test_student_can_create_imaging_request(self) -> None:
         """Test that students can create imaging requests"""
         self.client.force_authenticate(user=self.student_user)
         data = {
@@ -441,11 +431,11 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
             "role": "Student",
         }
         response = self.client.post("/api/student-groups/imaging-requests/", data)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["test_type"], "X-ray")
-        self.assertEqual(response.data["name"], "Test Request")
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["test_type"] == "X-ray"
+        assert response.data["name"] == "Test Request"
 
-    def test_instructor_can_manage_imaging_requests(self):
+    def test_instructor_can_manage_imaging_requests(self) -> None:
         """Test that instructors can manage imaging requests"""
         self.client.force_authenticate(user=self.instructor_user)
 
@@ -463,10 +453,10 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
         )
 
         response = self.client.get("/api/instructors/imaging-requests/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(response.data["results"]), 1)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) >= 1
 
-    def test_admin_has_full_access_to_requests(self):
+    def test_admin_has_full_access_to_requests(self) -> None:
         """Test that admin users have full access to all request types"""
         self.client.force_authenticate(user=self.admin_user)
 
@@ -485,5 +475,5 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
 
         # Admin should be able to access through any endpoint that exists
         # For now, just verify the request was created successfully
-        self.assertEqual(imaging_request.user, self.student_user)
-        self.assertEqual(imaging_request.status, "pending")
+        assert imaging_request.user == self.student_user
+        assert imaging_request.status == "pending"

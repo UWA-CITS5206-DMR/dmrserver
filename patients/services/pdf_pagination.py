@@ -7,7 +7,7 @@ making the code more testable and maintainable.
 """
 
 import io
-from typing import Optional, List
+
 from django.http import HttpResponse, HttpResponseForbidden
 from PyPDF2 import PdfReader, PdfWriter
 
@@ -27,7 +27,7 @@ class PdfPageRangeParser:
     """
 
     @staticmethod
-    def parse(range_str: Optional[str]) -> List[int]:
+    def parse(range_str: str | None) -> list[int]:
         """
         Parse page range string into a list of page numbers.
 
@@ -49,8 +49,8 @@ class PdfPageRangeParser:
             return []
 
         pages = []
-        for part in range_str.split(","):
-            part = part.strip()
+        for segment in range_str.split(","):
+            part = segment.strip()
             if "-" in part:
                 start, end = map(int, part.split("-"))
                 pages.extend(range(start, end + 1))
@@ -69,7 +69,7 @@ class PdfAuthorizationService:
     """
 
     @staticmethod
-    def get_authorized_page_range(file_instance, user) -> Optional[str]:
+    def get_authorized_page_range(file_instance: object, user: object) -> str | None:
         """
         Get the authorized page range for a user accessing a file.
 
@@ -120,13 +120,16 @@ class PdfPaginationService:
     The view layer should handle role checks and determine when to call this service.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the PDF pagination service."""
         self.auth_service = PdfAuthorizationService()
         self.parser = PdfPageRangeParser()
 
     def serve_paginated_pdf(
-        self, file_instance, user, page_range_query: str
+        self,
+        file_instance: object,
+        user: object,
+        page_range_query: str,
     ) -> HttpResponse:
         """
         Serve specific pages of a PDF file based on user authorization.
@@ -149,13 +152,14 @@ class PdfPaginationService:
         try:
             user_role = get_user_role(user)
             authorized_range = self.auth_service.get_authorized_page_range(
-                file_instance, user
+                file_instance,
+                user,
             )
 
             # Check if student has any access to this file
             if authorized_range is None and user_role == Role.STUDENT.value:
                 return HttpResponseForbidden(
-                    "No authorized page range found for this file."
+                    "No authorized page range found for this file.",
                 )
 
             # Parse requested pages
@@ -169,17 +173,20 @@ class PdfPaginationService:
 
             # Validate and extract pages
             return self._process_pdf_pages(
-                file_instance, requested_pages, authorized_range, user_role
+                file_instance,
+                requested_pages,
+                authorized_range,
+                user_role,
             )
 
-        except Exception as e:
-            return HttpResponseForbidden(f"Error processing PDF: {str(e)}")
+        except Exception as exc:  # noqa: BLE001 - fallback to forbid on unexpected PDF processing errors
+            return HttpResponseForbidden(f"Error processing PDF: {exc!s}")
 
     def _process_pdf_pages(
         self,
-        file_instance,
-        requested_pages: List[int],
-        authorized_range: Optional[str],
+        file_instance: object,
+        requested_pages: list[int],
+        authorized_range: str | None,
         user_role: str,
     ) -> HttpResponse:
         """
@@ -200,23 +207,28 @@ class PdfPaginationService:
 
             # Validate that all requested pages exist in the PDF
             validation_error = self._validate_pages(
-                requested_pages, total_pages, authorized_range, user_role
+                requested_pages,
+                total_pages,
+                authorized_range,
+                user_role,
             )
             if validation_error:
                 return validation_error
 
             # Extract the requested pages
             return self._extract_and_respond(
-                reader, requested_pages, file_instance.display_name
+                reader,
+                requested_pages,
+                file_instance.display_name,
             )
 
     def _validate_pages(
         self,
-        requested_pages: List[int],
+        requested_pages: list[int],
         total_pages: int,
-        authorized_range: Optional[str],
+        authorized_range: str | None,
         user_role: str,
-    ) -> Optional[HttpResponseForbidden]:
+    ) -> HttpResponseForbidden | None:
         """
         Validate that requested pages exist and are authorized.
 
@@ -236,8 +248,9 @@ class PdfPaginationService:
         if invalid_pages:
             return HttpResponseForbidden(
                 "Invalid page range. Valid pages: 1-{}. Invalid pages requested: {}".format(
-                    total_pages, ", ".join(map(str, invalid_pages))
-                )
+                    total_pages,
+                    ", ".join(map(str, invalid_pages)),
+                ),
             )
 
         # For students, verify requested pages are within authorized range
@@ -249,14 +262,18 @@ class PdfPaginationService:
             if unauthorized_pages:
                 return HttpResponseForbidden(
                     "Requested pages are not authorized. Your approved range is: {}. Unauthorized pages: {}".format(
-                        authorized_range, ", ".join(map(str, unauthorized_pages))
-                    )
+                        authorized_range,
+                        ", ".join(map(str, unauthorized_pages)),
+                    ),
                 )
 
         return None
 
     def _extract_and_respond(
-        self, reader: PdfReader, requested_pages: List[int], display_name: str
+        self,
+        reader: PdfReader,
+        requested_pages: list[int],
+        display_name: str,
     ) -> HttpResponse:
         """
         Extract pages from PDF and create HTTP response.
@@ -279,7 +296,8 @@ class PdfPaginationService:
         output_buffer.seek(0)
 
         response = HttpResponse(
-            output_buffer.getvalue(), content_type="application/pdf"
+            output_buffer.getvalue(),
+            content_type="application/pdf",
         )
         filename = f"{display_name}_pages_{'-'.join(map(str, requested_pages))}.pdf"
         response["Content-Disposition"] = f'inline; filename="{filename}"'

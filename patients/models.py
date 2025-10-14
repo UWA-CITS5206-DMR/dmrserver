@@ -1,8 +1,10 @@
-import os
 import uuid
-from datetime import datetime
-from django.db import models
+from pathlib import Path
+from typing import ClassVar
+
 from django.core.exceptions import ValidationError
+from django.db import models
+from django.utils import timezone
 
 
 class Patient(models.Model):
@@ -23,13 +25,17 @@ class Patient(models.Model):
         help_text="Patient's gender",
     )
     mrn = models.CharField(
-        max_length=50, unique=True, verbose_name="Medical Record Number (MRN)"
+        max_length=50,
+        unique=True,
+        verbose_name="Medical Record Number (MRN)",
     )
     ward = models.CharField(max_length=100, verbose_name="Ward")
     bed = models.CharField(max_length=20, verbose_name="Bed")
     email = models.EmailField(unique=True, verbose_name="Email Address")
     phone_number = models.CharField(
-        max_length=15, blank=True, verbose_name="Phone Number"
+        max_length=15,
+        blank=True,
+        verbose_name="Phone Number",
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
@@ -37,22 +43,26 @@ class Patient(models.Model):
     class Meta:
         verbose_name = "Patient"
         verbose_name_plural = "Patients"
-        ordering = ["last_name", "first_name"]
+        ordering: ClassVar[list[str]] = ["last_name", "first_name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.first_name} {self.last_name}"
 
 
-def validate_pdf_for_pagination(file, requires_pagination):
+def validate_pdf_for_pagination(
+    *, file: object | None = None, requires_pagination: bool = False
+) -> None:
     # Only validate when a file is present and pagination is requested
     if not requires_pagination:
         return
     if not file:
         # No file provided, nothing to validate here (other validators can enforce presence)
         return
-    ext = os.path.splitext(file.name)[1]
+
+    ext = Path(getattr(file, "name", "")).suffix
     if ext.lower() != ".pdf":
-        raise ValidationError("Only PDF files can be marked for pagination.")
+        msg = "Only PDF files can be marked for pagination."
+        raise ValidationError(msg)
 
 
 class File(models.Model):
@@ -65,13 +75,21 @@ class File(models.Model):
         OTHER = "Other", "Other"
 
     id = models.UUIDField(
-        primary_key=True, default=uuid.uuid4, editable=False, verbose_name="File ID"
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        verbose_name="File ID",
     )
     patient = models.ForeignKey(
-        Patient, on_delete=models.CASCADE, related_name="files", verbose_name="Patient"
+        Patient,
+        on_delete=models.CASCADE,
+        related_name="files",
+        verbose_name="Patient",
     )
     display_name = models.CharField(
-        max_length=255, editable=False, verbose_name="Display name"
+        max_length=255,
+        editable=False,
+        verbose_name="Display name",
     )
     category = models.CharField(
         max_length=20,
@@ -90,39 +108,39 @@ class File(models.Model):
     class Meta:
         verbose_name = "File"
         verbose_name_plural = "Files"
-        ordering = ["-created_at"]
+        ordering: ClassVar[list[str]] = ["-created_at"]
 
-    def clean(self):
-        super().clean()
-        validate_pdf_for_pagination(self.file, self.requires_pagination)
+    def __str__(self) -> str:
+        return self.display_name or str(self.id)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: object, **kwargs: object) -> None:
         """
         Override save method to automatically set display_name.
         If display_name is not set and file is uploaded, extract filename.
         """
         if not self.display_name and self.file:
             # Extract original filename from file path
-            self.display_name = os.path.basename(self.file.name)
+            self.display_name = Path(self.file.name).name
         super().save(*args, **kwargs)
 
+    def clean(self) -> None:
+        super().clean()
+        validate_pdf_for_pagination(self.file, self.requires_pagination)
+
     @staticmethod
-    def upload_to(instance, filename):
-        today = datetime.today().strftime("%Y/%m/%d")
+    def upload_to(instance: object, filename: str) -> str:
+        today = timezone.now().strftime("%Y/%m/%d")
         ext = filename.split(".")[-1]
         # Ensure we always have an identifier to use (instance.id may be None in some cases)
         file_id = getattr(instance, "id", None) or uuid.uuid4()
         unique_filename = f"{file_id}.{ext}"
-        return os.path.join("uploads", today, unique_filename)
+        return str(Path("uploads") / today / unique_filename)
 
-    def get_full_path(self):
+    def get_full_path(self) -> str | None:
         # self.file.path is already an absolute filesystem path when using
         # the default FileSystemStorage. Return it directly for correctness.
         return getattr(self.file, "path", None)
 
-    def delete(self, *args, **kwargs):
+    def delete(self, *args: object, **kwargs: object) -> None:
         self.file.delete(save=False)
         super().delete(*args, **kwargs)
-
-    def __str__(self):
-        return self.display_name or str(self.id)

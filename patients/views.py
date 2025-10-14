@@ -1,23 +1,27 @@
 import mimetypes
+from typing import ClassVar
 from wsgiref.util import FileWrapper
-from django.http import Http404, HttpResponse
-from django.db.models import Q
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, OpenApiExample
 
+from django.db.models import Q, QuerySet
+from django.http import Http404, HttpResponse
+from drf_spectacular.utils import OpenApiExample, extend_schema
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.request import Request
+from rest_framework.response import Response
+
+from core.context import Role
 from core.permissions import (
-    PatientPermission,
     FileAccessPermission,
-    FileManagementPermission,
     FileListPermission,
+    FileManagementPermission,
+    PatientPermission,
     get_user_role,
 )
-from core.context import Role
 from student_groups.models import ApprovedFile
-from .models import Patient, File
-from .serializers import PatientSerializer, FileSerializer
+
+from .models import File, Patient
+from .serializers import FileSerializer, PatientSerializer
 from .services import PdfPaginationService
 
 
@@ -32,7 +36,7 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     queryset = Patient.objects.all()
     serializer_class = PatientSerializer
-    permission_classes = [PatientPermission]
+    permission_classes: ClassVar[list[object]] = [PatientPermission]
 
     @extend_schema(
         summary="Upload file for patient (Legacy)",
@@ -63,7 +67,9 @@ class PatientViewSet(viewsets.ModelViewSet):
         ],
     )
     @action(detail=True, methods=["post"], serializer_class=FileSerializer)
-    def upload_file(self, request, pk=None):
+    def upload_file(
+        self, request: Request, *_args: object, **_kwargs: object
+    ) -> Response:
         """
         Upload a file for a specific patient.
 
@@ -74,11 +80,12 @@ class PatientViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(
-            patient=patient, display_name=serializer.validated_data["file"].name
+            patient=patient,
+            display_name=serializer.validated_data["file"].name,
         )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: object) -> None:
         serializer.save()
 
 
@@ -114,9 +121,9 @@ class FileViewSet(viewsets.ModelViewSet):
 
     queryset = File.objects.all()
     serializer_class = FileSerializer
-    permission_classes = [FileManagementPermission]
+    permission_classes: ClassVar[list[object]] = [FileManagementPermission]
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[object]:
         """
         Use different permissions for list vs other actions.
 
@@ -128,7 +135,7 @@ class FileViewSet(viewsets.ModelViewSet):
             return [FileListPermission()]
         return super().get_permissions()
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         """
         Filter files by patient_pk from the nested route and user role.
 
@@ -153,12 +160,12 @@ class FileViewSet(viewsets.ModelViewSet):
                     | Q(
                         blood_test_request__user=self.request.user,
                         blood_test_request__status="completed",
-                    )
+                    ),
                 ).values_list("file_id", flat=True)
 
                 # Filter: Admission category OR in approved files
                 base_queryset = base_queryset.filter(
-                    Q(category=File.Category.ADMISSION) | Q(id__in=approved_file_ids)
+                    Q(category=File.Category.ADMISSION) | Q(id__in=approved_file_ids),
                 ).distinct()
 
         return base_queryset
@@ -174,7 +181,7 @@ class FileViewSet(viewsets.ModelViewSet):
         ),
         responses={200: FileSerializer(many=True)},
     )
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
         return super().list(request, *args, **kwargs)
 
     @extend_schema(
@@ -208,7 +215,7 @@ class FileViewSet(viewsets.ModelViewSet):
             ),
         ],
     )
-    def create(self, request, *args, **kwargs):
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
         return super().create(request, *args, **kwargs)
 
     @extend_schema(
@@ -217,7 +224,7 @@ class FileViewSet(viewsets.ModelViewSet):
         "Only accessible by instructors and admins.",
         responses={200: FileSerializer},
     )
-    def retrieve(self, request, *args, **kwargs):
+    def retrieve(self, request: Request, *args: object, **kwargs: object) -> Response:
         return super().retrieve(request, *args, **kwargs)
 
     @extend_schema(
@@ -228,7 +235,7 @@ class FileViewSet(viewsets.ModelViewSet):
         request=FileSerializer,
         responses={200: FileSerializer},
     )
-    def update(self, request, *args, **kwargs):
+    def update(self, request: Request, *args: object, **kwargs: object) -> Response:
         return super().update(request, *args, **kwargs)
 
     @extend_schema(
@@ -238,7 +245,9 @@ class FileViewSet(viewsets.ModelViewSet):
         request=FileSerializer,
         responses={200: FileSerializer},
     )
-    def partial_update(self, request, *args, **kwargs):
+    def partial_update(
+        self, request: Request, *args: object, **kwargs: object
+    ) -> Response:
         return super().partial_update(request, *args, **kwargs)
 
     @extend_schema(
@@ -248,10 +257,10 @@ class FileViewSet(viewsets.ModelViewSet):
         "Only accessible by instructors and admins.",
         responses={204: None},
     )
-    def destroy(self, request, *args, **kwargs):
+    def destroy(self, request: Request, *args: object, **kwargs: object) -> Response:
         return super().destroy(request, *args, **kwargs)
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: object) -> None:
         """
         Override perform_create to automatically set the patient from the URL.
         The patient_pk comes from the nested route.
@@ -281,7 +290,9 @@ class FileViewSet(viewsets.ModelViewSet):
         ),
     )
     @action(detail=True, methods=["get"], permission_classes=[FileAccessPermission])
-    def view(self, request, pk=None, patient_pk=None):
+    def view(
+        self, request: Request, *_args: object, **_kwargs: object
+    ) -> HttpResponse | Response:
         """
         View file content with pagination support for PDFs.
 
@@ -306,21 +317,25 @@ class FileViewSet(viewsets.ModelViewSet):
             # Use pagination service for page extraction
             pdf_service = PdfPaginationService()
             return pdf_service.serve_paginated_pdf(
-                file_instance, request.user, page_range_query
+                file_instance,
+                request.user,
+                page_range_query,
             )
 
         # For non-paginated files, serve the whole file
         return self._serve_whole_file(file_instance)
 
-    def _serve_whole_file(self, file_instance):
+    def _serve_whole_file(self, file_instance: object) -> HttpResponse:
         """Serve the entire file content"""
         try:
             wrapper = FileWrapper(file_instance.file.open("rb"))
             content_type = mimetypes.guess_type(file_instance.file.name)[0]
             response = HttpResponse(wrapper, content_type=content_type)
+        except FileNotFoundError as exc:
+            msg = "File not found"
+            raise Http404(msg) from exc
+        else:
             response["Content-Disposition"] = (
                 f"inline; filename={file_instance.display_name}"
             )
             return response
-        except FileNotFoundError:
-            raise Http404("File not found")

@@ -1,7 +1,9 @@
-import os
+from pathlib import Path
+from typing import ClassVar
+
 from rest_framework import serializers
 
-from .models import Patient, File
+from .models import File, Patient
 
 
 class FileSerializer(serializers.ModelSerializer):
@@ -26,7 +28,7 @@ class FileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = File
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "patient",
             "display_name",
@@ -35,9 +37,14 @@ class FileSerializer(serializers.ModelSerializer):
             "requires_pagination",
             "created_at",
         ]
-        read_only_fields = ["id", "patient", "display_name", "created_at"]
+        read_only_fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "display_name",
+            "created_at",
+        ]
 
-    def validate(self, attrs):
+    def validate(self, attrs: dict) -> dict:
         """
         Validate that requires_pagination can only be True for PDF files.
         This validation runs before model.clean() to provide clear API error messages.
@@ -46,20 +53,20 @@ class FileSerializer(serializers.ModelSerializer):
         requires_pagination = attrs.get("requires_pagination", False)
 
         if requires_pagination and file_obj:
-            filename = file_obj.name
-            ext = os.path.splitext(filename)[1].lower()
+            filename = getattr(file_obj, "name", "")
+            ext = Path(filename).suffix.lower()
             if ext != ".pdf":
                 raise serializers.ValidationError(
                     {
                         "requires_pagination": "Only PDF files can be marked for pagination. Current file type: {}".format(
-                            ext or "unknown"
-                        )
-                    }
+                            ext or "unknown",
+                        ),
+                    },
                 )
 
         return attrs
 
-    def create(self, validated_data):
+    def create(self, validated_data: dict) -> File:
         """
         Create a new File instance.
         Automatically sets display_name from the uploaded file's name.
@@ -86,7 +93,7 @@ class PatientSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Patient
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "first_name",
             "last_name",
@@ -100,17 +107,18 @@ class PatientSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at", "updated_at"]
 
-    def create(self, validated_data):
+    def create(self, validated_data: dict) -> Patient:
         validated_data.setdefault("gender", Patient.Gender.UNSPECIFIED)
         return Patient.objects.create(**validated_data)
 
-    def update(self, instance, validated_data):
+    def update(self, instance: Patient, validated_data: dict) -> Patient:
         instance.first_name = validated_data.get("first_name", instance.first_name)
         instance.last_name = validated_data.get("last_name", instance.last_name)
         instance.date_of_birth = validated_data.get(
-            "date_of_birth", instance.date_of_birth
+            "date_of_birth",
+            instance.date_of_birth,
         )
         instance.gender = validated_data.get("gender", instance.gender)
         instance.mrn = validated_data.get("mrn", instance.mrn)
@@ -118,7 +126,8 @@ class PatientSerializer(serializers.ModelSerializer):
         instance.bed = validated_data.get("bed", instance.bed)
         instance.email = validated_data.get("email", instance.email)
         instance.phone_number = validated_data.get(
-            "phone_number", instance.phone_number
+            "phone_number",
+            instance.phone_number,
         )
         instance.save()
         return instance

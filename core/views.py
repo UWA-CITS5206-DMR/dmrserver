@@ -1,10 +1,15 @@
-from rest_framework import viewsets, status
+from typing import ClassVar
+
+from django.db import DatabaseError
+from drf_spectacular.utils import OpenApiExample, extend_schema
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from drf_spectacular.utils import extend_schema, OpenApiExample
+from rest_framework.request import Request
+from rest_framework.response import Response
+
 from .models import MultiDeviceToken
-from .serializers import LoginSerializer, UserSerializer, AuthTokenSerializer
+from .serializers import AuthTokenSerializer, LoginSerializer, UserSerializer
 
 # Create your views here.
 
@@ -14,7 +19,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     Authentication ViewSet for user login, logout and profile management
     """
 
-    permission_classes = [AllowAny]
+    permission_classes: ClassVar[list] = [AllowAny]
 
     @extend_schema(
         summary="User login",
@@ -25,13 +30,13 @@ class AuthViewSet(viewsets.GenericViewSet):
             OpenApiExample(
                 "Login Request",
                 value={"username": "student1", "password": "password123"},
-            )
+            ),
         ],
     )
     @action(detail=False, methods=["post"], permission_classes=[AllowAny])
-    def login(self, request):
+    def login(self, request: Request) -> Response:
         """Login user and return token with user information.
-        
+
         Creates a new token for each login, allowing multiple devices to be logged in simultaneously.
         """
         serializer = LoginSerializer(data=request.data)
@@ -51,26 +56,29 @@ class AuthViewSet(viewsets.GenericViewSet):
         responses={200: {"description": "Successfully logged out"}},
     )
     @action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
-    def logout(self, request):
+    def logout(self, request: Request) -> Response:
         """Logout user by deleting the current device token.
-        
+
         Only deletes the token used in this request, allowing other devices to remain logged in.
         """
-        try:
-            # Delete only the current token (from request.auth), not all user tokens
-            if request.auth:
+        # Delete only the current token (from request.auth), not all user tokens
+        if request.auth:
+            try:
                 request.auth.delete()
+            except (AttributeError, DatabaseError) as exc:
                 return Response(
-                    {"detail": "Successfully logged out"}, status=status.HTTP_200_OK
+                    {"error": f"Logout failed: {exc!s}"},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-            else:
-                return Response(
-                    {"error": "No active token found"}, status=status.HTTP_400_BAD_REQUEST
-                )
-        except Exception as e:
             return Response(
-                {"error": f"Logout failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Successfully logged out"},
+                status=status.HTTP_200_OK,
             )
+
+        return Response(
+            {"error": "No active token found"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     @extend_schema(
         summary="Get user profile",
@@ -78,7 +86,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         responses={200: UserSerializer},
     )
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
-    def profile(self, request):
+    def profile(self, request: Request) -> Response:
         """Get current user profile with role information"""
         serializer = UserSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)

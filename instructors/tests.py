@@ -1,22 +1,24 @@
+import shutil
+import tempfile
+
 from django.conf import settings
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import Group, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
-from rest_framework.test import APITestCase
 from rest_framework import status
-from patients.models import Patient, File
-from student_groups.models import ImagingRequest, BloodTestRequest, ApprovedFile
+from rest_framework.test import APITestCase
+
 from core.context import Role
-import tempfile
-import shutil
+from patients.models import File, Patient
+from student_groups.models import ApprovedFile, BloodTestRequest, ImagingRequest
 
 
 class InstructorViewSetTestCase(APITestCase):
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         # Shared fixtures that are immutable across tests
         cls.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
+            name=Role.INSTRUCTOR.value,
         )
         cls.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
 
@@ -42,7 +44,7 @@ class InstructorViewSetTestCase(APITestCase):
             email="john@example.com",
         )
 
-    def setUp(self):
+    def setUp(self) -> None:
         # Per-test mutable objects (requests) should stay in setUp
         self.imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
@@ -56,109 +58,109 @@ class InstructorViewSetTestCase(APITestCase):
             status="pending",
         )
 
-    def test_instructor_can_view_lab_requests(self):
+    def test_instructor_can_view_lab_requests(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get("/api/instructors/imaging-requests/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 1)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) == 1
 
-    def test_instructor_can_update_lab_request_status(self):
+    def test_instructor_can_update_lab_request_status(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.patch(
             f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
             {"status": "completed"},
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         self.imaging_request.refresh_from_db()
-        self.assertEqual(self.imaging_request.status, "completed")
+        assert self.imaging_request.status == "completed"
 
-    def test_instructor_dashboard_access(self):
+    def test_instructor_dashboard_access(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get("/api/instructors/dashboard/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("patients_count", response.data)
-        self.assertIn("total_imaging_requests", response.data)
-        self.assertEqual(response.data["patients_count"], 1)
+        assert response.status_code == status.HTTP_200_OK
+        assert "patients_count" in response.data
+        assert "total_imaging_requests" in response.data
+        assert response.data["patients_count"] == 1
 
-    def test_pending_lab_requests_endpoint(self):
+    def test_pending_lab_requests_endpoint(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get("/api/instructors/imaging-requests/pending/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         # Check if response has pagination (results key) or direct array
         if "results" in response.data:
-            self.assertEqual(len(response.data["results"]), 1)
+            assert len(response.data["results"]) == 1
         else:
-            self.assertEqual(len(response.data), 1)
+            assert len(response.data) == 1
 
-    def test_lab_request_stats_endpoint(self):
+    def test_lab_request_stats_endpoint(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get("/api/instructors/imaging-requests/stats/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["total"], 1)
-        self.assertEqual(response.data["pending"], 1)
-        self.assertEqual(response.data["completed"], 0)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["total"] == 1
+        assert response.data["pending"] == 1
+        assert response.data["completed"] == 0
 
-    def test_student_cannot_access_instructor_endpoints(self):
+    def test_student_cannot_access_instructor_endpoints(self) -> None:
         self.client.force_authenticate(user=self.student_user)
         response = self.client.get("/api/instructors/imaging-requests/")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_unauthorized_access_denied(self):
+    def test_unauthorized_access_denied(self) -> None:
         response = self.client.get("/api/instructors/imaging-requests/")
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_non_instructor_dashboard_access_denied(self):
+    def test_non_instructor_dashboard_access_denied(self) -> None:
         self.client.force_authenticate(user=self.student_user)
         response = self.client.get("/api/instructors/dashboard/")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_imaging_request_returns_full_user_and_patient_details(self):
+    def test_imaging_request_returns_full_user_and_patient_details(self) -> None:
         """
         Test that GET requests return full user and patient objects, not just IDs.
         """
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get(
-            f"/api/instructors/imaging-requests/{self.imaging_request.id}/"
+            f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Verify user is a full object with expected fields
-        self.assertIn("user", response.data)
-        self.assertIsInstance(response.data["user"], dict)
-        self.assertIn("id", response.data["user"])
-        self.assertIn("username", response.data["user"])
-        self.assertIn("email", response.data["user"])
-        self.assertEqual(response.data["user"]["username"], "student1")
+        assert "user" in response.data
+        assert isinstance(response.data["user"], dict)
+        assert "id" in response.data["user"]
+        assert "username" in response.data["user"]
+        assert "email" in response.data["user"]
+        assert response.data["user"]["username"] == "student1"
 
         # Verify patient is a full object with expected fields
-        self.assertIn("patient", response.data)
-        self.assertIsInstance(response.data["patient"], dict)
-        self.assertIn("id", response.data["patient"])
-        self.assertIn("first_name", response.data["patient"])
-        self.assertIn("last_name", response.data["patient"])
-        self.assertIn("email", response.data["patient"])
-        self.assertEqual(response.data["patient"]["first_name"], "John")
-        self.assertEqual(response.data["patient"]["last_name"], "Doe")
+        assert "patient" in response.data
+        assert isinstance(response.data["patient"], dict)
+        assert "id" in response.data["patient"]
+        assert "first_name" in response.data["patient"]
+        assert "last_name" in response.data["patient"]
+        assert "email" in response.data["patient"]
+        assert response.data["patient"]["first_name"] == "John"
+        assert response.data["patient"]["last_name"] == "Doe"
 
-    def test_imaging_request_list_returns_full_user_and_patient_details(self):
+    def test_imaging_request_list_returns_full_user_and_patient_details(self) -> None:
         """
         Test that list endpoint also returns full user and patient objects.
         """
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get("/api/instructors/imaging-requests/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         first_item = response.data["results"][0]
 
         # Verify user is a full object
-        self.assertIsInstance(first_item["user"], dict)
-        self.assertIn("username", first_item["user"])
-        self.assertEqual(first_item["user"]["username"], "student1")
+        assert isinstance(first_item["user"], dict)
+        assert "username" in first_item["user"]
+        assert first_item["user"]["username"] == "student1"
 
         # Verify patient is a full object
-        self.assertIsInstance(first_item["patient"], dict)
-        self.assertIn("first_name", first_item["patient"])
-        self.assertEqual(first_item["patient"]["first_name"], "John")
+        assert isinstance(first_item["patient"], dict)
+        assert "first_name" in first_item["patient"]
+        assert first_item["patient"]["first_name"] == "John"
 
 
 class BloodTestRequestViewSetTestCase(APITestCase):
@@ -168,9 +170,9 @@ class BloodTestRequestViewSetTestCase(APITestCase):
     """
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         cls.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
+            name=Role.INSTRUCTOR.value,
         )
 
         cls.instructor_user = User.objects.create_user(
@@ -194,7 +196,7 @@ class BloodTestRequestViewSetTestCase(APITestCase):
             email="jane@example.com",
         )
 
-    def setUp(self):
+    def setUp(self) -> None:
         # Keep per-test mutable request objects here
         self.blood_test_request = BloodTestRequest.objects.create(
             patient=self.patient,
@@ -206,47 +208,47 @@ class BloodTestRequestViewSetTestCase(APITestCase):
             status="pending",
         )
 
-    def test_blood_test_request_returns_full_user_and_patient_details(self):
+    def test_blood_test_request_returns_full_user_and_patient_details(self) -> None:
         """
         Test that GET requests return full user and patient objects, not just IDs.
         """
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get(
-            f"/api/instructors/blood-test-requests/{self.blood_test_request.id}/"
+            f"/api/instructors/blood-test-requests/{self.blood_test_request.id}/",
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Verify user is a full object with expected fields
-        self.assertIn("user", response.data)
-        self.assertIsInstance(response.data["user"], dict)
-        self.assertIn("username", response.data["user"])
-        self.assertEqual(response.data["user"]["username"], "student2")
+        assert "user" in response.data
+        assert isinstance(response.data["user"], dict)
+        assert "username" in response.data["user"]
+        assert response.data["user"]["username"] == "student2"
 
         # Verify patient is a full object with expected fields
-        self.assertIn("patient", response.data)
-        self.assertIsInstance(response.data["patient"], dict)
-        self.assertIn("first_name", response.data["patient"])
-        self.assertIn("last_name", response.data["patient"])
-        self.assertEqual(response.data["patient"]["first_name"], "Jane")
-        self.assertEqual(response.data["patient"]["last_name"], "Smith")
+        assert "patient" in response.data
+        assert isinstance(response.data["patient"], dict)
+        assert "first_name" in response.data["patient"]
+        assert "last_name" in response.data["patient"]
+        assert response.data["patient"]["first_name"] == "Jane"
+        assert response.data["patient"]["last_name"] == "Smith"
 
-    def test_blood_test_request_list_returns_full_details(self):
+    def test_blood_test_request_list_returns_full_details(self) -> None:
         """
         Test that list endpoint also returns full user and patient objects.
         """
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get("/api/instructors/blood-test-requests/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         first_item = response.data["results"][0]
 
         # Verify user is a full object
-        self.assertIsInstance(first_item["user"], dict)
-        self.assertIn("username", first_item["user"])
+        assert isinstance(first_item["user"], dict)
+        assert "username" in first_item["user"]
 
         # Verify patient is a full object
-        self.assertIsInstance(first_item["patient"], dict)
-        self.assertIn("first_name", first_item["patient"])
+        assert isinstance(first_item["patient"], dict)
+        assert "first_name" in first_item["patient"]
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -257,11 +259,11 @@ class ApprovedFilesTestCase(APITestCase):
     """
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
         super().tearDownClass()
 
-    def setUp(self):
+    def setUp(self) -> None:
         # Only create per-test mutable request objects here; shared fixtures are in setUpTestData
         self.imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
@@ -286,10 +288,10 @@ class ApprovedFilesTestCase(APITestCase):
         )
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         # Shared fixtures for approved files tests
         cls.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
+            name=Role.INSTRUCTOR.value,
         )
 
         cls.instructor_user = User.objects.create_user(
@@ -329,7 +331,7 @@ class ApprovedFilesTestCase(APITestCase):
             requires_pagination=True,
         )
 
-    def test_imaging_request_approval_with_flat_file_id_structure(self):
+    def test_imaging_request_approval_with_flat_file_id_structure(self) -> None:
         """
         Test that instructors can approve imaging requests with flat file_id structure.
         Frontend sends: {"status": "completed", "approved_files": [{"file_id": "uuid", "page_range": "1-5"}]}
@@ -345,27 +347,27 @@ class ApprovedFilesTestCase(APITestCase):
                     {
                         "file_id": str(self.file2.id),
                         "page_range": "1-5",
-                    }
+                    },
                 ],
             },
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Verify the request status was updated
         self.imaging_request.refresh_from_db()
-        self.assertEqual(self.imaging_request.status, "completed")
+        assert self.imaging_request.status == "completed"
 
         # Verify the approved file was created
         approved_files = ApprovedFile.objects.filter(
-            imaging_request=self.imaging_request
+            imaging_request=self.imaging_request,
         )
-        self.assertEqual(approved_files.count(), 1)
-        self.assertEqual(approved_files.first().file.id, self.file2.id)
-        self.assertEqual(approved_files.first().page_range, "1-5")
+        assert approved_files.count() == 1
+        assert approved_files.first().file.id == self.file2.id
+        assert approved_files.first().page_range == "1-5"
 
-    def test_imaging_request_approval_with_file_id_only(self):
+    def test_imaging_request_approval_with_file_id_only(self) -> None:
         """
         Test approval with only file_id (no page_range) for non-paginated files.
         """
@@ -378,23 +380,23 @@ class ApprovedFilesTestCase(APITestCase):
                 "approved_files": [
                     {
                         "file_id": str(self.file1.id),
-                    }
+                    },
                 ],
             },
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Verify the approved file was created without page_range
         approved_files = ApprovedFile.objects.filter(
-            imaging_request=self.imaging_request
+            imaging_request=self.imaging_request,
         )
-        self.assertEqual(approved_files.count(), 1)
-        self.assertEqual(approved_files.first().file.id, self.file1.id)
-        self.assertIsNone(approved_files.first().page_range)
+        assert approved_files.count() == 1
+        assert approved_files.first().file.id == self.file1.id
+        assert approved_files.first().page_range is None
 
-    def test_blood_test_request_approval_with_flat_file_id(self):
+    def test_blood_test_request_approval_with_flat_file_id(self) -> None:
         """
         Test that blood test request approval works with flat file_id structure.
         Note: BloodTestRequest uses direct M2M, so page_range is not applicable.
@@ -408,25 +410,23 @@ class ApprovedFilesTestCase(APITestCase):
                 "approved_files": [
                     {
                         "file_id": str(self.file1.id),
-                    }
+                    },
                 ],
             },
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Verify the request status was updated
         self.blood_test_request.refresh_from_db()
-        self.assertEqual(self.blood_test_request.status, "completed")
+        assert self.blood_test_request.status == "completed"
 
         # Verify the approved file was added (direct M2M)
-        self.assertEqual(self.blood_test_request.approved_files.count(), 1)
-        self.assertEqual(
-            self.blood_test_request.approved_files.first().id, self.file1.id
-        )
+        assert self.blood_test_request.approved_files.count() == 1
+        assert self.blood_test_request.approved_files.first().id == self.file1.id
 
-    def test_multiple_approved_files(self):
+    def test_multiple_approved_files(self) -> None:
         """
         Test approving a request with multiple files.
         """
@@ -444,15 +444,15 @@ class ApprovedFilesTestCase(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Verify multiple approved files were created
         approved_files = ApprovedFile.objects.filter(
-            imaging_request=self.imaging_request
+            imaging_request=self.imaging_request,
         )
-        self.assertEqual(approved_files.count(), 2)
+        assert approved_files.count() == 2
 
-    def test_validation_error_for_missing_page_range_on_paginated_file(self):
+    def test_validation_error_for_missing_page_range_on_paginated_file(self) -> None:
         """
         Test that validation error is raised when page_range is missing for paginated files.
         """
@@ -465,16 +465,16 @@ class ApprovedFilesTestCase(APITestCase):
                 "approved_files": [
                     {
                         "file_id": str(self.file2.id),  # file2 requires pagination
-                    }
+                    },
                 ],
             },
             format="json",
         )
 
         # Should fail validation
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_clear_approved_files_with_empty_list(self):
+    def test_clear_approved_files_with_empty_list(self) -> None:
         """
         Test that passing an empty approved_files list clears existing files.
         """
@@ -491,8 +491,9 @@ class ApprovedFilesTestCase(APITestCase):
         )
 
         # Verify file was added
-        self.assertEqual(
-            ApprovedFile.objects.filter(imaging_request=self.imaging_request).count(), 1
+        assert (
+            ApprovedFile.objects.filter(imaging_request=self.imaging_request).count()
+            == 1
         )
 
         # Now clear with empty list
@@ -502,9 +503,10 @@ class ApprovedFilesTestCase(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Verify files were cleared
-        self.assertEqual(
-            ApprovedFile.objects.filter(imaging_request=self.imaging_request).count(), 0
+        assert (
+            ApprovedFile.objects.filter(imaging_request=self.imaging_request).count()
+            == 0
         )

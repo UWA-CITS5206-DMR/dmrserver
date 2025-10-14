@@ -1,7 +1,10 @@
+from typing import ClassVar
+
 from rest_framework import serializers
-from student_groups.models import ImagingRequest, BloodTestRequest, ApprovedFile
+
 from core.serializers import BaseModelSerializer, UserSerializer
 from patients.serializers import PatientSerializer
+from student_groups.models import ApprovedFile, BloodTestRequest, ImagingRequest
 from student_groups.serializers import ApprovedFileSerializer
 
 
@@ -15,12 +18,14 @@ class ImagingRequestSerializer(BaseModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approved_files_through", many=True, required=False
+        source="approved_files_through",
+        many=True,
+        required=False,
     )
 
     class Meta:
         model = ImagingRequest
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "patient",
             "user",
@@ -35,9 +40,9 @@ class ImagingRequestSerializer(BaseModelSerializer):
             "updated_at",
             "approved_files",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at", "updated_at"]
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: object) -> dict:
         """
         Override to return full user and patient details instead of just IDs.
         """
@@ -46,7 +51,7 @@ class ImagingRequestSerializer(BaseModelSerializer):
         representation["patient"] = PatientSerializer(instance.patient).data
         return representation
 
-    def update(self, instance, validated_data):
+    def update(self, instance: object, validated_data: dict) -> object:
         approved_files_data = validated_data.pop("approved_files_through", None)
         instance = super().update(instance, validated_data)
 
@@ -59,7 +64,9 @@ class ImagingRequestSerializer(BaseModelSerializer):
 
                 if file:
                     ApprovedFile.objects.create(
-                        imaging_request=instance, file=file, page_range=page_range
+                        imaging_request=instance,
+                        file=file,
+                        page_range=page_range,
                     )
 
         return instance
@@ -72,15 +79,17 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approved_files_through", many=True, required=False
+        source="approved_files_through",
+        many=True,
+        required=False,
     )
 
     class Meta:
         model = ImagingRequest
-        fields = ["id", "status", "updated_at", "approved_files"]
-        read_only_fields = ["id", "updated_at"]
+        fields: ClassVar[list[str]] = ["id", "status", "updated_at", "approved_files"]
+        read_only_fields: ClassVar[list[str]] = ["id", "updated_at"]
 
-    def validate_status(self, value):
+    def validate_status(self, value: object) -> object:
         """
         Only allow status transitions from pending to completed.
         """
@@ -89,14 +98,16 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
             and self.instance.status == "completed"
             and value != "completed"
         ):
+            msg = "Cannot change status of a completed imaging request unless it is to 'completed'."
             raise serializers.ValidationError(
-                "Cannot change status of a completed imaging request unless it is to 'completed'."
+                msg,
             )
         if value not in ["pending", "completed"]:
-            raise serializers.ValidationError("Invalid status value.")
+            msg = "Invalid status value."
+            raise serializers.ValidationError(msg)
         return value
 
-    def update(self, instance, validated_data):
+    def update(self, instance: object, validated_data: dict) -> object:
         approved_files_data = validated_data.pop("approved_files_through", [])
 
         instance = super().update(instance, validated_data)
@@ -131,12 +142,14 @@ class BloodTestRequestSerializer(BaseModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approved_files_through", many=True, required=False
+        source="approved_files_through",
+        many=True,
+        required=False,
     )
 
     class Meta:
         model = BloodTestRequest
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "patient",
             "user",
@@ -149,9 +162,9 @@ class BloodTestRequestSerializer(BaseModelSerializer):
             "updated_at",
             "approved_files",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at", "updated_at"]
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: object) -> dict:
         """
         Override to return full user and patient details instead of just IDs.
         """
@@ -167,28 +180,32 @@ class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):
     """
 
     approved_files = ApprovedFileSerializer(
-        source="approved_files_through", many=True, required=False
+        source="approved_files_through",
+        many=True,
+        required=False,
     )
 
     class Meta:
         model = BloodTestRequest
-        fields = ["id", "status", "updated_at", "approved_files"]
-        read_only_fields = ["id", "updated_at"]
+        fields: ClassVar[list[str]] = ["id", "status", "updated_at", "approved_files"]
+        read_only_fields: ClassVar[list[str]] = ["id", "updated_at"]
 
-    def validate_status(self, value):
+    def validate_status(self, value: object) -> object:
         if (
             self.instance
             and self.instance.status == "completed"
             and value != "completed"
         ):
+            msg = "Cannot change status of a completed blood test request unless it is to 'completed'."
             raise serializers.ValidationError(
-                "Cannot change status of a completed blood test request unless it is to 'completed'."
+                msg,
             )
         if value not in ["pending", "completed"]:
-            raise serializers.ValidationError("Invalid status value.")
+            msg = "Invalid status value."
+            raise serializers.ValidationError(msg)
         return value
 
-    def update(self, instance, validated_data):
+    def update(self, instance: object, validated_data: dict) -> object:
         # BloodTestRequest now uses through="ApprovedFile" like ImagingRequest
         approved_files_data = validated_data.pop("approved_files_through", [])
 
@@ -203,7 +220,9 @@ class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):
                 page_range = approved_file_data.get("page_range", "")
                 if file:
                     ApprovedFile.objects.create(
-                        blood_test_request=instance, file=file, page_range=page_range
+                        blood_test_request=instance,
+                        file=file,
+                        page_range=page_range,
                     )
         elif "approved_files" in self.initial_data:
             # If an empty list is passed, clear the files

@@ -1,40 +1,48 @@
-from .serializers import (
-    ImagingRequestSerializer,
-    BloodTestRequestSerializer,
-    MedicationOrderSerializer,
-    DischargeSummarySerializer,
-    NoteSerializer,
-    BloodPressureSerializer,
-    HeartRateSerializer,
-    BodyTemperatureSerializer,
-    RespiratoryRateSerializer,
-    BloodSugarSerializer,
-    OxygenSaturationSerializer,
-    PainScoreSerializer,
-    ObservationsSerializer,
-    ObservationDataSerializer,
-)
+from typing import Any, ClassVar
+
+from django.core.exceptions import ValidationError
+from django.db.models import QuerySet
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
+from rest_framework import mixins, status, viewsets
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.serializers import Serializer
+
+from core.context import ViewContext
+from core.permissions import LabRequestPermission, ObservationPermission
+
 from .models import (
-    Note,
     BloodPressure,
-    HeartRate,
-    BodyTemperature,
-    RespiratoryRate,
     BloodSugar,
+    BloodTestRequest,
+    BodyTemperature,
+    DischargeSummary,
+    HeartRate,
+    ImagingRequest,
+    MedicationOrder,
+    Note,
+    ObservationManager,
     OxygenSaturation,
     PainScore,
-    ObservationManager,
-    ImagingRequest,
-    BloodTestRequest,
-    MedicationOrder,
-    DischargeSummary,
+    RespiratoryRate,
 )
 from .pagination import ObservationsPagination
-from core.permissions import ObservationPermission, LabRequestPermission
-from core.context import ViewContext
-from rest_framework.response import Response
-from rest_framework import viewsets, status, mixins
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from .serializers import (
+    BloodPressureSerializer,
+    BloodSugarSerializer,
+    BloodTestRequestSerializer,
+    BodyTemperatureSerializer,
+    DischargeSummarySerializer,
+    HeartRateSerializer,
+    ImagingRequestSerializer,
+    MedicationOrderSerializer,
+    NoteSerializer,
+    ObservationDataSerializer,
+    ObservationsSerializer,
+    OxygenSaturationSerializer,
+    PainScoreSerializer,
+    RespiratoryRateSerializer,
+)
 
 
 class BaseObservationViewSet(viewsets.ModelViewSet):
@@ -55,7 +63,7 @@ class BaseObservationViewSet(viewsets.ModelViewSet):
     - patient: (optional) Filter observations by patient ID
     """
 
-    permission_classes = [ObservationPermission]
+    permission_classes: ClassVar[list[Any]] = [ObservationPermission]
 
     @extend_schema(
         parameters=[
@@ -68,11 +76,11 @@ class BaseObservationViewSet(viewsets.ModelViewSet):
             ),
         ],
     )
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
         """List observations with optional patient filtering"""
         return super().list(request, *args, **kwargs)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         """
         Filter observations by authenticated user and optionally by patient.
 
@@ -88,7 +96,7 @@ class BaseObservationViewSet(viewsets.ModelViewSet):
 
         return queryset
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: Serializer) -> None:
         """Automatically set the user to the authenticated user"""
         serializer.save(user=self.request.user)
 
@@ -115,7 +123,7 @@ class BaseStudentRequestViewSet(
     - patient: (optional) Filter requests by patient ID
     """
 
-    permission_classes = [LabRequestPermission]
+    permission_classes: ClassVar[list[Any]] = [LabRequestPermission]
 
     @extend_schema(
         parameters=[
@@ -128,11 +136,11 @@ class BaseStudentRequestViewSet(
             ),
         ],
     )
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
         """List requests with optional patient filtering"""
         return super().list(request, *args, **kwargs)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         """
         Filter requests by authenticated user and optionally by patient.
 
@@ -148,14 +156,14 @@ class BaseStudentRequestViewSet(
 
         return queryset
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: Serializer) -> None:
         """Automatically set the user to the authenticated user"""
         serializer.save(user=self.request.user)
 
 
 class ObservationsViewSet(viewsets.GenericViewSet):
-    permission_classes = [ObservationPermission]
-    serializer_class = ObservationsSerializer
+    permission_classes: ClassVar[list[Any]] = [ObservationPermission]
+    serializer_class: ClassVar[Any] = ObservationsSerializer
 
     @extend_schema(
         summary="Create observations",
@@ -170,7 +178,7 @@ class ObservationsViewSet(viewsets.GenericViewSet):
                         "patient": 1,
                         "systolic": 120,
                         "diastolic": 80,
-                    }
+                    },
                 },
             ),
             OpenApiExample(
@@ -195,7 +203,7 @@ class ObservationsViewSet(viewsets.GenericViewSet):
             ),
         ],
     )
-    def create(self, request):
+    def create(self, request: Request) -> Response:
         # Inject the authenticated user into each observation type
         data = request.data.copy()
         for observation_type in [
@@ -207,7 +215,7 @@ class ObservationsViewSet(viewsets.GenericViewSet):
             "oxygen_saturation",
             "pain_score",
         ]:
-            if observation_type in data and data[observation_type]:
+            if data.get(observation_type):
                 data[observation_type]["user"] = request.user.id
 
         serializer = ObservationsSerializer(data=data)
@@ -215,17 +223,21 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         if serializer.is_valid():
             try:
                 created_objects = serializer.save()
-                return Response(created_objects, status=status.HTTP_201_CREATED)
-            except Exception as e:
+            except ValidationError as e:
+                return Response(
+                    {"error": "Validation error", "detail": e.message},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            except Exception as e:  # noqa: BLE001  (fallback for unexpected errors)
                 return Response(
                     {"error": "Error occurred during creation", "detail": str(e)},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
-        else:
-            return Response(
-                {"error": "Data validation failed", "detail": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response(created_objects, status=status.HTTP_201_CREATED)
+        return Response(
+            {"error": "Data validation failed", "detail": serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     @extend_schema(
         summary="List observations",
@@ -262,7 +274,7 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         ],
         responses={200: ObservationDataSerializer},
     )
-    def list(self, request, *args, **kwargs):
+    def list(self, request: Request, *_args: object, **_kwargs: object) -> Response:
         """
         Retrieve all observations for a specific patient.
 
@@ -323,7 +335,8 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         patient_id = request.query_params.get("patient_id")
         if not patient_id:
             return Response(
-                {"error": "patient_id is required"}, status=status.HTTP_400_BAD_REQUEST
+                {"error": "patient_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Get page_size parameter with validation
@@ -342,7 +355,9 @@ class ObservationsViewSet(viewsets.GenericViewSet):
 
         # Get observations with ordering
         observations = ObservationManager.get_observations_by_user_and_patient(
-            request.user.id, patient_id, ordering=ordering
+            request.user.id,
+            patient_id,
+            ordering=ordering,
         )
 
         # Apply pagination (slicing) to each observation type
@@ -423,7 +438,7 @@ class ImagingRequestViewSet(BaseStudentRequestViewSet):
     queryset = ImagingRequest.objects.all()
     serializer_class = ImagingRequestSerializer
 
-    def get_serializer_context(self):
+    def get_serializer_context(self) -> dict:
         """Add context for student create/read operations"""
         context = super().get_serializer_context()
         if self.action == "create":

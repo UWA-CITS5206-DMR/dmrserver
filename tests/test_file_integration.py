@@ -3,17 +3,16 @@
 import shutil
 import tempfile
 
-from django.test import TestCase, override_settings
-from django.contrib.auth.models import User, Group
-from django.urls import reverse
-from rest_framework.test import APIClient
-from rest_framework import status
+from django.contrib.auth.models import Group, User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APIClient
 
-from patients.models import Patient, File
-from student_groups.models import ImagingRequest, ApprovedFile
 from core.context import Role
-
+from patients.models import File, Patient
+from student_groups.models import ApprovedFile, ImagingRequest
 
 TEST_MEDIA_ROOT = tempfile.mkdtemp()
 
@@ -21,28 +20,30 @@ TEST_MEDIA_ROOT = tempfile.mkdtemp()
 @override_settings(MEDIA_ROOT=TEST_MEDIA_ROOT)
 class FileAccessIntegrationTest(TestCase):
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         super().setUpClass()
         cls._media_root = TEST_MEDIA_ROOT
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         shutil.rmtree(cls._media_root, ignore_errors=True)
         super().tearDownClass()
 
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         # Create persistent data reused across tests to avoid repeated file I/O
         cls.admin_group, _ = Group.objects.get_or_create(name=Role.ADMIN.value)
         cls.instructor_group, _ = Group.objects.get_or_create(
-            name=Role.INSTRUCTOR.value
+            name=Role.INSTRUCTOR.value,
         )
         cls.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
 
         # Create users
         cls.student = User.objects.create_user("student1", "student@test.com", "pass")
         cls.instructor = User.objects.create_user(
-            "instructor1", "instructor@test.com", "pass"
+            "instructor1",
+            "instructor@test.com",
+            "pass",
         )
         cls.admin = User.objects.create_user("admin1", "admin@test.com", "pass")
 
@@ -71,13 +72,15 @@ class FileAccessIntegrationTest(TestCase):
         cls.file = File.objects.create(
             patient=cls.patient,
             file=SimpleUploadedFile(
-                "test.pdf", pdf_content, content_type="application/pdf"
+                "test.pdf",
+                pdf_content,
+                content_type="application/pdf",
             ),
             display_name="Test PDF",
             requires_pagination=False,
         )
 
-    def setUp(self):
+    def setUp(self) -> None:
         # Per-test data that may be mutated (requests, approved files)
         # Create imaging request
         self.imaging_request = ImagingRequest.objects.create(
@@ -94,7 +97,9 @@ class FileAccessIntegrationTest(TestCase):
 
         # Create approved file per test
         self.approved_file = ApprovedFile.objects.create(
-            imaging_request=self.imaging_request, file=self.file, page_range="1-3"
+            imaging_request=self.imaging_request,
+            file=self.file,
+            page_range="1-3",
         )
 
         self.client = APIClient()
@@ -111,21 +116,22 @@ class FileAccessIntegrationTest(TestCase):
         # Create a 5-page PDF with proper structure to avoid warnings
         return create_test_pdf(num_pages=5)
 
-    def test_student_can_access_approved_file(self):
+    def test_student_can_access_approved_file(self) -> None:
         """Test that student can access file they have approval for"""
         self.client.force_authenticate(user=self.student)
 
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         response = self.client.get(url)
 
         # Should be successful
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
-    def test_student_cannot_access_unapproved_file(self):
+    def test_student_cannot_access_unapproved_file(self) -> None:
         """Test that student cannot access file without approval"""
         # Delete the approved file
         self.approved_file.delete()
@@ -133,29 +139,31 @@ class FileAccessIntegrationTest(TestCase):
         self.client.force_authenticate(user=self.student)
 
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         response = self.client.get(url)
 
         # Should be forbidden
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_instructor_can_access_any_file(self):
+    def test_instructor_can_access_any_file(self) -> None:
         """Test that instructor can access any file"""
         self.client.force_authenticate(user=self.instructor)
 
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         response = self.client.get(url)
 
         # Should be successful
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
-    def test_student_page_range_enforcement(self):
+    def test_student_page_range_enforcement(self) -> None:
         """Test that student can only access approved page range"""
         # Change file to require pagination
         self.file.requires_pagination = True
@@ -165,15 +173,16 @@ class FileAccessIntegrationTest(TestCase):
 
         # Try to access page 4 (not in approved range 1-3)
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         response = self.client.get(url, {"page_range": "4"})
 
         # Should be forbidden
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_student_can_access_approved_pages(self):
+    def test_student_can_access_approved_pages(self) -> None:
         """Test that student can access pages within approved range"""
         # Change file to require pagination
         self.file.requires_pagination = True
@@ -183,16 +192,17 @@ class FileAccessIntegrationTest(TestCase):
 
         # Try to access page 2 (within approved range 1-3)
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         response = self.client.get(url, {"page_range": "2"})
 
         # Should be successful
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
-    def test_student_cannot_manage_files(self):
+    def test_student_cannot_manage_files(self) -> None:
         """Test that student cannot perform CRUD operations on files"""
         self.client.force_authenticate(user=self.student)
 
@@ -201,9 +211,9 @@ class FileAccessIntegrationTest(TestCase):
         response = self.client.post(url, {})
 
         # Should be forbidden
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_instructor_can_manage_files(self):
+    def test_instructor_can_manage_files(self) -> None:
         """Test that instructor can perform CRUD operations on files"""
         self.client.force_authenticate(user=self.instructor)
 
@@ -212,9 +222,9 @@ class FileAccessIntegrationTest(TestCase):
         response = self.client.get(url)
 
         # Should be successful
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
-    def test_instructor_custom_page_range_access(self):
+    def test_instructor_custom_page_range_access(self) -> None:
         """
         Test that instructors can specify custom page ranges for paginated files.
 
@@ -228,31 +238,34 @@ class FileAccessIntegrationTest(TestCase):
 
         self.client.force_authenticate(user=self.instructor)
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         # Test 1: Instructor can access a single page using page_range
         response = self.client.get(url, {"page_range": "5"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
         # Test 2: Instructor can access a custom range using page_range parameter
         response = self.client.get(url, {"page_range": "1-5"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
         # Test 3: Instructor can access pages outside student's approved range
         # Student approved range is "1-3", instructor should access page 4
         response = self.client.get(url, {"page_range": "4"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
         # Test 4: Instructor can access complex ranges
         response = self.client.get(url, {"page_range": "1-2,4-5"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
-    def test_instructor_can_access_entire_paginated_file_without_page_range(self):
+    def test_instructor_can_access_entire_paginated_file_without_page_range(
+        self,
+    ) -> None:
         """
         Test that instructors can access entire paginated file without specifying page_range.
 
@@ -265,15 +278,16 @@ class FileAccessIntegrationTest(TestCase):
 
         self.client.force_authenticate(user=self.instructor)
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         # Instructor can access entire file without page_range parameter
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
-    def test_admin_custom_page_range_access(self):
+    def test_admin_custom_page_range_access(self) -> None:
         """
         Test that admins can specify custom page ranges for paginated files.
 
@@ -285,20 +299,21 @@ class FileAccessIntegrationTest(TestCase):
 
         self.client.force_authenticate(user=self.admin)
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         # Admin can access any single page using page_range
         response = self.client.get(url, {"page_range": "5"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
         # Admin can access any range using page_range parameter
         response = self.client.get(url, {"page_range": "1-5"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
-    def test_admin_can_access_entire_paginated_file_without_page_range(self):
+    def test_admin_can_access_entire_paginated_file_without_page_range(self) -> None:
         """
         Test that admins can access entire paginated file without specifying page_range.
 
@@ -310,15 +325,16 @@ class FileAccessIntegrationTest(TestCase):
 
         self.client.force_authenticate(user=self.admin)
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         # Admin can access entire file without page_range parameter
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
-    def test_student_cannot_access_pages_outside_approved_range(self):
+    def test_student_cannot_access_pages_outside_approved_range(self) -> None:
         """
         Test that students are restricted to their approved page range.
 
@@ -331,25 +347,26 @@ class FileAccessIntegrationTest(TestCase):
 
         self.client.force_authenticate(user=self.student)
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         # Student approved range is "1-3"
         # Test 1: Access within approved range should succeed
         response = self.client.get(url, {"page_range": "2"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Test 2: Access outside approved range should fail
         response = self.client.get(url, {"page_range": "4"})
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertIn("not authorized", response.content.decode().lower())
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "not authorized" in response.content.decode().lower()
 
         # Test 3: Range partially outside approved range should fail
         response = self.client.get(url, {"page_range": "2-5"})
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertIn("not authorized", response.content.decode().lower())
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "not authorized" in response.content.decode().lower()
 
-    def test_student_can_access_approved_file_from_blood_test_request(self):
+    def test_student_can_access_approved_file_from_blood_test_request(self) -> None:
         """
         Test that students can access files from BloodTestRequest with ApprovedFile.
 
@@ -363,7 +380,9 @@ class FileAccessIntegrationTest(TestCase):
         blood_test_file = File.objects.create(
             patient=self.patient,
             file=SimpleUploadedFile(
-                "blood_test.pdf", pdf_content, content_type="application/pdf"
+                "blood_test.pdf",
+                pdf_content,
+                content_type="application/pdf",
             ),
             display_name="Blood Test Results",
             requires_pagination=False,
@@ -397,10 +416,10 @@ class FileAccessIntegrationTest(TestCase):
         response = self.client.get(url)
 
         # Should be successful
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
-    def test_student_can_access_paginated_file_from_blood_test_request(self):
+    def test_student_can_access_paginated_file_from_blood_test_request(self) -> None:
         """
         Test that students can access paginated files from BloodTestRequest.
 
@@ -413,7 +432,9 @@ class FileAccessIntegrationTest(TestCase):
         blood_test_file = File.objects.create(
             patient=self.patient,
             file=SimpleUploadedFile(
-                "blood_test_paginated.pdf", pdf_content, content_type="application/pdf"
+                "blood_test_paginated.pdf",
+                pdf_content,
+                content_type="application/pdf",
             ),
             display_name="Blood Test Results (Paginated)",
             requires_pagination=True,
@@ -446,20 +467,20 @@ class FileAccessIntegrationTest(TestCase):
 
         # Test 1: Access page within approved range (should succeed)
         response = self.client.get(url, {"page_range": "3"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
         # Test 2: Access range within approved range (should succeed)
         response = self.client.get(url, {"page_range": "2-3"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
 
         # Test 3: Access page outside approved range (should fail)
         response = self.client.get(url, {"page_range": "5"})
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertIn("not authorized", response.content.decode().lower())
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "not authorized" in response.content.decode().lower()
 
-    def test_invalid_page_range_returns_helpful_error(self):
+    def test_invalid_page_range_returns_helpful_error(self) -> None:
         """
         Test that invalid page ranges return helpful error messages with valid range.
 
@@ -471,30 +492,31 @@ class FileAccessIntegrationTest(TestCase):
 
         self.client.force_authenticate(user=self.instructor)
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         # Test 1: Request page beyond PDF total pages
         response = self.client.get(url, {"page_range": "10"})
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
         response_text = response.content.decode()
-        self.assertIn("invalid page range", response_text.lower())
-        self.assertIn("valid pages: 1-5", response_text.lower())
+        assert "invalid page range" in response_text.lower()
+        assert "valid pages: 1-5" in response_text.lower()
 
         # Test 2: Request range with some invalid pages
         response = self.client.get(url, {"page_range": "4-10"})
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
         response_text = response.content.decode()
-        self.assertIn("invalid page range", response_text.lower())
-        self.assertIn("valid pages: 1-5", response_text.lower())
+        assert "invalid page range" in response_text.lower()
+        assert "valid pages: 1-5" in response_text.lower()
 
         # Test 3: Request page 0 (invalid)
         response = self.client.get(url, {"page_range": "0"})
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
         response_text = response.content.decode()
-        self.assertIn("invalid page range", response_text.lower())
+        assert "invalid page range" in response_text.lower()
 
-    def test_student_invalid_page_shows_both_errors(self):
+    def test_student_invalid_page_shows_both_errors(self) -> None:
         """
         Test that students get appropriate error for invalid pages.
 
@@ -507,14 +529,15 @@ class FileAccessIntegrationTest(TestCase):
 
         self.client.force_authenticate(user=self.student)
         url = reverse(
-            "file-view", kwargs={"patient_pk": self.patient.id, "pk": self.file.id}
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
         )
 
         # Student approved range is "1-3"
         # Test: Request page beyond PDF total pages (page 10)
         response = self.client.get(url, {"page_range": "10"})
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
         response_text = response.content.decode()
         # Should see error about invalid page range, not authorization
-        self.assertIn("invalid page range", response_text.lower())
-        self.assertIn("valid pages: 1-5", response_text.lower())
+        assert "invalid page range" in response_text.lower()
+        assert "valid pages: 1-5" in response_text.lower()
