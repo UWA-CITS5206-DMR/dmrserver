@@ -548,10 +548,18 @@ class BloodTestRequest(models.Model):
         FBC = "FBC", "Full Blood Count"
         EUC = "EUC", "Electrolytes, Urea, Creatinine"
         LFTS = "LFTs", "Liver Function Tests"
-        COAGS = "Coags", "Coagulation Profile"
+        LIPASE = "Lipase", "Lipase"
+        TROPONIN = "Troponin", "Troponin"
+        COAG = "Coag", "Coagulation Profile"
+        D_DIMER = "D-dimer", "D-dimer"
         CRP = "CRP", "C-Reactive Protein"
+        VBG = "VBG", "Venous Blood Gas"
+        HAPTOGLOBIN = "Haptoglobin", "Haptoglobin"
+        LDH = "LDH", "Lactate Dehydrogenase"
+        GROUP_AND_HOLD = "Group & Hold", "Group & Hold"
+        CROSSMATCH = "Crossmatch", "Crossmatch"
+        BLOOD_CULTURE = "Blood Culture", "Blood Culture"
         TFT = "TFT", "Thyroid Function Tests"
-        GROUP_AND_HOLD = "Group and Hold", "Group and Hold"
 
     STATUS_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ("pending", "Pending"),

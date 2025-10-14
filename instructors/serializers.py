@@ -123,7 +123,7 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
                     ApprovedFile.objects.create(
                         imaging_request=instance,
                         file=file,
-                        page_range=page_range,
+                        page_range=page_range or "",
                     )
         elif (
             "approved_files" in self.initial_data
