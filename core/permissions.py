@@ -290,20 +290,20 @@ class FileListPermission(BaseRolePermission):
     }
 
 
-class LabRequestPermission(BaseRolePermission):
+class InvestigationRequestPermission(BaseRolePermission):
     """
-    Permission for lab request resources (ImagingRequest, BloodTestRequest,
+    Permission for investigation request resources (ImagingRequest, BloodTestRequest,
     MedicationOrder, DischargeSummary).
 
-    This permission provides unified access control for all lab request types,
+    This permission provides unified access control for all investigation request types,
     ensuring consistent RBAC enforcement across student-side endpoints.
 
     Access rules:
-    - Students: can create and view their own requests (object-level check)
+    - Students: can create, view, update, and delete their own requests (object-level check)
     - Instructors: no access (use InstructorManagementPermission for instructor-side endpoints)
     - Admins: full access to all operations
 
-    Note: This permission is designed for student-side lab request endpoints.
+    Note: This permission is designed for student-side investigation request endpoints.
     Instructor-side endpoints should use InstructorManagementPermission.
     """
 
@@ -311,6 +311,9 @@ class LabRequestPermission(BaseRolePermission):
         Role.STUDENT.value: [
             "GET",
             "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
             "HEAD",
             "OPTIONS",
         ],
@@ -320,8 +323,8 @@ class LabRequestPermission(BaseRolePermission):
         self, request: Request, _view: object, obj: object
     ) -> bool:
         """
-        Check object-level permissions for lab requests.
-        Students can only access their own requests.
+        Check object-level permissions for investigation requests.
+        Students can only access, modify, and delete their own requests.
         """
         if not request.user.is_authenticated:
             return False
@@ -334,7 +337,7 @@ class LabRequestPermission(BaseRolePermission):
         if user_role == Role.ADMIN.value:
             return True
 
-        # Students can only access their own requests
+        # Students can fully manage their own requests (CRUD operations)
         if user_role == Role.STUDENT.value:
             return hasattr(obj, "user") and obj.user == request.user
 

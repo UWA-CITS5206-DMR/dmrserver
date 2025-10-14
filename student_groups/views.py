@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 
 from core.context import ViewContext
-from core.permissions import LabRequestPermission, ObservationPermission
+from core.permissions import InvestigationRequestPermission, ObservationPermission
 
 from .models import (
     BloodPressure,
@@ -105,17 +105,20 @@ class BaseStudentRequestViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
     mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
     """
-    Base ViewSet for student-side requests (lab requests and orders).
+    Base ViewSet for student-side investigation requests (ImagingRequest, BloodTestRequest,
+    MedicationOrder, DischargeSummary).
 
     Provides common functionality:
     - Automatic user filtering (students see only their requests)
     - Optional patient filtering via query parameter
     - Automatic user assignment in creation
-    - LabRequestPermission enforcement
-    - Read-only after creation (create, retrieve, list only)
+    - InvestigationRequestPermission enforcement
+    - Full CRUD operations for students' own requests
 
     Subclasses only need to set: queryset, serializer_class
 
@@ -123,7 +126,7 @@ class BaseStudentRequestViewSet(
     - patient: (optional) Filter requests by patient ID
     """
 
-    permission_classes: ClassVar[list[Any]] = [LabRequestPermission]
+    permission_classes: ClassVar[list[Any]] = [InvestigationRequestPermission]
 
     @extend_schema(
         parameters=[
