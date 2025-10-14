@@ -475,3 +475,86 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
         # For now, just verify the request was created successfully
         assert imaging_request.user == self.student_user
         assert imaging_request.status == "pending"
+
+    def test_student_can_update_own_investigation_request(self) -> None:
+        """Test that students can update their own investigation requests"""
+        self.client.force_authenticate(user=self.student_user)
+
+        # Create an imaging request
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="CT scan",
+            details="Original details",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
+            name="Test Student",
+            role="Medical Student",
+        )
+
+        # Update the request
+        data = {"details": "Updated details by student"}
+        response = self.client.patch(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+            data,
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["details"] == "Updated details by student"
+
+    def test_student_can_delete_own_investigation_request(self) -> None:
+        """Test that students can delete their own investigation requests"""
+        self.client.force_authenticate(user=self.student_user)
+
+        # Create an imaging request
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="Ultrasound",
+            details="Request to be deleted",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Abdomen",
+            name="Test Student",
+            role="Medical Student",
+        )
+
+        # Delete the request
+        response = self.client.delete(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not ImagingRequest.objects.filter(id=imaging_request.id).exists()
+
+    def test_student_cannot_modify_other_students_investigation_request(self) -> None:
+        """Test that students cannot modify other students' investigation requests"""
+        other_student = self.create_user("other_student", Role.STUDENT)
+        self.client.force_authenticate(user=self.student_user)
+
+        # Create an imaging request by another student
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=other_student,
+            test_type="MRI",
+            details="Other student's request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Brain",
+            name="Other Student",
+            role="Medical Student",
+        )
+
+        # Try to update the request
+        data = {"details": "Attempting unauthorized update"}
+        response = self.client.patch(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+            data,
+        )
+        # Should return 404 because get_queryset filters by user
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+        # Try to delete the request
+        response = self.client.delete(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+        )
+        # Should return 404 because get_queryset filters by user
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        # Verify the request still exists
+        assert ImagingRequest.objects.filter(id=imaging_request.id).exists()

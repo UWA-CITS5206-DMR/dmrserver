@@ -57,9 +57,9 @@ The system follows RBAC (Role-Based Access Control) principles. Each resource ha
 
 - `ObservationPermission`: Students can only CRUD their own group's records (enforced by `obj.user == request.user`); instructors have read-only access; admins have full access.
 
-**Lab Requests:**
+**Investigation Requests:**
 
-- `LabRequestPermission`: Students can create and view their own requests (ownership checked); admins have full access.
+- `InvestigationRequestPermission`: Students can create, view, update, and delete their own requests (ownership checked); admins have full access.
 - `InstructorManagementPermission`: Instructors can manage all requests via dedicated management endpoints; students have no access to these endpoints.
 
 **Key Design Principles:**

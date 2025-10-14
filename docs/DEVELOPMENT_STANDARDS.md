@@ -30,7 +30,7 @@ Suggested internal application structure (if new modules are needed):
 ### 2.1 Architecture Principles
 
 - **Centralized Location**: All general permission classes are located in `core/permissions.py`, uniformly inheriting `BaseRolePermission`.
-- **RBAC Pattern**: Follow resource-based RBAC. Name permission classes after the resources they protect (e.g., `PatientPermission`, `LabRequestPermission`), not after roles.
+- **RBAC Pattern**: Follow resource-based RBAC. Name permission classes after the resources they protect (e.g., `PatientPermission`, `InvestigationRequestPermission`), not after roles.
 - **Method-Level Control**: Define allowed methods via `role_permissions` dict; admin defaults to full access when not explicitly restricted.
 - **Object-Level Control**: Implement `has_object_permission` when needed (e.g., enforce `obj.user == request.user` for ownership checks).
 

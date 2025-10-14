@@ -916,29 +916,115 @@ class ImagingRequestViewSetTest(APITestCase):
         assert response.data["results"][0]["test_type"] == "X-ray"
         # Note: 'user' field is hidden in student read view by the serializer
 
-    def test_student_cannot_update_imaging_request(self) -> None:
-        """Test that students cannot update imaging requests (only create and read)"""
+    def test_student_can_update_own_imaging_request(self) -> None:
+        """Test that students can update their own imaging requests"""
         from student_groups.models import ImagingRequest
 
         imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=self.user,
             test_type="X-ray",
-            details="Testing update permissions",
+            details="Original details",
             infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
             imaging_focus="Leg",
             name="Test Update Request",
             role="Medical Student",
         )
 
-        data = {"status": "completed"}
+        data = {"details": "Updated details for the imaging request"}
         response = self.client.patch(
             f"/api/student-groups/imaging-requests/{imaging_request.id}/",
             data,
         )
-        # Students don't have PATCH permission in LabRequestPermission, so returns 403
-        # (Previously returned 405 because ViewSet lacks UpdateModelMixin, but permission check happens first)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        # Students can now update their own requests with InvestigationRequestPermission
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["details"] == "Updated details for the imaging request"
+
+    def test_student_cannot_update_other_students_imaging_request(self) -> None:
+        """Test that students cannot update other students' imaging requests"""
+        from django.contrib.auth import get_user_model
+
+        from student_groups.models import ImagingRequest
+
+        # Create another student user
+        other_user = get_user_model().objects.create_user(
+            username="other_student",
+            password="password",
+        )
+        other_user.groups.add(self.student_group)
+
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=other_user,
+            test_type="MRI",
+            details="Other student's request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Brain",
+            name="Other Student",
+            role="Medical Student",
+        )
+
+        data = {"details": "Attempting to update another student's request"}
+        response = self.client.patch(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+            data,
+        )
+        # Should return 404 because the request is filtered by user in get_queryset
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_student_can_delete_own_imaging_request(self) -> None:
+        """Test that students can delete their own imaging requests"""
+        from student_groups.models import ImagingRequest
+
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.user,
+            test_type="CT scan",
+            details="Request to be deleted",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
+            name="Test Delete Request",
+            role="Medical Student",
+        )
+
+        response = self.client.delete(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+        )
+        # Students can now delete their own requests with InvestigationRequestPermission
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not ImagingRequest.objects.filter(id=imaging_request.id).exists()
+
+    def test_student_cannot_delete_other_students_imaging_request(self) -> None:
+        """Test that students cannot delete other students' imaging requests"""
+        from django.contrib.auth import get_user_model
+
+        from student_groups.models import ImagingRequest
+
+        # Create another student user
+        other_user = get_user_model().objects.create_user(
+            username="another_student",
+            password="password",
+        )
+        other_user.groups.add(self.student_group)
+
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=other_user,
+            test_type="Ultrasound",
+            details="Other student's request to be deleted",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Abdomen",
+            name="Another Student",
+            role="Medical Student",
+        )
+
+        response = self.client.delete(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+        )
+        # Should return 404 because the request is filtered by user in get_queryset
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        # Verify the request still exists
+        assert ImagingRequest.objects.filter(id=imaging_request.id).exists()
 
 
 class PainScoreViewSetTest(APITestCase):
