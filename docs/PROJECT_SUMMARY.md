@@ -27,9 +27,9 @@ For setup and running instructions, see `README.md` in the root directory.
 
 - Application Boundaries and Responsibilities:
   - core: General permissions and authentication serializers (`core.permissions`, `core.serializers`).
-  - patients: `Patient`, `File` models and views; upload, view, and manage files.
+  - patients: `Patient`, `File`, `GoogleFormLink` models and views; upload, view, and manage files; manage Google Form links (read-only for students, full CRUD for instructors).
   - student_groups: Observation models (Note, vital signs, etc.), request models (`ImagingRequest`, `BloodTestRequest`, etc.), bulk creation API (`ObservationsViewSet`).
-  - instructors: Full management of diagnostic requests (`ImagingRequest`, `BloodTestRequest`) by instructors, to-do lists, and statistics.
+  - instructors: Full management of diagnostic requests (`ImagingRequest`, `BloodTestRequest`) by instructors, to-do lists, statistics, and Google Form management.
 
 ## 3. Permission Model and Access Control
 
@@ -50,8 +50,7 @@ The system follows RBAC (Role-Based Access Control) principles. Each resource ha
 **Patient and File Management:**
 
 - `PatientPermission`: Students read-only; instructors and admins have full CRUD.
-- `FileAccessPermission`: Admins/instructors access all files; students access is granted via either (a) `ApprovedFile` linked to their completed requests, or (b) manual releases recorded in `ApprovedFile.released_to_user`; access may be restricted by `page_range`.
-- `FileManagementPermission`: Only instructors and admins can manage files (upload, update, delete).
+- `FileAccessPermission`: Admins/instructors have full CRUD access to all files; students have read-only access (SAFE_METHODS) but can only view files approved via either (a) `ApprovedFile` linked to their completed investigation requests, or (b) manual releases recorded in `ApprovedFile.released_to_user`; access may be restricted by `page_range`.
 
 **Observation Data:**
 
@@ -59,8 +58,13 @@ The system follows RBAC (Role-Based Access Control) principles. Each resource ha
 
 **Investigation Requests:**
 
-- `InvestigationRequestPermission`: Students can create, view, update, and delete their own requests (ownership checked); admins have full access.
-- `InstructorManagementPermission`: Instructors can manage all requests via dedicated management endpoints; students have no access to these endpoints.
+- `InvestigationRequestPermission`: Students can create, view, and delete their own requests (ownership checked); only instructors/admins may update existing requests.
+- `MedicationOrderPermission`: Students can create, view, update, and delete their own medication orders; instructors have full CRUD access.
+- `DischargeSummaryPermission`: Students can create, view, update, and delete their own discharge summaries; instructors have full CRUD access.
+
+**Google Form Links:**
+
+- `GoogleFormLinkPermission`: Students have read-only access to active forms; instructors have full CRUD access.
 
 **Key Design Principles:**
 
@@ -92,7 +96,6 @@ For permission development guidelines, see [DEVELOPMENT_STANDARDS.md](./DEVELOPM
   - `File`: File record with optional categorization; `requires_pagination` controls whether "page-based authorization" is enabled. Override `delete()` to remove files from disk.
   - File Storage: `file = models.FileField(upload_to="upload_to")`, i.e., the path is `MEDIA_ROOT/upload_to/`.
   - File Viewing: `FileViewSet.view` supports PDF output for specified pages; authorized page range comes from `ApprovedFile.page_range` via completed diagnostic requests or manual releases.
-  - Upload: `PatientViewSet.upload_file` is an action route; controlled by `PatientPermission`, students cannot upload.
 
 - Observations and Bulk Creation (`student_groups`):
   - Models: `Note`, `BloodPressure`, `HeartRate`, `BodyTemperature`, `RespiratoryRate`, `BloodSugar`, `OxygenSaturation`, all containing `patient` and `user` foreign keys.
@@ -105,6 +108,13 @@ For permission development guidelines, see [DEVELOPMENT_STANDARDS.md](./DEVELOPM
   - Instructor-side: Request views in `instructors.views` provide full CRUD functionality; status updates are constrained by serializer rules (e.g., `ImagingRequestStatusUpdateSerializer`); can manage approved files. Instructors can also manually release file access to student group accounts without a request using the File API.
   - Additional request types: `MedicationOrder`, `DischargeSummary`, etc., follow similar patterns.
   - Dashboard views provide basic statistics on request status and completion.
+
+- Google Forms (`GoogleFormLink` in `patients/models.py`):
+  - Model: `GoogleFormLink` stores form title, URL, description, display order, and active status.
+  - Student/Patient Access: Read-only access to active forms via `GET /api/patients/google-forms/`.
+  - Instructor Management: Full CRUD access via `GET/POST/PUT/PATCH/DELETE /api/instructors/google-forms/` endpoints.
+  - Authorization: Forms are managed by instructors using `GoogleFormLinkPermission`; students have read-only access.
+  - Display: Forms are ordered by `display_order` and can be toggled active/inactive.
 
 ## 5. Data Security and File Access Control
 

@@ -4,8 +4,9 @@ from typing import Any, ClassVar
 from rest_framework import serializers
 
 from core.context import ViewContext
-from core.serializers import BaseModelSerializer
+from core.serializers import BaseModelSerializer, UserSerializer
 from patients.models import File
+from patients.serializers import PatientSerializer
 
 from .models import (
     ApprovedFile,
@@ -207,7 +208,13 @@ class ImagingRequestSerializer(BaseModelSerializer):
         elif context.get(ViewContext.INSTRUCTOR_READ.value):
             self.context[ViewContext.INSTRUCTOR_READ.value] = True
 
-        return super().to_representation(instance)
+        representation = super().to_representation(instance)
+
+        if context.get(ViewContext.INSTRUCTOR_READ.value):
+            representation["user"] = UserSerializer(instance.user).data
+            representation["patient"] = PatientSerializer(instance.patient).data
+
+        return representation
 
 
 class NoteSerializer(BaseModelSerializer):
@@ -404,6 +411,139 @@ class BloodTestRequestSerializer(BaseModelSerializer):
             "updated_at",
             "approved_files",
         ]
+
+    def to_representation(self, instance: BloodTestRequest) -> dict[str, Any]:
+        context = self.context or {}
+        if context.get(ViewContext.STUDENT_READ.value):
+            self.context[ViewContext.STUDENT_READ.value] = True
+        elif context.get(ViewContext.INSTRUCTOR_READ.value):
+            self.context[ViewContext.INSTRUCTOR_READ.value] = True
+
+        representation = super().to_representation(instance)
+
+        if context.get(ViewContext.INSTRUCTOR_READ.value):
+            representation["user"] = UserSerializer(instance.user).data
+            representation["patient"] = PatientSerializer(instance.patient).data
+
+        return representation
+
+
+class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for instructor status updates on imaging requests."""
+
+    approved_files = ApprovedFileSerializer(
+        source="approved_files_through",
+        many=True,
+        required=False,
+    )
+
+    class Meta:
+        model = ImagingRequest
+        fields: ClassVar[list[str]] = [
+            "id",
+            "status",
+            "updated_at",
+            "approved_files",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "updated_at"]
+
+    def validate_status(self, value: object) -> object:
+        if (
+            self.instance
+            and self.instance.status == "completed"
+            and value != "completed"
+        ):
+            msg = "Cannot change status of a completed imaging request unless it is to 'completed'."
+            raise serializers.ValidationError(msg)
+        if value not in ["pending", "completed"]:
+            msg = "Invalid status value."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def update(self, instance: ImagingRequest, validated_data: dict) -> ImagingRequest:
+        approved_files_data = validated_data.pop("approved_files_through", [])
+
+        instance = super().update(instance, validated_data)
+
+        if approved_files_data:
+            instance.approved_files_through.all().delete()
+            for approved_file_data in approved_files_data:
+                file = approved_file_data.get("file")
+                page_range = approved_file_data.get("page_range", "")
+                if file:
+                    ApprovedFile.objects.create(
+                        imaging_request=instance,
+                        file=file,
+                        page_range=page_range,
+                    )
+        elif "approved_files" in self.initial_data:
+            instance.approved_files_through.all().delete()
+
+        return instance
+
+    def to_representation(self, instance: ImagingRequest) -> dict[str, Any]:
+        serializer = ImagingRequestSerializer(instance, context=self.context)
+        return serializer.data
+
+
+class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for instructor status updates on blood test requests."""
+
+    approved_files = ApprovedFileSerializer(
+        source="approved_files_through",
+        many=True,
+        required=False,
+    )
+
+    class Meta:
+        model = BloodTestRequest
+        fields: ClassVar[list[str]] = [
+            "id",
+            "status",
+            "updated_at",
+            "approved_files",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "updated_at"]
+
+    def validate_status(self, value: object) -> object:
+        if (
+            self.instance
+            and self.instance.status == "completed"
+            and value != "completed"
+        ):
+            msg = "Cannot change status of a completed blood test request unless it is to 'completed'."
+            raise serializers.ValidationError(msg)
+        if value not in ["pending", "completed"]:
+            msg = "Invalid status value."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def update(
+        self, instance: BloodTestRequest, validated_data: dict
+    ) -> BloodTestRequest:
+        approved_files_data = validated_data.pop("approved_files_through", [])
+
+        instance = super().update(instance, validated_data)
+
+        if approved_files_data:
+            instance.approved_files_through.all().delete()
+            for approved_file_data in approved_files_data:
+                file = approved_file_data.get("file")
+                page_range = approved_file_data.get("page_range", "")
+                if file:
+                    ApprovedFile.objects.create(
+                        blood_test_request=instance,
+                        file=file,
+                        page_range=page_range,
+                    )
+        elif "approved_files" in self.initial_data:
+            instance.approved_files_through.all().delete()
+
+        return instance
+
+    def to_representation(self, instance: BloodTestRequest) -> dict[str, Any]:
+        serializer = BloodTestRequestSerializer(instance, context=self.context)
+        return serializer.data
 
 
 class MedicationOrderSerializer(BaseModelSerializer):

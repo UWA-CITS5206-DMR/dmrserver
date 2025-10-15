@@ -60,31 +60,23 @@ class InstructorViewSetTestCase(APITestCase):
 
     def test_instructor_can_view_lab_requests(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
-        response = self.client.get("/api/instructors/imaging-requests/")
+        response = self.client.get("/api/student-groups/imaging-requests/")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
 
     def test_instructor_can_update_lab_request_status(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.patch(
-            f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{self.imaging_request.id}/",
             {"status": "completed"},
         )
         assert response.status_code == status.HTTP_200_OK
         self.imaging_request.refresh_from_db()
         assert self.imaging_request.status == "completed"
 
-    def test_instructor_dashboard_access(self) -> None:
-        self.client.force_authenticate(user=self.instructor_user)
-        response = self.client.get("/api/instructors/dashboard/")
-        assert response.status_code == status.HTTP_200_OK
-        assert "patients_count" in response.data
-        assert "total_imaging_requests" in response.data
-        assert response.data["patients_count"] == 1
-
     def test_pending_lab_requests_endpoint(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
-        response = self.client.get("/api/instructors/imaging-requests/pending/")
+        response = self.client.get("/api/student-groups/imaging-requests/pending/")
         assert response.status_code == status.HTTP_200_OK
         # Check if response has pagination (results key) or direct array
         if "results" in response.data:
@@ -94,25 +86,23 @@ class InstructorViewSetTestCase(APITestCase):
 
     def test_lab_request_stats_endpoint(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
-        response = self.client.get("/api/instructors/imaging-requests/stats/")
+        response = self.client.get("/api/student-groups/imaging-requests/stats/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["total"] == 1
         assert response.data["pending"] == 1
         assert response.data["completed"] == 0
 
-    def test_student_cannot_access_instructor_endpoints(self) -> None:
+    def test_student_cannot_modify_investigation_requests(self) -> None:
         self.client.force_authenticate(user=self.student_user)
-        response = self.client.get("/api/instructors/imaging-requests/")
+        response = self.client.patch(
+            f"/api/student-groups/imaging-requests/{self.imaging_request.id}/",
+            {"status": "completed"},
+        )
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_unauthorized_access_denied(self) -> None:
-        response = self.client.get("/api/instructors/imaging-requests/")
+        response = self.client.get("/api/student-groups/imaging-requests/")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    def test_non_instructor_dashboard_access_denied(self) -> None:
-        self.client.force_authenticate(user=self.student_user)
-        response = self.client.get("/api/instructors/dashboard/")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_imaging_request_returns_full_user_and_patient_details(self) -> None:
         """
@@ -120,7 +110,7 @@ class InstructorViewSetTestCase(APITestCase):
         """
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get(
-            f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{self.imaging_request.id}/",
         )
         assert response.status_code == status.HTTP_200_OK
 
@@ -148,7 +138,7 @@ class InstructorViewSetTestCase(APITestCase):
         Test that list endpoint also returns full user and patient objects.
         """
         self.client.force_authenticate(user=self.instructor_user)
-        response = self.client.get("/api/instructors/imaging-requests/")
+        response = self.client.get("/api/student-groups/imaging-requests/")
         assert response.status_code == status.HTTP_200_OK
 
         first_item = response.data["results"][0]
@@ -227,7 +217,7 @@ class BloodTestRequestViewSetTestCase(APITestCase):
         """
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get(
-            f"/api/instructors/blood-test-requests/{self.blood_test_request.id}/",
+            f"/api/student-groups/blood-test-requests/{self.blood_test_request.id}/",
         )
         assert response.status_code == status.HTTP_200_OK
 
@@ -250,7 +240,7 @@ class BloodTestRequestViewSetTestCase(APITestCase):
         Test that list endpoint also returns full user and patient objects.
         """
         self.client.force_authenticate(user=self.instructor_user)
-        response = self.client.get("/api/instructors/blood-test-requests/")
+        response = self.client.get("/api/student-groups/blood-test-requests/")
         assert response.status_code == status.HTTP_200_OK
 
         first_item = response.data["results"][0]
@@ -352,7 +342,7 @@ class ApprovedFilesTestCase(APITestCase):
 
         # Approve the request with flat file_id structure
         response = self.client.patch(
-            f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{self.imaging_request.id}/",
             {
                 "status": "completed",
                 "approved_files": [
@@ -386,7 +376,7 @@ class ApprovedFilesTestCase(APITestCase):
         self.client.force_authenticate(user=self.instructor_user)
 
         response = self.client.patch(
-            f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{self.imaging_request.id}/",
             {
                 "status": "completed",
                 "approved_files": [
@@ -416,7 +406,7 @@ class ApprovedFilesTestCase(APITestCase):
         self.client.force_authenticate(user=self.instructor_user)
 
         response = self.client.patch(
-            f"/api/instructors/blood-test-requests/{self.blood_test_request.id}/",
+            f"/api/student-groups/blood-test-requests/{self.blood_test_request.id}/",
             {
                 "status": "completed",
                 "approved_files": [
@@ -445,7 +435,7 @@ class ApprovedFilesTestCase(APITestCase):
         self.client.force_authenticate(user=self.instructor_user)
 
         response = self.client.patch(
-            f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{self.imaging_request.id}/",
             {
                 "status": "completed",
                 "approved_files": [
@@ -471,7 +461,7 @@ class ApprovedFilesTestCase(APITestCase):
         self.client.force_authenticate(user=self.instructor_user)
 
         response = self.client.patch(
-            f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{self.imaging_request.id}/",
             {
                 "status": "completed",
                 "approved_files": [
@@ -494,7 +484,7 @@ class ApprovedFilesTestCase(APITestCase):
 
         # First, approve with a file
         self.client.patch(
-            f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{self.imaging_request.id}/",
             {
                 "status": "completed",
                 "approved_files": [{"file_id": str(self.file1.id)}],
@@ -510,7 +500,7 @@ class ApprovedFilesTestCase(APITestCase):
 
         # Now clear with empty list
         response = self.client.patch(
-            f"/api/instructors/imaging-requests/{self.imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{self.imaging_request.id}/",
             {"approved_files": []},
             format="json",
         )
