@@ -130,13 +130,6 @@ class BaseInvestigationRequestViewSet(
                 required=False,
                 description="Filter requests by patient ID",
             ),
-            OpenApiParameter(
-                name="patient_id",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Alternative filter parameter for patient ID",
-            ),
         ],
     )
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
@@ -155,9 +148,7 @@ class BaseInvestigationRequestViewSet(
         else:
             return queryset.none()
 
-        patient_param = self.request.query_params.get("patient") or self.request.query_params.get(
-            "patient_id",
-        )
+        patient_param = self.request.query_params.get("patient")
         if patient_param is not None:
             try:
                 patient_id = int(patient_param)
@@ -187,6 +178,8 @@ class BaseInvestigationRequestViewSet(
 
 
 class ObservationsViewSet(viewsets.GenericViewSet):
+    """ViewSet for bulk observation operations across all types."""
+
     permission_classes: ClassVar[list[Any]] = [ObservationPermission]
     serializer_class: ClassVar[Any] = ObservationsSerializer
 
@@ -300,66 +293,24 @@ class ObservationsViewSet(viewsets.GenericViewSet):
     )
     def list(self, request: Request, *_args: object, **_kwargs: object) -> Response:
         """
-        Retrieve all observations for a specific patient.
+        Retrieve all observations for a specific patient across all observation types.
 
-        This endpoint returns observations of various types (blood pressure,
-        heart rate, body temperature, respiratory rate, blood sugar, oxygen
-        saturation, pain score) for the specified patient.
-
-        The authenticated user making the request is automatically extracted from
-        the authentication token, and only observations recorded by that user are
-        returned to ensure data privacy and isolation.
-
-        Filtering and Pagination:
-        - The results can be filtered by observation type using the `types` query
-          parameter.
-        - The number of results per page can be controlled using the `page_size`
-          query parameter. By default, this is set to 10. The maximum allowed page
-          size is 100.
-        - Results are ordered by created_at in descending order (most recent first)
-          by default. The ordering can be changed using the `ordering` query
-          parameter. Supported values are `created_at` (ascending) and `-created_at`
-          (descending).
+        Returns observations grouped by type (blood_pressure, heart_rate, etc.).
+        Only shows observations created by the authenticated user for privacy.
 
         Query Parameters:
-        - `patient_id`: (required) The ID of the patient whose observations are
-          being requested.
-        - `types`: (optional) A comma-separated list of observation types to
-          filter by. Valid types are: blood_pressure, heart_rate, body_temperature,
-          respiratory_rate, blood_sugar, oxygen_saturation, pain_score.
-        - `page_size`: (optional) The number of results to return per page.
-          Default is 10, maximum is 100.
-        - `ordering`: (optional) The field to order results by. Supported values
-          are `created_at` (ascending) and `-created_at` (descending). Default is
-          `-created_at`.
+        - patient (required): Patient ID
+        - types (optional): Comma-separated list of observation types to filter
+        - page_size (optional): Number of records per type (default: 10, max: 100)
+        - ordering (optional): 'created_at' or '-created_at' (default: '-created_at')
 
-        Returns:
-        - `200 OK`: A paginated response with observation data following DRF
-          standard pagination format:
-          {
-              "count": <total number of observation records across all types>,
-              "next": null,
-              "previous": null,
-              "results": {
-                  "blood_pressure": [...],
-                  "heart_rate": [...],
-                  ...
-              }
-          }
-        - `400 Bad Request`: If the patient_id parameter is missing or invalid.
-        - `403 Forbidden`: If the user does not have permission to view this
-          patient's observations.
-
-        Note:
-        The `next` and `previous` fields are currently set to null because
-        pagination across multiple observation types is complex. For full
-        pagination support, use the individual observation type endpoints
-        (e.g., /api/student-groups/blood-pressure/).
+        Returns paginated response with observations grouped by type.
+        Note: Full pagination support available via individual type endpoints.
         """
-        patient_id = request.query_params.get("patient_id")
+        patient_id = request.query_params.get("patient")
         if not patient_id:
             return Response(
-                {"detail": "patient_id is required"},
+                {"detail": "patient is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -478,18 +429,12 @@ class ImagingRequestViewSet(BaseInvestigationRequestViewSet):
                 required=False,
                 description="Filter imaging requests by patient ID",
             ),
-            OpenApiParameter(
-                name="patient_id",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Alternative filter parameter for patient ID",
-            ),
         ],
     )
     @action(detail=False, methods=["get"])
     def pending(self, _request: Request) -> Response:
-        queryset = self.filter_queryset(self.get_queryset().filter(status="pending"))
+        queryset = self.get_queryset().filter(status="pending")
+
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -508,18 +453,12 @@ class ImagingRequestViewSet(BaseInvestigationRequestViewSet):
                 required=False,
                 description="Filter imaging requests by patient ID",
             ),
-            OpenApiParameter(
-                name="patient_id",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Alternative filter parameter for patient ID",
-            ),
         ],
     )
     @action(detail=False, methods=["get"])
     def stats(self, _request: Request) -> Response:
-        queryset = self.filter_queryset(self.get_queryset())
+        queryset = self.get_queryset()
+
         stats = {
             "total": queryset.count(),
             "pending": queryset.filter(status="pending").count(),
@@ -550,20 +489,12 @@ class BloodTestRequestViewSet(BaseInvestigationRequestViewSet):
                 required=False,
                 description="Filter blood test requests by patient ID",
             ),
-            OpenApiParameter(
-                name="patient_id",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Alternative filter parameter for patient ID",
-            ),
         ],
     )
     @action(detail=False, methods=["get"])
     def pending(self, _request: Request) -> Response:
-        queryset = self.filter_queryset(
-            self.get_queryset().filter(status="pending")
-        )
+        queryset = self.get_queryset().filter(status="pending")
+
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -582,18 +513,12 @@ class BloodTestRequestViewSet(BaseInvestigationRequestViewSet):
                 required=False,
                 description="Filter blood test requests by patient ID",
             ),
-            OpenApiParameter(
-                name="patient_id",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Alternative filter parameter for patient ID",
-            ),
         ],
     )
     @action(detail=False, methods=["get"])
     def stats(self, _request: Request) -> Response:
-        queryset = self.filter_queryset(self.get_queryset())
+        queryset = self.get_queryset()
+
         stats = {
             "total": queryset.count(),
             "pending": queryset.filter(status="pending").count(),
