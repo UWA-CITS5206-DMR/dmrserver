@@ -916,8 +916,8 @@ class ImagingRequestViewSetTest(APITestCase):
         assert response.data["results"][0]["test_type"] == "X-ray"
         # Note: 'user' field is hidden in student read view by the serializer
 
-    def test_student_can_update_own_imaging_request(self) -> None:
-        """Test that students can update their own imaging requests"""
+    def test_student_cannot_update_own_imaging_request(self) -> None:
+        """Test that students cannot update their own imaging requests"""
         from student_groups.models import ImagingRequest
 
         imaging_request = ImagingRequest.objects.create(
@@ -936,9 +936,9 @@ class ImagingRequestViewSetTest(APITestCase):
             f"/api/student-groups/imaging-requests/{imaging_request.id}/",
             data,
         )
-        # Students can now update their own requests with InvestigationRequestPermission
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["details"] == "Updated details for the imaging request"
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        imaging_request.refresh_from_db()
+        assert imaging_request.details == "Original details"
 
     def test_student_cannot_update_other_students_imaging_request(self) -> None:
         """Test that students cannot update other students' imaging requests"""
@@ -969,8 +969,7 @@ class ImagingRequestViewSetTest(APITestCase):
             f"/api/student-groups/imaging-requests/{imaging_request.id}/",
             data,
         )
-        # Should return 404 because the request is filtered by user in get_queryset
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_student_can_delete_own_imaging_request(self) -> None:
         """Test that students can delete their own imaging requests"""
@@ -990,7 +989,6 @@ class ImagingRequestViewSetTest(APITestCase):
         response = self.client.delete(
             f"/api/student-groups/imaging-requests/{imaging_request.id}/",
         )
-        # Students can now delete their own requests with InvestigationRequestPermission
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not ImagingRequest.objects.filter(id=imaging_request.id).exists()
 
@@ -1025,6 +1023,102 @@ class ImagingRequestViewSetTest(APITestCase):
         assert response.status_code == status.HTTP_404_NOT_FOUND
         # Verify the request still exists
         assert ImagingRequest.objects.filter(id=imaging_request.id).exists()
+
+
+class BloodTestRequestViewSetStudentTest(APITestCase):
+    """Student-facing tests for blood test investigation requests."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.student_group, _ = Group.objects.get_or_create(name=Role.STUDENT.value)
+        cls.user = get_user_model().objects.create_user(
+            username="blood_student",
+            password="testpass123",
+        )
+        cls.user.groups.add(cls.student_group)
+        cls.patient = Patient.objects.create(
+            first_name="Jane",
+            last_name="Doe",
+            date_of_birth="1991-02-02",
+            mrn="MRN_SG_013",
+            ward="Ward SG",
+            bed="Bed 13",
+            phone_number="+5222222222",
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_student_cannot_update_own_blood_test_request(self) -> None:
+        """Students should not be able to update their own blood test requests."""
+        from student_groups.models import BloodTestRequest
+
+        request_obj = BloodTestRequest.objects.create(
+            patient=self.patient,
+            user=self.user,
+            test_type=BloodTestRequest.TestType.FBC,
+            details="Original details",
+            name="Blood Test",
+            role="Medical Student",
+        )
+
+        response = self.client.patch(
+            f"/api/student-groups/blood-test-requests/{request_obj.id}/",
+            {"details": "Updated"},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        request_obj.refresh_from_db()
+        assert request_obj.details == "Original details"
+
+    def test_student_can_delete_own_blood_test_request(self) -> None:
+        """Students can delete their own pending blood test requests."""
+        from student_groups.models import BloodTestRequest
+
+        request_obj = BloodTestRequest.objects.create(
+            patient=self.patient,
+            user=self.user,
+            test_type=BloodTestRequest.TestType.EUC,
+            details="Request to be deleted",
+            name="Delete Blood Request",
+            role="Medical Student",
+        )
+
+        response = self.client.delete(
+            f"/api/student-groups/blood-test-requests/{request_obj.id}/",
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not BloodTestRequest.objects.filter(id=request_obj.id).exists()
+
+    def test_student_cannot_delete_other_students_blood_test_request(self) -> None:
+        """Students cannot delete requests owned by another student."""
+        from django.contrib.auth import get_user_model
+
+        from student_groups.models import BloodTestRequest
+
+        other_user = get_user_model().objects.create_user(
+            username="blood_student_other",
+            password="testpass123",
+        )
+        other_user.groups.add(self.student_group)
+
+        request_obj = BloodTestRequest.objects.create(
+            patient=self.patient,
+            user=other_user,
+            test_type=BloodTestRequest.TestType.CRP,
+            details="Other student's request",
+            name="Other Blood Request",
+            role="Medical Student",
+        )
+
+        response = self.client.delete(
+            f"/api/student-groups/blood-test-requests/{request_obj.id}/",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert BloodTestRequest.objects.filter(id=request_obj.id).exists()
 
 
 class PainScoreViewSetTest(APITestCase):

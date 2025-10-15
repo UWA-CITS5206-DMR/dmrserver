@@ -137,7 +137,7 @@ class ApprovedFilesAPITestCase(TestCase):
 
         # Retrieve the request
         response = self.api_client.get(
-            f"/api/instructors/imaging-requests/{imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -181,7 +181,7 @@ class ApprovedFilesAPITestCase(TestCase):
 
         # Retrieve the request
         response = self.api_client.get(
-            f"/api/instructors/blood-test-requests/{blood_test_request.id}/",
+            f"/api/student-groups/blood-test-requests/{blood_test_request.id}/",
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -269,7 +269,7 @@ class ApprovedFilesAPITestCase(TestCase):
         self.api_client.force_authenticate(user=self.instructor_user)
 
         # List all requests
-        response = self.api_client.get("/api/instructors/imaging-requests/")
+        response = self.api_client.get("/api/student-groups/imaging-requests/")
 
         assert response.status_code == status.HTTP_200_OK
         results = response.data["results"]
@@ -305,7 +305,7 @@ class ApprovedFilesAPITestCase(TestCase):
 
         # Retrieve the request
         response = self.api_client.get(
-            f"/api/instructors/imaging-requests/{imaging_request.id}/",
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
         )
 
         assert response.status_code == status.HTTP_200_OK

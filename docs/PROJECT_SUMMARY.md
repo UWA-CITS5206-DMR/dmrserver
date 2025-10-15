@@ -59,7 +59,7 @@ The system follows RBAC (Role-Based Access Control) principles. Each resource ha
 
 **Investigation Requests:**
 
-- `InvestigationRequestPermission`: Students can create, view, update, and delete their own requests (ownership checked); admins have full access.
+- `InvestigationRequestPermission`: Students can create, view, and delete their own requests (ownership checked); only instructors/admins may update existing requests.
 - `InstructorManagementPermission`: Instructors can manage all requests via dedicated management endpoints; students have no access to these endpoints.
 
 **Key Design Principles:**

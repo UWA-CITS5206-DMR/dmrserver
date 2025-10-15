@@ -291,24 +291,20 @@ class FileListPermission(BaseRolePermission):
 
 
 class InvestigationRequestPermission(BaseRolePermission):
-    """
-    Permission for investigation request resources (ImagingRequest, BloodTestRequest,
-    MedicationOrder, DischargeSummary).
+    """Unified permission for investigation request resources.
 
-    This permission provides unified access control for all investigation request types,
-    ensuring consistent RBAC enforcement across student-side endpoints.
+    Covers ImagingRequest, BloodTestRequest, MedicationOrder, and DischargeSummary APIs so
+    instructors and students can share the same endpoints while keeping responsibilities clear.
 
     Access rules:
-    - Students: can create, view, update, and delete their own requests (object-level check)
-    - Instructors: no access (use InstructorManagementPermission for instructor-side endpoints)
-    - Admins: full access to all operations
-
-    Note: This permission is designed for student-side investigation request endpoints.
-    Instructor-side endpoints should use InstructorManagementPermission.
+    - Students: can list, retrieve, create, and delete their own requests for their patients; updates remain blocked.
+    - Instructors: full CRUD access to manage requests and approve results.
+    - Admins: inherit full access (handled by BaseRolePermission).
     """
 
     role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
-        Role.STUDENT.value: [
+        Role.STUDENT.value: [*SAFE_METHODS, "POST", "DELETE"],
+        Role.INSTRUCTOR.value: [
             "GET",
             "POST",
             "PUT",
@@ -324,7 +320,7 @@ class InvestigationRequestPermission(BaseRolePermission):
     ) -> bool:
         """
         Check object-level permissions for investigation requests.
-        Students can only access, modify, and delete their own requests.
+        Students can only access their own requests.
         """
         if not request.user.is_authenticated:
             return False
@@ -333,11 +329,15 @@ class InvestigationRequestPermission(BaseRolePermission):
         if not user_role:
             return False
 
-        # Admin has full access
-        if user_role == Role.ADMIN.value:
+        # Check if the method is allowed for this role
+        allowed_methods = self.role_permissions.get(user_role, [])
+        if request.method not in allowed_methods:
+            return False
+
+        # Instructor and Admin has full access
+        if user_role in (Role.ADMIN.value, Role.INSTRUCTOR.value):
             return True
 
-        # Students can fully manage their own requests (CRUD operations)
         if user_role == Role.STUDENT.value:
             return hasattr(obj, "user") and obj.user == request.user
 

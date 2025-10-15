@@ -4,12 +4,18 @@ from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 
-from core.context import ViewContext
-from core.permissions import InvestigationRequestPermission, ObservationPermission
+from core.context import Role, ViewContext
+from core.permissions import (
+    InvestigationRequestPermission,
+    ObservationPermission,
+    get_user_role,
+)
 
 from .models import (
     BloodPressure,
@@ -31,10 +37,12 @@ from .serializers import (
     BloodPressureSerializer,
     BloodSugarSerializer,
     BloodTestRequestSerializer,
+    BloodTestRequestStatusUpdateSerializer,
     BodyTemperatureSerializer,
     DischargeSummarySerializer,
     HeartRateSerializer,
     ImagingRequestSerializer,
+    ImagingRequestStatusUpdateSerializer,
     MedicationOrderSerializer,
     NoteSerializer,
     ObservationDataSerializer,
@@ -101,7 +109,7 @@ class BaseObservationViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-class BaseStudentRequestViewSet(
+class BaseInvestigationRequestViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
     mixins.ListModelMixin,
@@ -109,22 +117,7 @@ class BaseStudentRequestViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """
-    Base ViewSet for student-side investigation requests (ImagingRequest, BloodTestRequest,
-    MedicationOrder, DischargeSummary).
-
-    Provides common functionality:
-    - Automatic user filtering (students see only their requests)
-    - Optional patient filtering via query parameter
-    - Automatic user assignment in creation
-    - InvestigationRequestPermission enforcement
-    - Full CRUD operations for students' own requests
-
-    Subclasses only need to set: queryset, serializer_class
-
-    Query Parameters:
-    - patient: (optional) Filter requests by patient ID
-    """
+    """Shared base for investigation requests across roles."""
 
     permission_classes: ClassVar[list[Any]] = [InvestigationRequestPermission]
 
@@ -137,30 +130,59 @@ class BaseStudentRequestViewSet(
                 required=False,
                 description="Filter requests by patient ID",
             ),
+            OpenApiParameter(
+                name="patient_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Alternative filter parameter for patient ID",
+            ),
         ],
     )
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """List requests with optional patient filtering"""
+        """List requests with optional patient filtering."""
         return super().list(request, *args, **kwargs)
 
     def get_queryset(self) -> QuerySet:
-        """
-        Filter requests by authenticated user and optionally by patient.
+        """Apply role-aware filtering for investigation requests."""
+        queryset = self.queryset
+        user_role = get_user_role(self.request.user)
 
-        Always filters by user for security. If 'patient' query parameter
-        is provided, additionally filters by patient ID.
-        """
-        queryset = self.queryset.filter(user=self.request.user)
+        if user_role == Role.STUDENT.value:
+            queryset = queryset.filter(user=self.request.user)
+        elif user_role in {Role.INSTRUCTOR.value, Role.ADMIN.value}:
+            pass  # Instructors and admins can see all requests
+        else:
+            return queryset.none()
 
-        # Optional patient filtering
-        patient_id = self.request.query_params.get("patient")
-        if patient_id is not None:
+        patient_param = self.request.query_params.get("patient") or self.request.query_params.get(
+            "patient_id",
+        )
+        if patient_param is not None:
+            try:
+                patient_id = int(patient_param)
+            except (TypeError, ValueError) as exc:
+                raise DRFValidationError({"patient": "Invalid patient id"}) from exc
             queryset = queryset.filter(patient_id=patient_id)
 
         return queryset
 
+    def get_serializer_context(self) -> dict[str, Any]:
+        context = super().get_serializer_context()
+        user_role = get_user_role(self.request.user)
+
+        if user_role == Role.STUDENT.value:
+            if self.action == "create":
+                context[ViewContext.STUDENT_CREATE.value] = True
+            else:
+                context[ViewContext.STUDENT_READ.value] = True
+        else:
+            context[ViewContext.INSTRUCTOR_READ.value] = True
+
+        return context
+
     def perform_create(self, serializer: Serializer) -> None:
-        """Automatically set the user to the authenticated user"""
+        """Automatically set the user to the authenticated user."""
         serializer.save(user=self.request.user)
 
 
@@ -434,37 +456,160 @@ class PainScoreViewSet(BaseObservationViewSet):
     serializer_class = PainScoreSerializer
 
 
-class ImagingRequestViewSet(BaseStudentRequestViewSet):
-    """ViewSet for ImagingRequest (student-side)"""
+class ImagingRequestViewSet(BaseInvestigationRequestViewSet):
+    """Unified imaging request API for students and instructors."""
 
-    queryset = ImagingRequest.objects.all()
+    queryset = ImagingRequest.objects.select_related("user", "patient")
     serializer_class = ImagingRequestSerializer
 
-    def get_serializer_context(self) -> dict:
-        """Add context for student create/read operations"""
-        context = super().get_serializer_context()
-        if self.action == "create":
-            context[ViewContext.STUDENT_CREATE.value] = True
-        else:
-            context[ViewContext.STUDENT_READ.value] = True
-        return context
+    def get_serializer_class(self) -> type[Serializer]:
+        if self.action in {"update", "partial_update"}:
+            return ImagingRequestStatusUpdateSerializer
+        return super().get_serializer_class()
+
+    @extend_schema(
+        summary="List pending imaging requests",
+        description="Get all imaging requests with pending status",
+        parameters=[
+            OpenApiParameter(
+                name="patient",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter imaging requests by patient ID",
+            ),
+            OpenApiParameter(
+                name="patient_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Alternative filter parameter for patient ID",
+            ),
+        ],
+    )
+    @action(detail=False, methods=["get"])
+    def pending(self, _request: Request) -> Response:
+        queryset = self.filter_queryset(self.get_queryset().filter(status="pending"))
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Get imaging request statistics",
+        description="Get counts of imaging requests by status",
+        parameters=[
+            OpenApiParameter(
+                name="patient",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter imaging requests by patient ID",
+            ),
+            OpenApiParameter(
+                name="patient_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Alternative filter parameter for patient ID",
+            ),
+        ],
+    )
+    @action(detail=False, methods=["get"])
+    def stats(self, _request: Request) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        stats = {
+            "total": queryset.count(),
+            "pending": queryset.filter(status="pending").count(),
+            "completed": queryset.filter(status="completed").count(),
+        }
+        return Response(stats)
 
 
-class BloodTestRequestViewSet(BaseStudentRequestViewSet):
-    """ViewSet for BloodTestRequest (student-side)"""
+class BloodTestRequestViewSet(BaseInvestigationRequestViewSet):
+    """Unified blood test request API for students and instructors."""
 
-    queryset = BloodTestRequest.objects.all()
+    queryset = BloodTestRequest.objects.select_related("user", "patient")
     serializer_class = BloodTestRequestSerializer
 
+    def get_serializer_class(self) -> type[Serializer]:
+        if self.action in {"update", "partial_update"}:
+            return BloodTestRequestStatusUpdateSerializer
+        return super().get_serializer_class()
 
-class MedicationOrderViewSet(BaseStudentRequestViewSet):
+    @extend_schema(
+        summary="List pending blood test requests",
+        description="Get all blood test requests with pending status",
+        parameters=[
+            OpenApiParameter(
+                name="patient",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter blood test requests by patient ID",
+            ),
+            OpenApiParameter(
+                name="patient_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Alternative filter parameter for patient ID",
+            ),
+        ],
+    )
+    @action(detail=False, methods=["get"])
+    def pending(self, _request: Request) -> Response:
+        queryset = self.filter_queryset(
+            self.get_queryset().filter(status="pending")
+        )
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Get blood test request statistics",
+        description="Get counts of blood test requests by status",
+        parameters=[
+            OpenApiParameter(
+                name="patient",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter blood test requests by patient ID",
+            ),
+            OpenApiParameter(
+                name="patient_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Alternative filter parameter for patient ID",
+            ),
+        ],
+    )
+    @action(detail=False, methods=["get"])
+    def stats(self, _request: Request) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        stats = {
+            "total": queryset.count(),
+            "pending": queryset.filter(status="pending").count(),
+            "completed": queryset.filter(status="completed").count(),
+        }
+        return Response(stats)
+
+
+class MedicationOrderViewSet(BaseInvestigationRequestViewSet):
     """ViewSet for MedicationOrder (student-side)"""
 
     queryset = MedicationOrder.objects.all()
     serializer_class = MedicationOrderSerializer
 
 
-class DischargeSummaryViewSet(BaseStudentRequestViewSet):
+class DischargeSummaryViewSet(BaseInvestigationRequestViewSet):
     """ViewSet for DischargeSummary (student-side)"""
 
     queryset = DischargeSummary.objects.all()

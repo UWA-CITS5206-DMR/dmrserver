@@ -450,7 +450,7 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
             role="Medical Student",
         )
 
-        response = self.client.get("/api/instructors/imaging-requests/")
+        response = self.client.get("/api/student-groups/imaging-requests/")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) >= 1
 
@@ -498,8 +498,7 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
             f"/api/student-groups/imaging-requests/{imaging_request.id}/",
             data,
         )
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["details"] == "Updated details by student"
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_student_can_delete_own_investigation_request(self) -> None:
         """Test that students can delete their own investigation requests"""
@@ -547,8 +546,8 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
             f"/api/student-groups/imaging-requests/{imaging_request.id}/",
             data,
         )
-        # Should return 404 because get_queryset filters by user
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        # Should return 403 because students cannot update
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Try to delete the request
         response = self.client.delete(
