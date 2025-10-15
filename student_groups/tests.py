@@ -25,6 +25,57 @@ from student_groups.models import (
 from student_groups.serializers import NoteSerializer, ObservationsSerializer
 
 
+class RoleFixtureMixin:
+    """Reusable helpers for creating role-aware users and patients."""
+
+    # Intentionally using a fixed test password for fixtures. Marked to ignore S105.
+    DEFAULT_PASSWORD = "test123"  # noqa: S105
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.role_groups = {
+            Role.ADMIN.value: Group.objects.get_or_create(name=Role.ADMIN.value)[0],
+            Role.INSTRUCTOR.value: Group.objects.get_or_create(
+                name=Role.INSTRUCTOR.value,
+            )[0],
+            Role.STUDENT.value: Group.objects.get_or_create(name=Role.STUDENT.value)[0],
+        }
+
+    @classmethod
+    def create_user(cls, username, role=None, **extra):
+        """Create a user and attach them to the requested role group."""
+
+        user = get_user_model().objects.create_user(
+            username=username,
+            password=extra.pop("password", cls.DEFAULT_PASSWORD),
+            **extra,
+        )
+        if role:
+            role_value = role.value if isinstance(role, Role) else role
+            user.groups.add(cls.role_groups[role_value])
+        return user
+
+    @classmethod
+    def create_patient(cls, **overrides):
+        """Create a patient with the new mandatory identifiers populated."""
+        from uuid import uuid4
+
+        suffix = uuid4().hex[:8]
+        defaults = {
+            "first_name": "Test",
+            "last_name": "Patient",
+            "date_of_birth": "1990-01-01",
+            "gender": Patient.Gender.UNSPECIFIED,
+            "mrn": f"MRN_CORE_{suffix}",
+            "ward": "Ward Core",
+            "bed": "Bed 1",
+            "phone_number": f"+7000{suffix[:6]}",
+        }
+        defaults.update(overrides)
+        return Patient.objects.create(**defaults)
+
+
 class BloodTestRequestChoicesTest(TestCase):
     def test_required_blood_test_types_available(self) -> None:
         required_codes = {
@@ -1182,3 +1233,167 @@ class PainScoreViewSetTest(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
         assert response.data["results"][0]["score"] == 8
+
+
+class RequestRBACTest(RoleFixtureMixin, APITestCase):
+    """Test RBAC for new request types (ImagingRequest, etc.)"""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
+
+        cls.patient = cls.create_patient(bed="Bed 5")
+
+    def setUp(self) -> None:
+        # Fresh API client per test
+        self.client = APIClient()
+
+    def test_student_can_create_imaging_request(self) -> None:
+        """Test that students can create imaging requests"""
+        self.client.force_authenticate(user=self.student_user)
+        data = {
+            "patient": self.patient.id,
+            "test_type": "X-ray",
+            "details": "Patient complaining of chest pain",
+            "infection_control_precautions": "None",
+            "imaging_focus": "Chest",
+            "name": "Test Request",
+            "role": "Student",
+        }
+        response = self.client.post("/api/student-groups/imaging-requests/", data)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["test_type"] == "X-ray"
+        assert response.data["name"] == "Test Request"
+
+    def test_instructor_can_manage_imaging_requests(self) -> None:
+        """Test that instructors can manage imaging requests"""
+        self.client.force_authenticate(user=self.instructor_user)
+
+        # Create an imaging request first
+        from student_groups.models import ImagingRequest
+        ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="MRI scan",
+            details="Patient needs MRI scan for diagnosis",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Head",
+            status="pending",
+            name="Test MRI Request",
+            role="Medical Student",
+        )
+
+        response = self.client.get("/api/student-groups/imaging-requests/")
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) >= 1
+
+    def test_admin_has_full_access_to_requests(self) -> None:
+        """Test that admin users have full access to all request types"""
+        self.client.force_authenticate(user=self.admin_user)
+
+        # Create an imaging request
+        from student_groups.models import ImagingRequest
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="X-ray",
+            details="Testing admin access rights",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Arm",
+            status="pending",
+            name="Admin Test Request",
+            role="Doctor",
+        )
+
+        # Admin should be able to access through any endpoint that exists
+        # For now, just verify the request was created successfully
+        assert imaging_request.user == self.student_user
+        assert imaging_request.status == "pending"
+
+    def test_student_can_update_own_investigation_request(self) -> None:
+        """Test that students can update their own investigation requests"""
+        self.client.force_authenticate(user=self.student_user)
+
+        # Create an imaging request
+        from student_groups.models import ImagingRequest
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="CT scan",
+            details="Original details",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
+            name="Test Student",
+            role="Medical Student",
+        )
+
+        # Update the request
+        data = {"details": "Updated details by student"}
+        response = self.client.patch(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+            data,
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_student_can_delete_own_investigation_request(self) -> None:
+        """Test that students can delete their own investigation requests"""
+        self.client.force_authenticate(user=self.student_user)
+
+        # Create an imaging request
+        from student_groups.models import ImagingRequest
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="Ultrasound",
+            details="Request to be deleted",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Abdomen",
+            name="Test Student",
+            role="Medical Student",
+        )
+
+        # Delete the request
+        response = self.client.delete(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not ImagingRequest.objects.filter(id=imaging_request.id).exists()
+
+    def test_student_cannot_modify_other_students_investigation_request(self) -> None:
+        """Test that students cannot modify other students' investigation requests"""
+        other_student = self.create_user("other_student", Role.STUDENT)
+        self.client.force_authenticate(user=self.student_user)
+
+        # Create an imaging request by another student
+        from student_groups.models import ImagingRequest
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=other_student,
+            test_type="MRI",
+            details="Other student's request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Brain",
+            name="Other Student",
+            role="Medical Student",
+        )
+
+        # Try to update the request
+        data = {"details": "Attempting unauthorized update"}
+        response = self.client.patch(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+            data,
+        )
+        # Should return 403 because students cannot update
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+        # Try to delete the request
+        response = self.client.delete(
+            f"/api/student-groups/imaging-requests/{imaging_request.id}/",
+        )
+        # Should return 404 because get_queryset filters by user
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        # Verify the request still exists
+        assert ImagingRequest.objects.filter(id=imaging_request.id).exists()

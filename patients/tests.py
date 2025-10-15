@@ -17,10 +17,61 @@ from student_groups.models import ApprovedFile, ImagingRequest
 from .models import File, GoogleFormLink, Patient
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
-class PatientApiTests(APITestCase):
+class RoleFixtureMixin:
+    """Reusable helpers for creating role-aware users and patients."""
+
+    # Intentionally using a fixed test password for fixtures. Marked to ignore S105.
+    DEFAULT_PASSWORD = "test123"  # noqa: S105
+
     @classmethod
     def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.role_groups = {
+            Role.ADMIN.value: Group.objects.get_or_create(name=Role.ADMIN.value)[0],
+            Role.INSTRUCTOR.value: Group.objects.get_or_create(
+                name=Role.INSTRUCTOR.value,
+            )[0],
+            Role.STUDENT.value: Group.objects.get_or_create(name=Role.STUDENT.value)[0],
+        }
+
+    @classmethod
+    def create_user(cls, username, role=None, **extra):
+        """Create a user and attach them to the requested role group."""
+
+        user = get_user_model().objects.create_user(
+            username=username,
+            password=extra.pop("password", cls.DEFAULT_PASSWORD),
+            **extra,
+        )
+        if role:
+            role_value = role.value if isinstance(role, Role) else role
+            user.groups.add(cls.role_groups[role_value])
+        return user
+
+    @classmethod
+    def create_patient(cls, **overrides):
+        """Create a patient with the new mandatory identifiers populated."""
+
+        suffix = uuid4().hex[:8]
+        defaults = {
+            "first_name": "Test",
+            "last_name": "Patient",
+            "date_of_birth": "1990-01-01",
+            "gender": Patient.Gender.UNSPECIFIED,
+            "mrn": f"MRN_CORE_{suffix}",
+            "ward": "Ward Core",
+            "bed": "Bed 1",
+            "phone_number": f"+7000{suffix[:6]}",
+        }
+        defaults.update(overrides)
+        return Patient.objects.create(**defaults)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class PatientApiTests(APITestCase, RoleFixtureMixin):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
         cls.instructor_group, created = Group.objects.get_or_create(
             name=Role.INSTRUCTOR.value,
         )
@@ -1245,3 +1296,206 @@ class GoogleFormLinkApiTests(APITestCase):
         url = reverse("google-form-detail", args=[self.form1.id])
         response = self.client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+class FilePermissionsTest(RoleFixtureMixin, APITestCase):
+    """Test file access permissions with approval-based logic"""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        # Create role-aware users once per class
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
+
+        # Create test patient and file once per class
+        cls.patient = cls.create_patient()
+        cls.file = File.objects.create(file="test_file.pdf", patient=cls.patient)
+
+    def setUp(self) -> None:
+        # Lightweight per-test mocks
+        from unittest.mock import Mock
+        self.mock_request = Mock()
+        self.mock_view = Mock()
+
+    def test_admin_can_access_file(self) -> None:
+        """Test that an admin has full access to files."""
+        from core.permissions import FileAccessPermission
+        permission = FileAccessPermission()
+        self.mock_request.user = self.admin_user
+        self.mock_request.method = "GET"
+
+        # Admin should have access
+        assert permission.has_object_permission(
+            self.mock_request, self.mock_view, self.file
+        )
+
+    def test_instructor_can_access_file(self) -> None:
+        """Test that an instructor has full access to files."""
+        from core.permissions import FileAccessPermission
+        permission = FileAccessPermission()
+        self.mock_request.user = self.instructor_user
+        self.mock_request.method = "GET"
+
+        # Instructor should have access
+        assert permission.has_object_permission(
+            self.mock_request, self.mock_view, self.file
+        )
+
+    def test_student_cannot_access_file_without_approval(self) -> None:
+        """Test that a student cannot access a file without an approved request."""
+        from core.permissions import FileAccessPermission
+        permission = FileAccessPermission()
+        self.mock_request.user = self.student_user
+        self.mock_request.method = "GET"
+
+        # Student should not have access without approval
+        assert not permission.has_object_permission(
+            self.mock_request, self.mock_view, self.file
+        )
+
+    def test_student_can_access_file_with_approval(self) -> None:
+        """Test that a student can access a file if their request was approved."""
+        from core.permissions import FileAccessPermission
+        permission = FileAccessPermission()
+        self.mock_request.user = self.student_user
+        self.mock_request.method = "GET"
+
+        # Create imaging request
+        imaging_request = ImagingRequest.objects.create(
+            patient=self.patient,
+            user=self.student_user,
+            test_type="X_RAY",
+            details="Test request",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Chest",
+            status="completed",
+            name="Test X-Ray Request",
+        )
+
+        # Create approved file link
+        ApprovedFile.objects.create(
+            file=self.file,
+            imaging_request=imaging_request,
+        )
+
+        # Student should now have access
+        assert permission.has_object_permission(
+            self.mock_request, self.mock_view, self.file
+        )
+
+    def test_instructor_safe_methods_allowed(self) -> None:
+        """Instructors should have permission for safe HTTP methods."""
+        from core.permissions import FileAccessPermission
+        permission = FileAccessPermission()
+        self.mock_request.user = self.instructor_user
+
+        for method in ["GET", "HEAD", "OPTIONS"]:
+            self.mock_request.method = method
+            assert permission.has_permission(self.mock_request, self.mock_view)
+
+    def test_instructor_write_methods_denied_by_permission_class(self) -> None:
+        """Instructor write operations require the view to allow them explicitly."""
+        from core.permissions import FileAccessPermission
+        permission = FileAccessPermission()
+        self.mock_request.user = self.instructor_user
+
+        for method in ["POST", "PUT", "PATCH", "DELETE"]:
+            self.mock_request.method = method
+            assert not permission.has_permission(self.mock_request, self.mock_view)
+
+    def test_student_cannot_manage_files(self) -> None:
+        """Test that a student cannot create, update, or delete files."""
+        from core.permissions import FileAccessPermission
+        permission = FileAccessPermission()
+        self.mock_request.user = self.student_user
+
+        # Test write methods - should be denied
+        for method in ["POST", "PUT", "PATCH", "DELETE"]:
+            self.mock_request.method = method
+            assert not permission.has_permission(self.mock_request, self.mock_view)
+
+
+class PatientRBACTest(RoleFixtureMixin, APITestCase):
+    """Test RBAC for Patient operations"""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        # Create users and patient once per class to avoid repeated DB writes
+        cls.admin_user = cls.create_user("admin", Role.ADMIN)
+        cls.instructor_user = cls.create_user("instructor", Role.INSTRUCTOR)
+        cls.student_user = cls.create_user("student", Role.STUDENT)
+
+        cls.patient = cls.create_patient(bed="Bed 2")
+
+    def setUp(self) -> None:
+        # Keep a fresh API client per test for authentication handling
+        self.client = APIClient()
+
+    def test_student_can_read_patients(self) -> None:
+        """Test that students can read patient data"""
+        self.client.force_authenticate(user=self.student_user)
+
+        # Can list patients
+        response = self.client.get(reverse("patient-list"))
+        assert response.status_code == status.HTTP_200_OK
+
+        # Can retrieve specific patient
+        response = self.client.get(reverse("patient-detail", args=[self.patient.id]))
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_instructor_can_modify_patients(self) -> None:
+        """Test that instructors can modify patient data"""
+        self.client.force_authenticate(user=self.instructor_user)
+
+        create_payload = {
+            "first_name": "New",
+            "last_name": "Patient",
+            "date_of_birth": "1985-01-01",
+            "gender": Patient.Gender.FEMALE,
+            "mrn": "MRN_CORE_INSTR_CREATE",
+            "ward": "Ward Core",
+            "bed": "Bed 3",
+            "phone_number": "+61800000001",
+        }
+        response = self.client.post(reverse("patient-list"), create_payload)
+        assert response.status_code == status.HTTP_201_CREATED
+
+        update_payload = {"first_name": "Updated"}
+        response = self.client.patch(
+            reverse("patient-detail", args=[self.patient.id]),
+            update_payload,
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        self.patient.refresh_from_db()
+        assert self.patient.first_name == "Updated"
+
+    def test_admin_can_modify_patients(self) -> None:
+        """Test that admin users can modify patient data"""
+        self.client.force_authenticate(user=self.admin_user)
+
+        create_payload = {
+            "first_name": "New",
+            "last_name": "Patient",
+            "date_of_birth": "1985-01-01",
+            "gender": Patient.Gender.MALE,
+            "mrn": "MRN_CORE_ADMIN_CREATE",
+            "ward": "Ward Core",
+            "bed": "Bed 4",
+            "phone_number": "+61800000002",
+        }
+        response = self.client.post(reverse("patient-list"), create_payload)
+        assert response.status_code == status.HTTP_201_CREATED
+
+        update_payload = {"first_name": "Updated Admin"}
+        response = self.client.patch(
+            reverse("patient-detail", args=[self.patient.id]),
+            update_payload,
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        self.patient.refresh_from_db()
+        assert self.patient.first_name == "Updated Admin"
