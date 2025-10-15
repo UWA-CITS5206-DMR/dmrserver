@@ -3,7 +3,7 @@ from typing import Any, ClassVar
 from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
-from rest_framework import mixins, status, viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.request import Request
@@ -111,14 +111,7 @@ class BaseObservationViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-class BaseInvestigationRequestViewSet(
-    mixins.CreateModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.ListModelMixin,
-    mixins.UpdateModelMixin,
-    mixins.DestroyModelMixin,
-    viewsets.GenericViewSet,
-):
+class BaseInvestigationRequestViewSet(viewsets.ModelViewSet):
     """Shared base for investigation requests across roles."""
 
     permission_classes: ClassVar[list[Any]] = [InvestigationRequestPermission]
@@ -131,6 +124,13 @@ class BaseInvestigationRequestViewSet(
                 location=OpenApiParameter.QUERY,
                 required=False,
                 description="Filter requests by patient ID",
+            ),
+            OpenApiParameter(
+                name="user",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filter requests by user ID (instructors and admins only)",
             ),
         ],
     )
@@ -146,7 +146,14 @@ class BaseInvestigationRequestViewSet(
         if user_role == Role.STUDENT.value:
             queryset = queryset.filter(user=self.request.user)
         elif user_role in {Role.INSTRUCTOR.value, Role.ADMIN.value}:
-            pass  # Instructors and admins can see all requests
+            # Instructors and admins can see all requests, or filter by specific user
+            user_param = self.request.query_params.get("user")
+            if user_param is not None:
+                try:
+                    user_id = int(user_param)
+                except (TypeError, ValueError) as exc:
+                    raise DRFValidationError({"user": "Invalid user id"}) from exc
+                queryset = queryset.filter(user_id=user_id)
         else:
             return queryset.none()
 
