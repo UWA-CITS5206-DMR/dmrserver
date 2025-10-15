@@ -22,6 +22,3 @@ class StudentGroupViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("username")
             .distinct()
         )
-
-
-

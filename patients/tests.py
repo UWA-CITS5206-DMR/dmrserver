@@ -1316,12 +1316,14 @@ class FilePermissionsTest(RoleFixtureMixin, APITestCase):
     def setUp(self) -> None:
         # Lightweight per-test mocks
         from unittest.mock import Mock
+
         self.mock_request = Mock()
         self.mock_view = Mock()
 
     def test_admin_can_access_file(self) -> None:
         """Test that an admin has full access to files."""
         from core.permissions import FileAccessPermission
+
         permission = FileAccessPermission()
         self.mock_request.user = self.admin_user
         self.mock_request.method = "GET"
@@ -1334,6 +1336,7 @@ class FilePermissionsTest(RoleFixtureMixin, APITestCase):
     def test_instructor_can_access_file(self) -> None:
         """Test that an instructor has full access to files."""
         from core.permissions import FileAccessPermission
+
         permission = FileAccessPermission()
         self.mock_request.user = self.instructor_user
         self.mock_request.method = "GET"
@@ -1346,6 +1349,7 @@ class FilePermissionsTest(RoleFixtureMixin, APITestCase):
     def test_student_cannot_access_file_without_approval(self) -> None:
         """Test that a student cannot access a file without an approved request."""
         from core.permissions import FileAccessPermission
+
         permission = FileAccessPermission()
         self.mock_request.user = self.student_user
         self.mock_request.method = "GET"
@@ -1358,6 +1362,7 @@ class FilePermissionsTest(RoleFixtureMixin, APITestCase):
     def test_student_can_access_file_with_approval(self) -> None:
         """Test that a student can access a file if their request was approved."""
         from core.permissions import FileAccessPermission
+
         permission = FileAccessPermission()
         self.mock_request.user = self.student_user
         self.mock_request.method = "GET"
@@ -1388,6 +1393,7 @@ class FilePermissionsTest(RoleFixtureMixin, APITestCase):
     def test_instructor_safe_methods_allowed(self) -> None:
         """Instructors should have permission for safe HTTP methods."""
         from core.permissions import FileAccessPermission
+
         permission = FileAccessPermission()
         self.mock_request.user = self.instructor_user
 
@@ -1398,6 +1404,7 @@ class FilePermissionsTest(RoleFixtureMixin, APITestCase):
     def test_instructor_write_methods_denied_by_permission_class(self) -> None:
         """Instructor write operations require the view to allow them explicitly."""
         from core.permissions import FileAccessPermission
+
         permission = FileAccessPermission()
         self.mock_request.user = self.instructor_user
 
@@ -1408,6 +1415,7 @@ class FilePermissionsTest(RoleFixtureMixin, APITestCase):
     def test_student_cannot_manage_files(self) -> None:
         """Test that a student cannot create, update, or delete files."""
         from core.permissions import FileAccessPermission
+
         permission = FileAccessPermission()
         self.mock_request.user = self.student_user
 

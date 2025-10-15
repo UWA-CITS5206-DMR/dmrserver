@@ -453,9 +453,7 @@ class ImagingRequestStatusUpdateSerializer(serializers.ModelSerializer):
             and self.instance.status == "completed"
             and value != "completed"
         ):
-            msg = (
-                "Cannot change status of a completed imaging request unless it is to 'completed'."
-            )
+            msg = "Cannot change status of a completed imaging request unless it is to 'completed'."
             raise serializers.ValidationError(msg)
         if value not in ["pending", "completed"]:
             msg = "Invalid status value."
@@ -513,16 +511,16 @@ class BloodTestRequestStatusUpdateSerializer(serializers.ModelSerializer):
             and self.instance.status == "completed"
             and value != "completed"
         ):
-            msg = (
-                "Cannot change status of a completed blood test request unless it is to 'completed'."
-            )
+            msg = "Cannot change status of a completed blood test request unless it is to 'completed'."
             raise serializers.ValidationError(msg)
         if value not in ["pending", "completed"]:
             msg = "Invalid status value."
             raise serializers.ValidationError(msg)
         return value
 
-    def update(self, instance: BloodTestRequest, validated_data: dict) -> BloodTestRequest:
+    def update(
+        self, instance: BloodTestRequest, validated_data: dict
+    ) -> BloodTestRequest:
         approved_files_data = validated_data.pop("approved_files_through", [])
 
         instance = super().update(instance, validated_data)

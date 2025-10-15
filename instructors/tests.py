@@ -512,6 +512,3 @@ class ApprovedFilesTestCase(APITestCase):
             ApprovedFile.objects.filter(imaging_request=self.imaging_request).count()
             == 0
         )
-
-
-

@@ -424,7 +424,9 @@ class GoogleFormLinkViewSet(viewsets.ModelViewSet):
 
         if user_role == Role.STUDENT.value:
             # Students only see active forms
-            return GoogleFormLink.objects.filter(is_active=True).order_by("display_order")
+            return GoogleFormLink.objects.filter(is_active=True).order_by(
+                "display_order"
+            )
 
         # Instructors and admins see all forms
         return GoogleFormLink.objects.all().order_by("display_order")

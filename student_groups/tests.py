@@ -646,7 +646,7 @@ class ObservationsViewSetTest(APITestCase):
         )
         response = self.client.get(
             reverse("observation-list"),
-            {"patient_id": self.patient.id},
+            {"patient": self.patient.id},
         )
         assert response.status_code == status.HTTP_200_OK
         # Check pagination format
@@ -678,7 +678,7 @@ class ObservationsViewSetTest(APITestCase):
         # Test with page_size=2
         response = self.client.get(
             reverse("observation-list"),
-            {"patient_id": self.patient.id, "page_size": 2},
+            {"patient": self.patient.id, "page_size": 2},
         )
         assert response.status_code == status.HTTP_200_OK
         # Check pagination format
@@ -690,7 +690,7 @@ class ObservationsViewSetTest(APITestCase):
         # Test with page_size=1
         response = self.client.get(
             reverse("observation-list"),
-            {"patient_id": self.patient.id, "page_size": 1},
+            {"patient": self.patient.id, "page_size": 1},
         )
         assert response.status_code == status.HTTP_200_OK
         assert "count" in response.data
@@ -727,7 +727,7 @@ class ObservationsViewSetTest(APITestCase):
         # Test descending order (newest first) - default
         response = self.client.get(
             reverse("observation-list"),
-            {"patient_id": self.patient.id, "ordering": "-created_at"},
+            {"patient": self.patient.id, "ordering": "-created_at"},
         )
         assert response.status_code == status.HTTP_200_OK
         assert "results" in response.data
@@ -738,7 +738,7 @@ class ObservationsViewSetTest(APITestCase):
         # Test ascending order (oldest first)
         response = self.client.get(
             reverse("observation-list"),
-            {"patient_id": self.patient.id, "ordering": "created_at"},
+            {"patient": self.patient.id, "ordering": "created_at"},
         )
         assert response.status_code == status.HTTP_200_OK
         assert "results" in response.data
@@ -1274,6 +1274,7 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
 
         # Create an imaging request first
         from student_groups.models import ImagingRequest
+
         ImagingRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
@@ -1296,6 +1297,7 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
 
         # Create an imaging request
         from student_groups.models import ImagingRequest
+
         imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
@@ -1319,6 +1321,7 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
 
         # Create an imaging request
         from student_groups.models import ImagingRequest
+
         imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
@@ -1344,6 +1347,7 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
 
         # Create an imaging request
         from student_groups.models import ImagingRequest
+
         imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
@@ -1369,6 +1373,7 @@ class RequestRBACTest(RoleFixtureMixin, APITestCase):
 
         # Create an imaging request by another student
         from student_groups.models import ImagingRequest
+
         imaging_request = ImagingRequest.objects.create(
             patient=self.patient,
             user=other_student,
