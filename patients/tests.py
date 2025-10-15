@@ -1045,17 +1045,24 @@ class GoogleFormLinkApiTests(APITestCase):
         cls.instructor_group, created = Group.objects.get_or_create(
             name=Role.INSTRUCTOR.value,
         )
-        cls.user = get_user_model().objects.create_user(
-            username="tester",
-            email="tester@example.com",
+        cls.student_group, created = Group.objects.get_or_create(
+            name=Role.STUDENT.value,
+        )
+        cls.instructor_user = get_user_model().objects.create_user(
+            username="instructor",
+            email="instructor@example.com",
             password="pass1234",
         )
-        cls.user.groups.add(cls.instructor_group)
+        cls.instructor_user.groups.add(cls.instructor_group)
+
+        cls.student_user = get_user_model().objects.create_user(
+            username="student",
+            email="student@example.com",
+            password="pass1234",
+        )
+        cls.student_user.groups.add(cls.student_group)
 
     def setUp(self) -> None:
-        self.client: APIClient = APIClient()
-        self.client.force_authenticate(user=self.user)
-
         # Create test Google Form links
         self.form1 = GoogleFormLink.objects.create(
             title="Patient Feedback Form",
@@ -1080,27 +1087,32 @@ class GoogleFormLinkApiTests(APITestCase):
         )
 
     def test_list_google_forms(self) -> None:
-        """Test listing all active Google Form links."""
+        """Test listing Google Form links for instructor (shows all forms)."""
+        self.client.force_authenticate(user=self.instructor_user)
         url = reverse("google-form-list")
         response = self.client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
-        # Should only return active forms
-        assert len(response.data) == 2
+        # Instructor should see all forms (active and inactive)
+        assert len(response.data) == 3
         assert response.data[0]["title"] == "Patient Feedback Form"
         assert response.data[1]["title"] == "Health Survey"
+        assert response.data[2]["title"] == "Inactive Form"
 
     def test_list_google_forms_ordered_by_display_order(self) -> None:
         """Test that Google Forms are ordered by display_order."""
+        self.client.force_authenticate(user=self.instructor_user)
         url = reverse("google-form-list")
         response = self.client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data[0]["display_order"] == 1
         assert response.data[1]["display_order"] == 2
+        assert response.data[2]["display_order"] == 3
 
     def test_retrieve_google_form(self) -> None:
         """Test retrieving a specific Google Form link."""
+        self.client.force_authenticate(user=self.instructor_user)
         url = reverse("google-form-detail", args=[self.form1.id])
         response = self.client.get(url)
 
@@ -1110,21 +1122,23 @@ class GoogleFormLinkApiTests(APITestCase):
         assert response.data["description"] == "Please provide your feedback"
         assert response.data["is_active"] is True
 
-    def test_list_excludes_inactive_forms(self) -> None:
-        """Test that inactive forms are not included in the list."""
+    def test_list_includes_all_forms_for_instructor(self) -> None:
+        """Test that instructors can see all forms (active and inactive)."""
+        self.client.force_authenticate(user=self.instructor_user)
         url = reverse("google-form-list")
         response = self.client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
-        # Verify inactive form is not in results
+        # Verify all forms are included
         form_titles = [form["title"] for form in response.data]
-        assert "Inactive Form" not in form_titles
+        assert "Patient Feedback Form" in form_titles
+        assert "Health Survey" in form_titles
+        assert "Inactive Form" in form_titles
 
-    def test_google_form_read_only(self) -> None:
-        """Test that Google Form links are read-only via API."""
+    def test_instructor_can_create_google_form(self) -> None:
+        """Test that instructors can create new Google Form links."""
+        self.client.force_authenticate(user=self.instructor_user)
         url = reverse("google-form-list")
-
-        # Attempt to create via POST
         data = {
             "title": "New Form",
             "url": "https://forms.google.com/new",
@@ -1133,19 +1147,40 @@ class GoogleFormLinkApiTests(APITestCase):
             "is_active": True,
         }
         response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["title"] == "New Form"
+        assert response.data["url"] == "https://forms.google.com/new"
 
-        # Attempt to update via PUT
+    def test_instructor_can_update_google_form(self) -> None:
+        """Test that instructors can update Google Form links."""
+        self.client.force_authenticate(user=self.instructor_user)
         url = reverse("google-form-detail", args=[self.form1.id])
+        data = {
+            "title": "Updated Form",
+            "url": "https://forms.google.com/updated",
+            "description": "Updated description",
+            "display_order": 5,
+            "is_active": False,
+        }
         response = self.client.put(url, data, format="json")
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["title"] == "Updated Form"
+        assert response.data["is_active"] is False
 
-        # Attempt to delete
+    def test_instructor_can_delete_google_form(self) -> None:
+        """Test that instructors can delete Google Form links."""
+        self.client.force_authenticate(user=self.instructor_user)
+        url = reverse("google-form-detail", args=[self.form1.id])
         response = self.client.delete(url)
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+        # Verify it's deleted
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_google_form_response_structure(self) -> None:
         """Test that Google Form response includes all expected fields."""
+        self.client.force_authenticate(user=self.instructor_user)
         url = reverse("google-form-detail", args=[self.form1.id])
         response = self.client.get(url)
 
@@ -1161,3 +1196,52 @@ class GoogleFormLinkApiTests(APITestCase):
             "updated_at",
         }
         assert set(response.data.keys()) == expected_fields
+
+    def test_student_can_only_read_active_forms(self) -> None:
+        """Test that students can only see active forms."""
+        self.client.force_authenticate(user=self.student_user)
+        url = reverse("google-form-list")
+        response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        # Students should only see active forms
+        assert len(response.data) == 2
+        form_titles = [form["title"] for form in response.data]
+        assert "Patient Feedback Form" in form_titles
+        assert "Health Survey" in form_titles
+        assert "Inactive Form" not in form_titles
+
+    def test_student_cannot_create_google_form(self) -> None:
+        """Test that students cannot create Google Form links."""
+        self.client.force_authenticate(user=self.student_user)
+        url = reverse("google-form-list")
+        data = {
+            "title": "New Form",
+            "url": "https://forms.google.com/new",
+            "description": "New form description",
+            "display_order": 10,
+            "is_active": True,
+        }
+        response = self.client.post(url, data, format="json")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_student_cannot_update_google_form(self) -> None:
+        """Test that students cannot update Google Form links."""
+        self.client.force_authenticate(user=self.student_user)
+        url = reverse("google-form-detail", args=[self.form1.id])
+        data = {
+            "title": "Updated Form",
+            "url": "https://forms.google.com/updated",
+            "description": "Updated description",
+            "display_order": 5,
+            "is_active": False,
+        }
+        response = self.client.put(url, data, format="json")
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_student_cannot_delete_google_form(self) -> None:
+        """Test that students cannot delete Google Form links."""
+        self.client.force_authenticate(user=self.student_user)
+        url = reverse("google-form-detail", args=[self.form1.id])
+        response = self.client.delete(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN

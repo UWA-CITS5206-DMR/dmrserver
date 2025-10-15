@@ -342,3 +342,25 @@ class InvestigationRequestPermission(BaseRolePermission):
             return hasattr(obj, "user") and obj.user == request.user
 
         return False
+
+
+class GoogleFormLinkPermission(BaseRolePermission):
+    """
+    Permission for Google Form links access:
+    - Students: read-only access to active forms
+    - Instructors: full CRUD access to all forms
+    - Admin: full access (inherited)
+    """
+
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
+        Role.STUDENT.value: SAFE_METHODS,  # GET, HEAD, OPTIONS
+        Role.INSTRUCTOR.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
+    }

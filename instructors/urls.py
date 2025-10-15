@@ -14,7 +14,6 @@ router.register(
     views.BloodTestRequestViewSet,
     basename="blood-test-request",
 )
-router.register(r"dashboard", views.DashboardViewSet, basename="dashboard")
 router.register(r"student-groups", views.StudentGroupViewSet, basename="student-group")
 
 urlpatterns = [

@@ -15,6 +15,7 @@ from core.permissions import (
     FileAccessPermission,
     FileListPermission,
     FileManagementPermission,
+    GoogleFormLinkPermission,
     PatientPermission,
     get_user_role,
 )
@@ -388,27 +389,42 @@ class FileViewSet(viewsets.ModelViewSet):
             return response
 
 
-class GoogleFormLinkViewSet(viewsets.ReadOnlyModelViewSet):
+class GoogleFormLinkViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Google Form links.
 
-    Provides read-only access to Google Form links.
+    Provides role-based access to Google Form links:
+    - Students: read-only access to active forms
+    - Instructors: full CRUD access to all forms
+    - Admins: full access (inherited)
+
     These links are global and shown to all users across all patient records.
 
     - List: GET /api/patients/google-forms/
     - Retrieve: GET /api/patients/google-forms/{id}/
+    - Create: POST /api/patients/google-forms/ (instructors only)
+    - Update: PUT/PATCH /api/patients/google-forms/{id}/ (instructors only)
+    - Delete: DELETE /api/patients/google-forms/{id}/ (instructors only)
 
-    Only active forms are returned by default.
+    Only active forms are returned by default for students.
     """
 
+    queryset = GoogleFormLink.objects.all()
     serializer_class = GoogleFormLinkSerializer
-    permission_classes: ClassVar[
-        list[object]
-    ] = []  # Public access for authenticated users
+    permission_classes: ClassVar[list[object]] = [GoogleFormLinkPermission]
     pagination_class = None  # Disable pagination for simple list of forms
 
     def get_queryset(self) -> QuerySet:
         """
-        Return only active Google Form links, ordered by display_order.
+        Return Google Form links based on user role:
+        - Students: only active forms, ordered by display_order
+        - Instructors/Admins: all forms, ordered by display_order
         """
-        return GoogleFormLink.objects.filter(is_active=True)
+        user_role = get_user_role(self.request.user)
+
+        if user_role == Role.STUDENT.value:
+            # Students only see active forms
+            return GoogleFormLink.objects.filter(is_active=True).order_by("display_order")
+
+        # Instructors and admins see all forms
+        return GoogleFormLink.objects.all().order_by("display_order")

@@ -27,9 +27,9 @@ For setup and running instructions, see `README.md` in the root directory.
 
 - Application Boundaries and Responsibilities:
   - core: General permissions and authentication serializers (`core.permissions`, `core.serializers`).
-  - patients: `Patient`, `File` models and views; upload, view, and manage files.
+  - patients: `Patient`, `File`, `GoogleFormLink` models and views; upload, view, and manage files; manage Google Form links (read-only for students, full CRUD for instructors).
   - student_groups: Observation models (Note, vital signs, etc.), request models (`ImagingRequest`, `BloodTestRequest`, etc.), bulk creation API (`ObservationsViewSet`).
-  - instructors: Full management of diagnostic requests (`ImagingRequest`, `BloodTestRequest`) by instructors, to-do lists, and statistics.
+  - instructors: Full management of diagnostic requests (`ImagingRequest`, `BloodTestRequest`) by instructors, to-do lists, statistics, and Google Form management.
 
 ## 3. Permission Model and Access Control
 
@@ -105,6 +105,13 @@ For permission development guidelines, see [DEVELOPMENT_STANDARDS.md](./DEVELOPM
   - Instructor-side: Request views in `instructors.views` provide full CRUD functionality; status updates are constrained by serializer rules (e.g., `ImagingRequestStatusUpdateSerializer`); can manage approved files. Instructors can also manually release file access to student group accounts without a request using the File API.
   - Additional request types: `MedicationOrder`, `DischargeSummary`, etc., follow similar patterns.
   - Dashboard views provide basic statistics on request status and completion.
+
+- Google Forms (`GoogleFormLink` in `patients/models.py`):
+  - Model: `GoogleFormLink` stores form title, URL, description, display order, and active status.
+  - Student/Patient Access: Read-only access to active forms via `GET /api/patients/google-forms/`.
+  - Instructor Management: Full CRUD access via `GET/POST/PUT/PATCH/DELETE /api/instructors/google-forms/` endpoints.
+  - Authorization: Forms are managed by instructors using `InstructorManagementPermission`; students have read-only access.
+  - Display: Forms are ordered by `display_order` and can be toggled active/inactive.
 
 ## 5. Data Security and File Access Control
 

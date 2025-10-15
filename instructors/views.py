@@ -12,7 +12,6 @@ from rest_framework.response import Response
 from core.context import Role, ViewContext
 from core.permissions import InstructorManagementPermission
 from core.serializers import UserSerializer
-from patients.models import Patient
 from student_groups.models import BloodTestRequest, ImagingRequest
 
 from .serializers import (
@@ -124,7 +123,6 @@ class ImagingRequestViewSet(BaseInstructorRequestViewSet):
         }
         return Response(stats)
 
-    # Inherits get_queryset and perform_create behavior from BaseInstructorRequestViewSet
 
 
 class BloodTestRequestViewSet(BaseInstructorRequestViewSet):
@@ -191,39 +189,7 @@ class BloodTestRequestViewSet(BaseInstructorRequestViewSet):
         }
         return Response(stats)
 
-    # Inherits get_queryset and perform_create behavior from BaseInstructorRequestViewSet
 
-
-class DashboardViewSet(viewsets.GenericViewSet):
-    """
-    Instructor dashboard data endpoints.
-    """
-
-    permission_classes: ClassVar[list[Any]] = [InstructorManagementPermission]
-
-    @extend_schema(
-        summary="Get dashboard overview",
-        description="Get overview statistics for instructor dashboard",
-    )
-    def list(self, _request: object) -> Response:
-        data = {
-            "patients_count": Patient.objects.count(),
-            "total_imaging_requests": ImagingRequest.objects.count(),
-            "pending_imaging_requests": ImagingRequest.objects.filter(
-                status="pending",
-            ).count(),
-            "completed_imaging_requests": ImagingRequest.objects.filter(
-                status="completed",
-            ).count(),
-            "total_blood_test_requests": BloodTestRequest.objects.count(),
-            "pending_blood_test_requests": BloodTestRequest.objects.filter(
-                status="pending",
-            ).count(),
-            "completed_blood_test_requests": BloodTestRequest.objects.filter(
-                status="completed",
-            ).count(),
-        }
-        return Response(data)
 
 
 class StudentGroupViewSet(viewsets.ReadOnlyModelViewSet):
@@ -239,3 +205,6 @@ class StudentGroupViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("username")
             .distinct()
         )
+
+
+

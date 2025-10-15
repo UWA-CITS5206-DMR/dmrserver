@@ -74,14 +74,6 @@ class InstructorViewSetTestCase(APITestCase):
         self.imaging_request.refresh_from_db()
         assert self.imaging_request.status == "completed"
 
-    def test_instructor_dashboard_access(self) -> None:
-        self.client.force_authenticate(user=self.instructor_user)
-        response = self.client.get("/api/instructors/dashboard/")
-        assert response.status_code == status.HTTP_200_OK
-        assert "patients_count" in response.data
-        assert "total_imaging_requests" in response.data
-        assert response.data["patients_count"] == 1
-
     def test_pending_lab_requests_endpoint(self) -> None:
         self.client.force_authenticate(user=self.instructor_user)
         response = self.client.get("/api/instructors/imaging-requests/pending/")
@@ -108,11 +100,6 @@ class InstructorViewSetTestCase(APITestCase):
     def test_unauthorized_access_denied(self) -> None:
         response = self.client.get("/api/instructors/imaging-requests/")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    def test_non_instructor_dashboard_access_denied(self) -> None:
-        self.client.force_authenticate(user=self.student_user)
-        response = self.client.get("/api/instructors/dashboard/")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_imaging_request_returns_full_user_and_patient_details(self) -> None:
         """
@@ -522,3 +509,6 @@ class ApprovedFilesTestCase(APITestCase):
             ApprovedFile.objects.filter(imaging_request=self.imaging_request).count()
             == 0
         )
+
+
+
