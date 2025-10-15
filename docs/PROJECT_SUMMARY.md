@@ -96,7 +96,6 @@ For permission development guidelines, see [DEVELOPMENT_STANDARDS.md](./DEVELOPM
   - `File`: File record with optional categorization; `requires_pagination` controls whether "page-based authorization" is enabled. Override `delete()` to remove files from disk.
   - File Storage: `file = models.FileField(upload_to="upload_to")`, i.e., the path is `MEDIA_ROOT/upload_to/`.
   - File Viewing: `FileViewSet.view` supports PDF output for specified pages; authorized page range comes from `ApprovedFile.page_range` via completed diagnostic requests or manual releases.
-  - Upload: `PatientViewSet.upload_file` is an action route; controlled by `PatientPermission`, students cannot upload.
 
 - Observations and Bulk Creation (`student_groups`):
   - Models: `Note`, `BloodPressure`, `HeartRate`, `BodyTemperature`, `RespiratoryRate`, `BloodSugar`, `OxygenSaturation`, all containing `patient` and `user` foreign keys.

@@ -82,6 +82,14 @@ class PatientApiTests(APITestCase, RoleFixtureMixin):
         )
         cls.user.groups.add(cls.instructor_group)
 
+        # Pre-create PDF content to reuse in tests and avoid repeated PDF generation
+        try:
+            from tests.test_utils import create_test_pdf
+
+            cls._cached_pdf_content = create_test_pdf(num_pages=1)
+        except Exception:  # noqa: BLE001 - fallback to allow test suite to proceed without fixture
+            cls._cached_pdf_content = b"dummy pdf content"
+
     def setUp(self) -> None:
         self.client: APIClient = APIClient()
         self.media_root = settings.MEDIA_ROOT
@@ -118,17 +126,23 @@ class PatientApiTests(APITestCase, RoleFixtureMixin):
     def create_patient(self, **overrides) -> Patient:
         return Patient.objects.create(**self._patient_payload(**overrides))
 
-    def upload_file(self, patient: Patient, name: str = "report.txt") -> File:
-        upload_url = reverse("patient-upload-file", args=[patient.id])
-        test_content = b"dummy-content"
-        upload = SimpleUploadedFile(name, test_content, content_type="text/plain")
-        res_upload = self.client.post(
-            upload_url,
-            data={"file": upload},
-            format="multipart",
+    def create_file_via_api(
+        self, patient: Patient, name: str = "test.pdf", **file_overrides
+    ) -> File:
+        """Create a file using FileViewSet API and return the File object."""
+        files_list_url = reverse("file-list", kwargs={"patient_pk": patient.id})
+        # Use cached PDF content to create a new SimpleUploadedFile for each test
+        pdf_file = SimpleUploadedFile(
+            name, self._cached_pdf_content, content_type="application/pdf"
         )
-        assert res_upload.status_code == status.HTTP_201_CREATED
-        return File.objects.get(patient=patient)
+        data = {
+            "file": pdf_file,
+            "category": file_overrides.get("category", File.Category.IMAGING),
+            "requires_pagination": file_overrides.get("requires_pagination", False),
+        }
+        response = self.client.post(files_list_url, data, format="multipart")
+        assert response.status_code == status.HTTP_201_CREATED
+        return File.objects.get(patient=patient, display_name=name)
 
     def test_auth_required_for_list(self) -> None:
         self.client.force_authenticate(user=None)
@@ -175,15 +189,11 @@ class PatientApiTests(APITestCase, RoleFixtureMixin):
         assert res_delete.status_code == status.HTTP_204_NO_CONTENT
         assert Patient.objects.count() == 0
 
-    def test_upload_file_action(self) -> None:
-        p = self.create_patient()
-        f = self.upload_file(p)
-        assert File.objects.filter(patient=p).count() == 1
-        assert f.display_name == "report.txt"
-
     def test_list_files_for_patient(self) -> None:
         p = self.create_patient()
-        self.upload_file(p)
+        # Create a file using FileViewSet
+        self.create_file_via_api(p)
+
         files_list_url = reverse("file-list", kwargs={"patient_pk": p.id})
         res_files = self.client.get(files_list_url)
         assert res_files.status_code == status.HTTP_200_OK
@@ -191,7 +201,9 @@ class PatientApiTests(APITestCase, RoleFixtureMixin):
 
     def test_retrieve_file_detail(self) -> None:
         p = self.create_patient()
-        f = self.upload_file(p)
+        # Create a file using FileViewSet
+        f = self.create_file_via_api(p)
+
         file_detail_url = reverse(
             "file-detail",
             kwargs={"patient_pk": p.id, "pk": str(f.id)},
@@ -202,7 +214,9 @@ class PatientApiTests(APITestCase, RoleFixtureMixin):
 
     def test_delete_file_for_patient(self) -> None:
         p = self.create_patient()
-        f = self.upload_file(p)
+        # Create a file using FileViewSet
+        f = self.create_file_via_api(p)
+
         file_detail_url = reverse(
             "file-detail",
             kwargs={"patient_pk": p.id, "pk": str(f.id)},
@@ -991,32 +1005,6 @@ class FileUploadMultipartParserTests(APITestCase):
 
         # Verify all files were created
         assert File.objects.filter(patient=self.patient).count() == 3
-
-    def test_upload_pdf_via_legacy_endpoint(self) -> None:
-        """
-        Test uploading PDF with binary content via legacy upload_file endpoint.
-
-        This ensures the legacy PatientViewSet.upload_file action also works
-        with the multipart parser configuration.
-        """
-        url = reverse("patient-upload-file", args=[self.patient.id])
-
-        pdf_file = self._create_pdf_with_binary_content("legacy_upload.pdf")
-        data = {
-            "file": pdf_file,
-            "category": File.Category.LAB_RESULTS,
-            "requires_pagination": False,
-        }
-
-        response = self.client.post(url, data, format="multipart")
-
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["category"] == File.Category.LAB_RESULTS
-
-        # Verify file was created
-        file_obj = File.objects.filter(patient=self.patient).first()
-        assert file_obj is not None
-        assert file_obj.display_name == "legacy_upload.pdf"
 
     def test_multipart_parser_with_mixed_content_types(self) -> None:
         """

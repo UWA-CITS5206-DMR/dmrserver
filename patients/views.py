@@ -43,53 +43,6 @@ class PatientViewSet(viewsets.ModelViewSet):
     serializer_class = PatientSerializer
     permission_classes: ClassVar[list[object]] = [PatientPermission]
 
-    @extend_schema(
-        summary="Upload file for patient (Legacy)",
-        description="Legacy endpoint for uploading files to a patient. "
-        "Consider using POST /api/patients/{patient_pk}/files/ instead for better REST compliance. "
-        "This endpoint supports file upload with category and pagination settings.",
-        request=FileSerializer,
-        responses={201: FileSerializer},
-        examples=[
-            OpenApiExample(
-                "Upload PDF with pagination",
-                value={
-                    "file": "file.pdf",
-                    "category": "Imaging",
-                    "requires_pagination": True,
-                },
-                request_only=True,
-            ),
-            OpenApiExample(
-                "Upload regular file",
-                value={
-                    "file": "document.txt",
-                    "category": "Other",
-                    "requires_pagination": False,
-                },
-                request_only=True,
-            ),
-        ],
-    )
-    @action(detail=True, methods=["post"], serializer_class=FileSerializer)
-    def upload_file(
-        self, request: Request, *_args: object, **_kwargs: object
-    ) -> Response:
-        """
-        Upload a file for a specific patient.
-
-        Note: This is a legacy endpoint. For new implementations,
-        prefer using FileViewSet.create (POST /api/patients/{patient_pk}/files/).
-        """
-        patient = self.get_object()
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(
-            patient=patient,
-            display_name=serializer.validated_data["file"].name,
-        )
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
     def perform_create(self, serializer: object) -> None:
         serializer.save()
 
