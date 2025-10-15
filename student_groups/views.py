@@ -12,7 +12,9 @@ from rest_framework.serializers import Serializer
 
 from core.context import Role, ViewContext
 from core.permissions import (
+    DischargeSummaryPermission,
     InvestigationRequestPermission,
+    MedicationOrderPermission,
     ObservationPermission,
     get_user_role,
 )
@@ -532,6 +534,7 @@ class MedicationOrderViewSet(BaseInvestigationRequestViewSet):
 
     queryset = MedicationOrder.objects.all()
     serializer_class = MedicationOrderSerializer
+    permission_classes: ClassVar[list[Any]] = [MedicationOrderPermission]
 
 
 class DischargeSummaryViewSet(BaseInvestigationRequestViewSet):
@@ -539,3 +542,4 @@ class DischargeSummaryViewSet(BaseInvestigationRequestViewSet):
 
     queryset = DischargeSummary.objects.all()
     serializer_class = DischargeSummarySerializer
+    permission_classes: ClassVar[list[Any]] = [DischargeSummaryPermission]

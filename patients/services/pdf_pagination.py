@@ -8,7 +8,6 @@ making the code more testable and maintainable.
 
 import io
 
-from django.http import HttpResponse
 from PyPDF2 import PdfReader, PdfWriter
 from rest_framework import status
 from rest_framework.response import Response
@@ -301,7 +300,7 @@ class PdfPaginationService:
         reader: PdfReader,
         requested_pages: list[int],
         display_name: str,
-    ) -> HttpResponse:
+    ) -> Response:
         """
         Extract pages from PDF and create HTTP response.
 
@@ -311,7 +310,7 @@ class PdfPaginationService:
             display_name: Original filename for response headers
 
         Returns:
-            HttpResponse with extracted PDF content
+            Response with extracted PDF content
         """
         writer = PdfWriter()
         for page_num in requested_pages:
@@ -322,10 +321,9 @@ class PdfPaginationService:
         writer.write(output_buffer)
         output_buffer.seek(0)
 
-        response = HttpResponse(
-            output_buffer.getvalue(),
-            content_type="application/pdf",
-        )
+        response = Response()
+        response.content = output_buffer.getvalue()
+        response["Content-Type"] = "application/pdf"
         filename = f"{display_name}_pages_{'-'.join(map(str, requested_pages))}.pdf"
         response["Content-Disposition"] = f'inline; filename="{filename}"'
         return response

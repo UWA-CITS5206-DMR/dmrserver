@@ -50,8 +50,7 @@ The system follows RBAC (Role-Based Access Control) principles. Each resource ha
 **Patient and File Management:**
 
 - `PatientPermission`: Students read-only; instructors and admins have full CRUD.
-- `FileAccessPermission`: Admins/instructors access all files; students access is granted via either (a) `ApprovedFile` linked to their completed requests, or (b) manual releases recorded in `ApprovedFile.released_to_user`; access may be restricted by `page_range`.
-- `FileManagementPermission`: Only instructors and admins can manage files (upload, update, delete).
+- `FileAccessPermission`: Admins/instructors have full CRUD access to all files; students have read-only access (SAFE_METHODS) but can only view files approved via either (a) `ApprovedFile` linked to their completed investigation requests, or (b) manual releases recorded in `ApprovedFile.released_to_user`; access may be restricted by `page_range`.
 
 **Observation Data:**
 
@@ -60,7 +59,12 @@ The system follows RBAC (Role-Based Access Control) principles. Each resource ha
 **Investigation Requests:**
 
 - `InvestigationRequestPermission`: Students can create, view, and delete their own requests (ownership checked); only instructors/admins may update existing requests.
-- `InstructorManagementPermission`: Instructors can manage all requests via dedicated management endpoints; students have no access to these endpoints.
+- `MedicationOrderPermission`: Students can create, view, update, and delete their own medication orders; instructors have full CRUD access.
+- `DischargeSummaryPermission`: Students can create, view, update, and delete their own discharge summaries; instructors have full CRUD access.
+
+**Google Form Links:**
+
+- `GoogleFormLinkPermission`: Students have read-only access to active forms; instructors have full CRUD access.
 
 **Key Design Principles:**
 
@@ -110,7 +114,7 @@ For permission development guidelines, see [DEVELOPMENT_STANDARDS.md](./DEVELOPM
   - Model: `GoogleFormLink` stores form title, URL, description, display order, and active status.
   - Student/Patient Access: Read-only access to active forms via `GET /api/patients/google-forms/`.
   - Instructor Management: Full CRUD access via `GET/POST/PUT/PATCH/DELETE /api/instructors/google-forms/` endpoints.
-  - Authorization: Forms are managed by instructors using `InstructorManagementPermission`; students have read-only access.
+  - Authorization: Forms are managed by instructors using `GoogleFormLinkPermission`; students have read-only access.
   - Display: Forms are ordered by `display_order` and can be toggled active/inactive.
 
 ## 5. Data Security and File Access Control

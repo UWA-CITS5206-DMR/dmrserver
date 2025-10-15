@@ -1401,8 +1401,8 @@ class FilePermissionsTest(RoleFixtureMixin, APITestCase):
             self.mock_request.method = method
             assert permission.has_permission(self.mock_request, self.mock_view)
 
-    def test_instructor_write_methods_denied_by_permission_class(self) -> None:
-        """Instructor write operations require the view to allow them explicitly."""
+    def test_instructor_write_methods_allowed_by_permission_class(self) -> None:
+        """Instructor write operations are allowed by the permission class."""
         from core.permissions import FileAccessPermission
 
         permission = FileAccessPermission()
@@ -1410,7 +1410,7 @@ class FilePermissionsTest(RoleFixtureMixin, APITestCase):
 
         for method in ["POST", "PUT", "PATCH", "DELETE"]:
             self.mock_request.method = method
-            assert not permission.has_permission(self.mock_request, self.mock_view)
+            assert permission.has_permission(self.mock_request, self.mock_view)
 
     def test_student_cannot_manage_files(self) -> None:
         """Test that a student cannot create, update, or delete files."""

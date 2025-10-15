@@ -56,12 +56,13 @@ class BaseRolePermission(BasePermission):
     # Override in subclasses: {role: [allowed_methods]}
     role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {}
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._role_cache: dict[str, str | None] = {}
+
     def has_permission(self, request: Request, _view: object) -> bool:
         """Check if user has permission to access the endpoint"""
-        if not request.user.is_authenticated:
-            return False
-
-        user_role = get_user_role(request.user)
+        user_role = self._get_user_role(request.user)
         if not user_role:
             return False
 
@@ -81,25 +82,43 @@ class BaseRolePermission(BasePermission):
         """Default object permission - same as has_permission"""
         return self.has_permission(request, _view)
 
+    def _get_user_role(self, user: object | None) -> str | None:
+        """
+        Get user role with caching per username.
 
-class InstructorManagementPermission(BaseRolePermission):
-    """
-    Permission for instructor management endpoints (dashboard, request management).
+        Returns:
+            str | None: User role or None if not authenticated or no role
+        """
+        if not user or not user.is_authenticated:
+            return None
 
-    This permission protects instructor-side endpoints that provide full CRUD
-    access to lab requests and dashboard statistics.
+        username = user.username
+        if username not in self._role_cache:
+            self._role_cache[username] = get_user_role(user)
 
-    Access rules:
-    - Instructors: full CRUD access to all management functions
-    - Admins: full access (inherited)
-    - Students: no access
+        return self._role_cache[username]
 
-    Use this for:
-    - Instructor dashboard endpoints
-    - Instructor-side lab request management
-    - Any instructor-specific management features
-    """
+    def _check_ownership(self, request: Request, obj: object) -> bool:
+        """
+        Check if the user owns the object (for student role).
+        Args:
+            request: The HTTP request
+            obj: The object being accessed
+        Returns:
+            bool: True if user owns the object, False otherwise
+        """
+        user_role = self._get_user_role(request.user)
 
+        if user_role in (Role.ADMIN.value, Role.INSTRUCTOR.value):
+            return True
+
+        if user_role == Role.STUDENT.value:
+            return hasattr(obj, "user") and obj.user == request.user
+
+        return False
+
+
+class StudentGroupPermission(BaseRolePermission):
     role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
         Role.INSTRUCTOR.value: [
             "GET",
@@ -153,33 +172,13 @@ class ObservationPermission(BaseRolePermission):
             "HEAD",
             "OPTIONS",
         ],
-        Role.INSTRUCTOR.value: SAFE_METHODS,
+        Role.INSTRUCTOR.value: SAFE_METHODS,  # Read-only access
     }
 
     def has_object_permission(
         self, request: Request, _view: object, obj: object
     ) -> bool:
-        """Students can only access their own observations"""
-        if not request.user.is_authenticated:
-            return False
-
-        user_role = get_user_role(request.user)
-        if not user_role:
-            return False
-
-        # Admin has full access
-        if user_role == Role.ADMIN.value:
-            return True
-
-        # Instructor has read-only access to all observations
-        if user_role == Role.INSTRUCTOR.value:
-            return request.method in SAFE_METHODS
-
-        # Student can only access their own observations
-        if user_role == Role.STUDENT.value:
-            return hasattr(obj, "user") and obj.user == request.user
-
-        return False
+        return self._check_ownership(request, obj)
 
 
 class FileAccessPermission(BaseRolePermission):
@@ -191,44 +190,43 @@ class FileAccessPermission(BaseRolePermission):
 
     role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
         Role.STUDENT.value: SAFE_METHODS,
-        Role.INSTRUCTOR.value: SAFE_METHODS,
+        Role.INSTRUCTOR.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
     }
 
     def has_object_permission(
         self, request: Request, _view: object, obj: object
     ) -> bool:
         """Check file access permissions"""
-        user = request.user
+        user_role = self._get_user_role(request.user)
 
-        if not user.is_authenticated:
-            return False
-
-        user_role = get_user_role(user)
-        if not user_role:
-            return False
-
-        # Admins and instructors have full access
-        if user_role in [Role.ADMIN.value, Role.INSTRUCTOR.value]:
+        if user_role in (Role.ADMIN.value, Role.INSTRUCTOR.value):
             return True
 
-        # Students must have an approved lab request for this file
+        # Students must have an approved investigation request or manual release
         if user_role == Role.STUDENT.value:
-            # Check if file is approved in any completed lab request for this student
+            # Check if file is approved in any completed investigation request
             imaging_request_exists = ApprovedFile.objects.filter(
                 file=obj,
-                imaging_request__user=user,
+                imaging_request__user=request.user,
                 imaging_request__status="completed",
             ).exists()
-
             blood_test_request_exists = ApprovedFile.objects.filter(
                 file=obj,
-                blood_test_request__user=user,
+                blood_test_request__user=request.user,
                 blood_test_request__status="completed",
             ).exists()
-
+            # Check if file has been manually released to the student
             manual_release_exists = ApprovedFile.objects.filter(
                 file=obj,
-                released_to_user=user,
+                released_to_user=request.user,
             ).exists()
 
             return (
@@ -238,56 +236,6 @@ class FileAccessPermission(BaseRolePermission):
             )
 
         return False
-
-
-class FileManagementPermission(BaseRolePermission):
-    """
-    Permission for file management (CRUD operations on files).
-    Only instructors and admins can manage files.
-    """
-
-    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
-        Role.INSTRUCTOR.value: [
-            "GET",
-            "POST",
-            "PUT",
-            "PATCH",
-            "DELETE",
-            "HEAD",
-            "OPTIONS",
-        ],
-    }
-
-
-class FileListPermission(BaseRolePermission):
-    """
-    Permission for listing patient files.
-
-    This permission allows students to view file lists (read-only),
-    while instructors and admins have full access.
-
-    Access rules:
-    - Students: read-only access to file lists (actual files shown are filtered by queryset)
-    - Instructors: full access to all file lists
-    - Admins: full access (inherited)
-
-    Note: The queryset filtering is handled in the view layer to show:
-    - Students: Only Admission files + approved files from completed requests
-    - Instructors/Admins: All files
-    """
-
-    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
-        Role.STUDENT.value: SAFE_METHODS,
-        Role.INSTRUCTOR.value: [
-            "GET",
-            "POST",
-            "PUT",
-            "PATCH",
-            "DELETE",
-            "HEAD",
-            "OPTIONS",
-        ],
-    }
 
 
 class InvestigationRequestPermission(BaseRolePermission):
@@ -318,30 +266,7 @@ class InvestigationRequestPermission(BaseRolePermission):
     def has_object_permission(
         self, request: Request, _view: object, obj: object
     ) -> bool:
-        """
-        Check object-level permissions for investigation requests.
-        Students can only access their own requests.
-        """
-        if not request.user.is_authenticated:
-            return False
-
-        user_role = get_user_role(request.user)
-        if not user_role:
-            return False
-
-        # Check if the method is allowed for this role
-        allowed_methods = self.role_permissions.get(user_role, [])
-        if request.method not in allowed_methods:
-            return False
-
-        # Instructor and Admin has full access
-        if user_role in (Role.ADMIN.value, Role.INSTRUCTOR.value):
-            return True
-
-        if user_role == Role.STUDENT.value:
-            return hasattr(obj, "user") and obj.user == request.user
-
-        return False
+        return self._check_ownership(request, obj)
 
 
 class GoogleFormLinkPermission(BaseRolePermission):
@@ -353,7 +278,7 @@ class GoogleFormLinkPermission(BaseRolePermission):
     """
 
     role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
-        Role.STUDENT.value: SAFE_METHODS,  # GET, HEAD, OPTIONS
+        Role.STUDENT.value: SAFE_METHODS,
         Role.INSTRUCTOR.value: [
             "GET",
             "POST",
@@ -364,3 +289,75 @@ class GoogleFormLinkPermission(BaseRolePermission):
             "OPTIONS",
         ],
     }
+
+
+class MedicationOrderPermission(BaseRolePermission):
+    """Permission for MedicationOrder resources.
+
+    Access rules:
+    - Students: can list, retrieve, create, update, and delete their own medication orders
+    - Instructors: full CRUD access to manage medication orders
+    - Admins: inherit full access (handled by BaseRolePermission)
+    """
+
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
+        Role.STUDENT.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
+        Role.INSTRUCTOR.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
+    }
+
+    def has_object_permission(
+        self, request: Request, _view: object, obj: object
+    ) -> bool:
+        return self._check_ownership(request, obj)
+
+
+class DischargeSummaryPermission(BaseRolePermission):
+    """Permission for DischargeSummary resources.
+
+    Access rules:
+    - Students: can list, retrieve, create, update, and delete their own discharge summaries
+    - Instructors: full CRUD access to manage discharge summaries
+    - Admins: inherit full access (handled by BaseRolePermission)
+    """
+
+    role_permissions: ClassVar[dict[str, list[str] | tuple[str, ...]]] = {
+        Role.STUDENT.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
+        Role.INSTRUCTOR.value: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS",
+        ],
+    }
+
+    def has_object_permission(
+        self, request: Request, _view: object, obj: object
+    ) -> bool:
+        return self._check_ownership(request, obj)
