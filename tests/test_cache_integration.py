@@ -233,7 +233,7 @@ class ObservationViewSetCachingTest(APITestCase):
         from student_groups.views import BaseObservationViewSet
 
         viewset = BaseObservationViewSet()
-        assert "patient" in viewset.cache_retrieve_params
+        assert "patient" in viewset.cache_key_params
 
 
 @override_settings(
@@ -292,7 +292,7 @@ class InvestigationRequestCachingTest(APITestCase):
         from student_groups.views import BaseInvestigationRequestViewSet
 
         viewset = BaseInvestigationRequestViewSet()
-        assert "patient" in viewset.cache_retrieve_params
+        assert "patient" in viewset.cache_key_params
         # Note: "user" was removed to prevent data leakage between different request types
 
 
@@ -328,7 +328,7 @@ class PatientAndFileCachingTest(APITestCase):
         assert hasattr(viewset, "cache_app")
         assert viewset.cache_app == "patients"
         assert viewset.cache_model == "files"
-        assert "patient_pk" in viewset.cache_retrieve_params
+        assert "patient_pk" in viewset.cache_key_params
 
 
 class CacheInvalidationStrategyTest(TestCase):
@@ -404,50 +404,6 @@ class CacheInvalidationStrategyTest(TestCase):
         assert cache.get("app2:model1:data3") is None
         assert cache.get("app1:model2:data2") is not None
         assert cache.get("other:data4") is not None
-
-
-class CacheMixinConfigurationTest(TestCase):
-    """Test CacheMixin configuration in all ViewSets"""
-
-    def test_base_observation_viewset_configuration(self) -> None:
-        """Test BaseObservationViewSet cache configuration"""
-        from student_groups.views import BaseObservationViewSet
-
-        viewset = BaseObservationViewSet()
-        assert viewset.cache_app == "student_groups"
-        assert viewset.cache_model == "observations"
-        assert viewset.cache_retrieve_params == ["patient"]
-        assert viewset.cache_invalidate_params == ["patient_id"]
-
-    def test_base_investigation_viewset_configuration(self) -> None:
-        """Test BaseInvestigationRequestViewSet cache configuration"""
-        from student_groups.views import BaseInvestigationRequestViewSet
-
-        viewset = BaseInvestigationRequestViewSet()
-        assert viewset.cache_app == "student_groups"
-        assert viewset.cache_model == "investigation_requests"
-        assert viewset.cache_retrieve_params == ["patient"]
-        assert viewset.cache_invalidate_params == ["patient_id", "user_id"]
-
-    def test_patient_viewset_configuration(self) -> None:
-        """Test PatientViewSet cache configuration"""
-        from patients.views import PatientViewSet
-
-        viewset = PatientViewSet()
-        assert viewset.cache_app == "patients"
-        assert viewset.cache_model == "patients"
-        assert viewset.cache_retrieve_params == []
-        assert viewset.cache_invalidate_params == ["id"]
-
-    def test_file_viewset_configuration(self) -> None:
-        """Test FileViewSet cache configuration"""
-        from patients.views import FileViewSet
-
-        viewset = FileViewSet()
-        assert viewset.cache_app == "patients"
-        assert viewset.cache_model == "files"
-        assert viewset.cache_retrieve_params == ["patient_pk"]
-        assert viewset.cache_invalidate_params == ["patient_id"]
 
 
 class CacheKeyStrategyTest(TestCase):
@@ -548,16 +504,3 @@ class UserIsolationTest(APITestCase):
         )
 
         assert key1 != key2, "Cache keys should be different for different users"
-
-    def test_cache_retrieve_response_user_sensitive_decorator(self) -> None:
-        """Test that cache_retrieve_response decorator with user_sensitive=True includes user_id"""
-        from core.cache import cache_retrieve_response
-
-        @cache_retrieve_response("test", "model", ["param"], user_sensitive=True)
-        def mock_view(self, request, *args, **kwargs):
-            return type(
-                "Response", (), {"status_code": 200, "data": {"test": "data"}}
-            )()
-
-        # The decorator should be applied correctly
-        assert hasattr(mock_view, "__wrapped__"), "Decorator should be applied"

@@ -75,9 +75,23 @@ class FileSerializer(serializers.ModelSerializer):
     def create(self, validated_data: dict) -> File:
         """
         Create a new File instance.
-        Automatically sets display_name from the uploaded file's name.
+
+        Automatically sets:
+        - display_name from the uploaded file's name
+        - patient_id from the ViewSet context (for nested routes)
+
+        This allows CacheMixin in the ViewSet to automatically handle
+        cache invalidation without overriding perform_create.
         """
         validated_data["display_name"] = validated_data["file"].name
+
+        # Set patient from view kwargs if available (supports nested routes)
+        view = self.context.get("view")
+        if view and hasattr(view, "kwargs"):
+            patient_pk = view.kwargs.get("patient_pk")
+            if patient_pk:
+                validated_data["patient_id"] = patient_pk
+
         return super().create(validated_data)
 
 

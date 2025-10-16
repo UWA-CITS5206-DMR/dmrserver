@@ -63,7 +63,6 @@ class BaseObservationViewSet(CacheMixin, viewsets.ModelViewSet):
     Provides common functionality for observation ViewSets:
     - Automatic user filtering in get_queryset()
     - Optional patient filtering via query parameter
-    - Automatic user assignment in perform_create()
     - ObservationPermission enforcement
     - Automatic response caching on list and retrieve actions
     - Automatic cache invalidation on create/update/destroy actions
@@ -80,24 +79,9 @@ class BaseObservationViewSet(CacheMixin, viewsets.ModelViewSet):
     permission_classes: ClassVar[list[Any]] = [ObservationPermission]
     cache_app: str = "student_groups"
     cache_model: str = "observations"  # Default, subclasses should override
-    cache_retrieve_params: ClassVar[list[str]] = ["patient"]
+    cache_key_params: ClassVar[list[str]] = ["patient"]
     cache_invalidate_params: ClassVar[list[str]] = ["patient_id"]
     cache_user_sensitive: ClassVar[bool] = True
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter(
-                name="patient",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Filter observations by patient ID",
-            ),
-        ],
-    )
-    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """List observations with optional patient filtering"""
-        return super().list(request, *args, **kwargs)
 
     def get_queryset(self) -> QuerySet:
         """
@@ -114,10 +98,6 @@ class BaseObservationViewSet(CacheMixin, viewsets.ModelViewSet):
             queryset = queryset.filter(patient_id=patient_id)
 
         return queryset
-
-    def perform_create(self, serializer: Serializer) -> None:
-        """Automatically set the user to the authenticated user"""
-        serializer.save(user=self.request.user)
 
 
 class BaseInvestigationRequestViewSet(CacheMixin, viewsets.ModelViewSet):
@@ -140,31 +120,9 @@ class BaseInvestigationRequestViewSet(CacheMixin, viewsets.ModelViewSet):
     permission_classes: ClassVar[list[Any]] = [InvestigationRequestPermission]
     cache_app: str = "student_groups"
     cache_model: str = "investigation_requests"  # Default, subclasses should override
-    cache_retrieve_params: ClassVar[list[str]] = ["patient"]
-    cache_invalidate_params: ClassVar[list[str]] = ["patient_id", "user_id"]
+    cache_key_params: ClassVar[list[str]] = ["patient"]
+    cache_invalidate_params: ClassVar[list[str]] = ["patient_id"]
     cache_user_sensitive: ClassVar[bool] = True
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter(
-                name="patient",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Filter requests by patient ID",
-            ),
-            OpenApiParameter(
-                name="user",
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Filter requests by user ID (instructors and admins only)",
-            ),
-        ],
-    )
-    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """List requests with optional patient filtering."""
-        return super().list(request, *args, **kwargs)
 
     def get_queryset(self) -> QuerySet:
         """Apply role-aware filtering for investigation requests."""
@@ -208,10 +166,6 @@ class BaseInvestigationRequestViewSet(CacheMixin, viewsets.ModelViewSet):
             context[ViewContext.INSTRUCTOR_READ.value] = True
 
         return context
-
-    def perform_create(self, serializer: Serializer) -> None:
-        """Automatically set the user to the authenticated user."""
-        serializer.save(user=self.request.user)
 
 
 class ObservationsViewSet(viewsets.GenericViewSet):
