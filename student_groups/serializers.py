@@ -27,6 +27,170 @@ from .models import (
 from .validators import ObservationValidator
 
 
+class NoteSerializer(BaseModelSerializer):
+    class Meta:
+        model = Note
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "name",
+            "role",
+            "content",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = [
+            "id",
+            "user",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class BloodPressureSerializer(BaseModelSerializer):
+    class Meta:
+        model = BloodPressure
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "systolic",
+            "diastolic",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        ObservationValidator.validate_blood_pressure(
+            data["patient"],
+            data["user"],
+            data["systolic"],
+            data["diastolic"],
+        )
+        return data
+
+
+class HeartRateSerializer(BaseModelSerializer):
+    class Meta:
+        model = HeartRate
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "heart_rate",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        ObservationValidator.validate_heart_rate(
+            data["patient"],
+            data["user"],
+            data["heart_rate"],
+        )
+        return data
+
+
+class BodyTemperatureSerializer(BaseModelSerializer):
+    class Meta:
+        model = BodyTemperature
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "temperature",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        ObservationValidator.validate_body_temperature(
+            data["patient"],
+            data["user"],
+            data["temperature"],
+        )
+        return data
+
+
+class RespiratoryRateSerializer(BaseModelSerializer):
+    class Meta:
+        model = RespiratoryRate
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "respiratory_rate",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        ObservationValidator.validate_respiratory_rate(
+            data["patient"],
+            data["user"],
+            data["respiratory_rate"],
+        )
+        return data
+
+
+class BloodSugarSerializer(BaseModelSerializer):
+    class Meta:
+        model = BloodSugar
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "sugar_level",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        ObservationValidator.validate_blood_sugar(
+            data["patient"],
+            data["user"],
+            data["sugar_level"],
+        )
+        return data
+
+
+class OxygenSaturationSerializer(BaseModelSerializer):
+    class Meta:
+        model = OxygenSaturation
+        fields: ClassVar[list[str]] = [
+            "id",
+            "patient",
+            "user",
+            "saturation_percentage",
+            "created_at",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        ObservationValidator.validate_oxygen_saturation(
+            data["patient"],
+            data["user"],
+            data["saturation_percentage"],
+        )
+        return data
+
+
+class PainScoreSerializer(BaseModelSerializer):
+    class Meta:
+        model = PainScore
+        fields: ClassVar[list[str]] = ["id", "patient", "user", "score", "created_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        ObservationValidator.validate_pain_score(
+            data["patient"],
+            data["user"],
+            data["score"],
+        )
+        return data
+
+
 class ApprovedFileSerializer(serializers.ModelSerializer):
     """
     Unified serializer for ApprovedFile with context-aware field selection.
@@ -215,170 +379,6 @@ class ImagingRequestSerializer(BaseModelSerializer):
             representation["patient"] = PatientSerializer(instance.patient).data
 
         return representation
-
-
-class NoteSerializer(BaseModelSerializer):
-    class Meta:
-        model = Note
-        fields: ClassVar[list[str]] = [
-            "id",
-            "patient",
-            "user",
-            "name",
-            "role",
-            "content",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields: ClassVar[list[str]] = [
-            "id",
-            "user",
-            "created_at",
-            "updated_at",
-        ]
-
-
-class BloodPressureSerializer(BaseModelSerializer):
-    class Meta:
-        model = BloodPressure
-        fields: ClassVar[list[str]] = [
-            "id",
-            "patient",
-            "user",
-            "systolic",
-            "diastolic",
-            "created_at",
-        ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
-
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        ObservationValidator.validate_blood_pressure(
-            data["patient"],
-            data["user"],
-            data["systolic"],
-            data["diastolic"],
-        )
-        return data
-
-
-class HeartRateSerializer(BaseModelSerializer):
-    class Meta:
-        model = HeartRate
-        fields: ClassVar[list[str]] = [
-            "id",
-            "patient",
-            "user",
-            "heart_rate",
-            "created_at",
-        ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
-
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        ObservationValidator.validate_heart_rate(
-            data["patient"],
-            data["user"],
-            data["heart_rate"],
-        )
-        return data
-
-
-class BodyTemperatureSerializer(BaseModelSerializer):
-    class Meta:
-        model = BodyTemperature
-        fields: ClassVar[list[str]] = [
-            "id",
-            "patient",
-            "user",
-            "temperature",
-            "created_at",
-        ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
-
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        ObservationValidator.validate_body_temperature(
-            data["patient"],
-            data["user"],
-            data["temperature"],
-        )
-        return data
-
-
-class RespiratoryRateSerializer(BaseModelSerializer):
-    class Meta:
-        model = RespiratoryRate
-        fields: ClassVar[list[str]] = [
-            "id",
-            "patient",
-            "user",
-            "respiratory_rate",
-            "created_at",
-        ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
-
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        ObservationValidator.validate_respiratory_rate(
-            data["patient"],
-            data["user"],
-            data["respiratory_rate"],
-        )
-        return data
-
-
-class BloodSugarSerializer(BaseModelSerializer):
-    class Meta:
-        model = BloodSugar
-        fields: ClassVar[list[str]] = [
-            "id",
-            "patient",
-            "user",
-            "sugar_level",
-            "created_at",
-        ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
-
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        ObservationValidator.validate_blood_sugar(
-            data["patient"],
-            data["user"],
-            data["sugar_level"],
-        )
-        return data
-
-
-class OxygenSaturationSerializer(BaseModelSerializer):
-    class Meta:
-        model = OxygenSaturation
-        fields: ClassVar[list[str]] = [
-            "id",
-            "patient",
-            "user",
-            "saturation_percentage",
-            "created_at",
-        ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
-
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        ObservationValidator.validate_oxygen_saturation(
-            data["patient"],
-            data["user"],
-            data["saturation_percentage"],
-        )
-        return data
-
-
-class PainScoreSerializer(BaseModelSerializer):
-    class Meta:
-        model = PainScore
-        fields: ClassVar[list[str]] = ["id", "patient", "user", "score", "created_at"]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
-
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
-        ObservationValidator.validate_pain_score(
-            data["patient"],
-            data["user"],
-            data["score"],
-        )
-        return data
 
 
 class BloodTestRequestSerializer(BaseModelSerializer):
