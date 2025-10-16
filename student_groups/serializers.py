@@ -59,16 +59,19 @@ class BloodPressureSerializer(BaseModelSerializer):
             "diastolic",
             "created_at",
         ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "user", "created_at"]
 
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        # First call super().validate() to set user from context
+        validated_data = super().validate(attrs)
+        # Now validated_data has user set
         ObservationValidator.validate_blood_pressure(
-            data["patient"],
-            data["user"],
-            data["systolic"],
-            data["diastolic"],
+            validated_data["patient"],
+            validated_data["user"],
+            validated_data["systolic"],
+            validated_data["diastolic"],
         )
-        return data
+        return validated_data
 
 
 class HeartRateSerializer(BaseModelSerializer):
@@ -81,15 +84,18 @@ class HeartRateSerializer(BaseModelSerializer):
             "heart_rate",
             "created_at",
         ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "user", "created_at"]
 
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        # First call super().validate() to set user from context
+        validated_data = super().validate(attrs)
+        # Now validated_data has user set
         ObservationValidator.validate_heart_rate(
-            data["patient"],
-            data["user"],
-            data["heart_rate"],
+            validated_data["patient"],
+            validated_data["user"],
+            validated_data["heart_rate"],
         )
-        return data
+        return validated_data
 
 
 class BodyTemperatureSerializer(BaseModelSerializer):
@@ -102,15 +108,18 @@ class BodyTemperatureSerializer(BaseModelSerializer):
             "temperature",
             "created_at",
         ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "user", "created_at"]
 
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        # First call super().validate() to set user from context
+        validated_data = super().validate(attrs)
+        # Now validated_data has user set
         ObservationValidator.validate_body_temperature(
-            data["patient"],
-            data["user"],
-            data["temperature"],
+            validated_data["patient"],
+            validated_data["user"],
+            validated_data["temperature"],
         )
-        return data
+        return validated_data
 
 
 class RespiratoryRateSerializer(BaseModelSerializer):
@@ -123,15 +132,18 @@ class RespiratoryRateSerializer(BaseModelSerializer):
             "respiratory_rate",
             "created_at",
         ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "user", "created_at"]
 
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        # First call super().validate() to set user from context
+        validated_data = super().validate(attrs)
+        # Now validated_data has user set
         ObservationValidator.validate_respiratory_rate(
-            data["patient"],
-            data["user"],
-            data["respiratory_rate"],
+            validated_data["patient"],
+            validated_data["user"],
+            validated_data["respiratory_rate"],
         )
-        return data
+        return validated_data
 
 
 class BloodSugarSerializer(BaseModelSerializer):
@@ -144,15 +156,18 @@ class BloodSugarSerializer(BaseModelSerializer):
             "sugar_level",
             "created_at",
         ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "user", "created_at"]
 
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        # First call super().validate() to set user from context
+        validated_data = super().validate(attrs)
+        # Now validated_data has user set
         ObservationValidator.validate_blood_sugar(
-            data["patient"],
-            data["user"],
-            data["sugar_level"],
+            validated_data["patient"],
+            validated_data["user"],
+            validated_data["sugar_level"],
         )
-        return data
+        return validated_data
 
 
 class OxygenSaturationSerializer(BaseModelSerializer):
@@ -165,30 +180,36 @@ class OxygenSaturationSerializer(BaseModelSerializer):
             "saturation_percentage",
             "created_at",
         ]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "user", "created_at"]
 
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        # First call super().validate() to set user from context
+        validated_data = super().validate(attrs)
+        # Now validated_data has user set
         ObservationValidator.validate_oxygen_saturation(
-            data["patient"],
-            data["user"],
-            data["saturation_percentage"],
+            validated_data["patient"],
+            validated_data["user"],
+            validated_data["saturation_percentage"],
         )
-        return data
+        return validated_data
 
 
 class PainScoreSerializer(BaseModelSerializer):
     class Meta:
         model = PainScore
         fields: ClassVar[list[str]] = ["id", "patient", "user", "score", "created_at"]
-        read_only_fields: ClassVar[list[str]] = ["id", "created_at"]
+        read_only_fields: ClassVar[list[str]] = ["id", "user", "created_at"]
 
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        # First call super().validate() to set user from context
+        validated_data = super().validate(attrs)
+        # Now validated_data has user set
         ObservationValidator.validate_pain_score(
-            data["patient"],
-            data["user"],
-            data["score"],
+            validated_data["patient"],
+            validated_data["user"],
+            validated_data["score"],
         )
-        return data
+        return validated_data
 
 
 class ObservationsSerializer(serializers.Serializer):

@@ -6,7 +6,7 @@ once per class, which keeps the suite fast and avoids repeated boilerplate.
 """
 
 import uuid
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import Group, User
 from django.test import TestCase
@@ -206,245 +206,119 @@ class AuthenticationTest(APITestCase):
         assert response.data["user"]["username"] == "testuser"
 
 
-class MedicationOrderPermissionTest(RoleFixtureMixin, TestCase):
-    """Test MedicationOrderPermission access rules."""
+class _BasePermissionBehaviorTest(RoleFixtureMixin, TestCase):
+    """Shared behaviour checks for role-aware permissions."""
+
+    permission_class = MedicationOrderPermission
 
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.student = cls.create_user("student_perm", Role.STUDENT)
-        cls.instructor = cls.create_user("instructor_perm", Role.INSTRUCTOR)
-        cls.admin = cls.create_user("admin_perm", Role.ADMIN)
-
-        # Create a mock medication order object
-        cls.medication_order = Mock()
-        cls.medication_order.user = cls.student
-
-        # Create another medication order for different user
-        cls.other_medication_order = Mock()
-        cls.other_medication_order.user = cls.create_user("other_student", Role.STUDENT)
-
-    def setUp(self) -> None:
-        self.permission = MedicationOrderPermission()
-
-    def test_student_can_read_own_medication_order(self) -> None:
-        """Students can read their own medication orders."""
-        request = Mock()
-        request.user = self.student
-        request.method = "GET"
-
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.medication_order
+        cls.student = cls.create_user(
+            f"student_{cls.permission_class.__name__.lower()}",
+            Role.STUDENT,
         )
-
-    def test_student_can_create_medication_order(self) -> None:
-        """Students can create medication orders."""
-        request = Mock()
-        request.user = self.student
-        request.method = "POST"
-
-        assert self.permission.has_permission(request, None)
-
-    def test_student_can_update_own_medication_order(self) -> None:
-        """Students can update their own medication orders."""
-        request = Mock()
-        request.user = self.student
-        request.method = "PUT"
-
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.medication_order
+        cls.other_student = cls.create_user(
+            f"other_student_{cls.permission_class.__name__.lower()}",
+            Role.STUDENT,
         )
-
-    def test_student_can_patch_own_medication_order(self) -> None:
-        """Students can patch their own medication orders."""
-        request = Mock()
-        request.user = self.student
-        request.method = "PATCH"
-
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.medication_order
+        cls.instructor = cls.create_user(
+            f"instructor_{cls.permission_class.__name__.lower()}",
+            Role.INSTRUCTOR,
         )
-
-    def test_student_can_delete_own_medication_order(self) -> None:
-        """Students can delete their own medication orders."""
-        request = Mock()
-        request.user = self.student
-        request.method = "DELETE"
-
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.medication_order
-        )
-
-    def test_student_cannot_access_other_medication_order(self) -> None:
-        """Students cannot access other students' medication orders."""
-        request = Mock()
-        request.user = self.student
-        request.method = "GET"
-
-        assert not self.permission.has_object_permission(
-            request, None, self.other_medication_order
-        )
-
-    def test_instructor_has_full_access(self) -> None:
-        """Instructors have full access to all medication orders."""
-        request = Mock()
-        request.user = self.instructor
-        request.method = "PUT"
-
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.medication_order
-        )
-        assert self.permission.has_object_permission(
-            request, None, self.other_medication_order
-        )
-
-    def test_admin_has_full_access(self) -> None:
-        """Admins have full access to all medication orders."""
-        request = Mock()
-        request.user = self.admin
-        request.method = "DELETE"
-
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.medication_order
-        )
-
-    def test_unauthenticated_user_denied(self) -> None:
-        """Unauthenticated users are denied access."""
-        request = Mock()
-        request.user = Mock()
-        request.user.is_authenticated = False
-        request.method = "GET"
-
-        assert not self.permission.has_permission(request, None)
-        assert not self.permission.has_object_permission(
-            request, None, self.medication_order
-        )
-
-
-class DischargeSummaryPermissionTest(RoleFixtureMixin, TestCase):
-    """Test DischargeSummaryPermission access rules."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        super().setUpTestData()
-        cls.student = cls.create_user("student_ds_perm", Role.STUDENT)
-        cls.instructor = cls.create_user("instructor_ds_perm", Role.INSTRUCTOR)
-        cls.admin = cls.create_user("admin_ds_perm", Role.ADMIN)
-
-        # Create a mock discharge summary object
-        cls.discharge_summary = Mock()
-        cls.discharge_summary.user = cls.student
-
-        # Create another discharge summary for different user
-        cls.other_discharge_summary = Mock()
-        cls.other_discharge_summary.user = cls.create_user(
-            "other_student_ds", Role.STUDENT
+        cls.admin = cls.create_user(
+            f"admin_{cls.permission_class.__name__.lower()}",
+            Role.ADMIN,
         )
 
     def setUp(self) -> None:
-        self.permission = DischargeSummaryPermission()
+        self.permission = self.permission_class()
+        self.owned_obj = Mock()
+        self.owned_obj.user = self.student
+        self.other_obj = Mock()
+        self.other_obj.user = self.other_student
 
-    def test_student_can_read_own_discharge_summary(self) -> None:
-        """Students can read their own discharge summaries."""
+    def _build_request(self, user, method: str):
         request = Mock()
-        request.user = self.student
-        request.method = "GET"
+        request.user = user
+        request.method = method
+        return request
 
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.discharge_summary
-        )
+    def test_student_access_requires_ownership(self) -> None:
+        """Students keep method access but are blocked on foreign objects."""
 
-    def test_student_can_create_discharge_summary(self) -> None:
-        """Students can create discharge summaries."""
-        request = Mock()
-        request.user = self.student
-        request.method = "POST"
+        for method in ("GET", "POST", "PUT", "PATCH", "DELETE"):
+            with self.subTest(method=method):
+                request = self._build_request(self.student, method)
+                assert self.permission.has_permission(request, None)
+                assert self.permission.has_object_permission(
+                    request,
+                    None,
+                    self.owned_obj,
+                )
 
-        assert self.permission.has_permission(request, None)
+                assert not self.permission.has_object_permission(
+                    request,
+                    None,
+                    self.other_obj,
+                )
 
-    def test_student_can_update_own_discharge_summary(self) -> None:
-        """Students can update their own discharge summaries."""
-        request = Mock()
-        request.user = self.student
-        request.method = "PUT"
+    def test_student_denied_when_object_missing_user(self) -> None:
+        """Objects without ownership metadata must be rejected for students."""
 
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.discharge_summary
-        )
-
-    def test_student_can_patch_own_discharge_summary(self) -> None:
-        """Students can patch their own discharge summaries."""
-        request = Mock()
-        request.user = self.student
-        request.method = "PATCH"
-
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.discharge_summary
-        )
-
-    def test_student_can_delete_own_discharge_summary(self) -> None:
-        """Students can delete their own discharge summaries."""
-        request = Mock()
-        request.user = self.student
-        request.method = "DELETE"
-
-        assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.discharge_summary
-        )
-
-    def test_student_cannot_access_other_discharge_summary(self) -> None:
-        """Students cannot access other students' discharge summaries."""
-        request = Mock()
-        request.user = self.student
-        request.method = "GET"
+        anonymous_obj = Mock()
+        delattr(anonymous_obj, "user")
+        request = self._build_request(self.student, "GET")
 
         assert not self.permission.has_object_permission(
-            request, None, self.other_discharge_summary
+            request,
+            None,
+            anonymous_obj,
         )
 
     def test_instructor_has_full_access(self) -> None:
-        """Instructors have full access to all discharge summaries."""
-        request = Mock()
-        request.user = self.instructor
-        request.method = "PUT"
+        request = self._build_request(self.instructor, "DELETE")
 
         assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.discharge_summary
-        )
-        assert self.permission.has_object_permission(
-            request, None, self.other_discharge_summary
-        )
+        assert self.permission.has_object_permission(request, None, self.owned_obj)
+        assert self.permission.has_object_permission(request, None, self.other_obj)
 
     def test_admin_has_full_access(self) -> None:
-        """Admins have full access to all discharge summaries."""
-        request = Mock()
-        request.user = self.admin
-        request.method = "DELETE"
+        request = self._build_request(self.admin, "PATCH")
 
         assert self.permission.has_permission(request, None)
-        assert self.permission.has_object_permission(
-            request, None, self.discharge_summary
-        )
+        assert self.permission.has_object_permission(request, None, self.owned_obj)
 
     def test_unauthenticated_user_denied(self) -> None:
-        """Unauthenticated users are denied access."""
-        request = Mock()
-        request.user = Mock()
-        request.user.is_authenticated = False
-        request.method = "GET"
+        unauthenticated = Mock()
+        unauthenticated.is_authenticated = False
+        request = self._build_request(unauthenticated, "GET")
 
         assert not self.permission.has_permission(request, None)
         assert not self.permission.has_object_permission(
-            request, None, self.discharge_summary
+            request,
+            None,
+            self.owned_obj,
         )
+
+    def test_role_lookup_cached_after_first_access(self) -> None:
+        """BaseRolePermission should memoise role lookups per username."""
+
+        request = self._build_request(self.student, "GET")
+
+        with patch(
+            "core.permissions.get_user_role", return_value=Role.STUDENT.value
+        ) as mocked_role:
+            assert self.permission.has_permission(request, None)
+            assert self.permission.has_permission(request, None)
+
+        # Two permission checks should only trigger one expensive role lookup.
+        assert mocked_role.call_count == 1
+
+
+class MedicationOrderPermissionTest(_BasePermissionBehaviorTest):
+    permission_class = MedicationOrderPermission
+
+
+class DischargeSummaryPermissionTest(_BasePermissionBehaviorTest):
+    permission_class = DischargeSummaryPermission
