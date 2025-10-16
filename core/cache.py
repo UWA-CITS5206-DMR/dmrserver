@@ -418,7 +418,6 @@ class CacheMixin:
             "list",
             **params,
         )
-
         # Try cache first
         cached_data = CacheManager.get_cached(cache_key)
         if cached_data is not None:

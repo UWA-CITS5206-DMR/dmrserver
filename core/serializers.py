@@ -18,23 +18,23 @@ class BaseModelSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 
-    def create(self, validated_data: dict[str, Any]) -> object:
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         # Automatically set user from request context if the model has a user field
-        # and it's not already provided in validated_data
+        # and it's not already provided in attrs
         request = self.context.get("request")
         if (
             request
             and request.user.is_authenticated
-            and "user" not in validated_data
+            and "user" not in attrs
             and hasattr(self.Meta.model, "_meta")
         ):
             try:
                 self.Meta.model._meta.get_field("user")  # noqa: SLF001
-                validated_data["user"] = request.user
+                attrs["user"] = request.user
             except FieldDoesNotExist:
                 # Field doesn't exist, skip
                 pass
-        return super().create(validated_data)
+        return super().validate(attrs)
 
 
 class LoginSerializer(serializers.Serializer):

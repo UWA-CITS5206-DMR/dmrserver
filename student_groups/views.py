@@ -120,7 +120,7 @@ class BaseInvestigationRequestViewSet(CacheMixin, viewsets.ModelViewSet):
     permission_classes: ClassVar[list[Any]] = [InvestigationRequestPermission]
     cache_app: str = "student_groups"
     cache_model: str = "investigation_requests"  # Default, subclasses should override
-    cache_key_params: ClassVar[list[str]] = ["patient"]
+    cache_key_params: ClassVar[list[str]] = ["patient", "user"]
     cache_invalidate_params: ClassVar[list[str]] = ["patient_id"]
     cache_user_sensitive: ClassVar[bool] = True
 
