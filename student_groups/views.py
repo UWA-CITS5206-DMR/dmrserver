@@ -10,7 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 
-from core.cache import CacheMixin
+from core.cache import CacheKeyGenerator, CacheManager, CacheMixin
 from core.context import Role, ViewContext
 from core.permissions import (
     DischargeSummaryPermission,
@@ -71,6 +71,7 @@ class BaseObservationViewSet(CacheMixin, viewsets.ModelViewSet):
     Subclasses only need to set:
     - queryset
     - serializer_class
+    - cache_model (to override the default)
 
     Query Parameters:
     - patient: (optional) Filter observations by patient ID
@@ -78,9 +79,10 @@ class BaseObservationViewSet(CacheMixin, viewsets.ModelViewSet):
 
     permission_classes: ClassVar[list[Any]] = [ObservationPermission]
     cache_app: str = "student_groups"
-    cache_model: str = "observations"
+    cache_model: str = "observations"  # Default, subclasses should override
     cache_retrieve_params: ClassVar[list[str]] = ["patient"]
     cache_invalidate_params: ClassVar[list[str]] = ["patient_id"]
+    cache_user_sensitive: ClassVar[bool] = True
 
     @extend_schema(
         parameters=[
@@ -127,13 +129,20 @@ class BaseInvestigationRequestViewSet(CacheMixin, viewsets.ModelViewSet):
     - Patient and user filtering via query parameters
     - Automatic response caching on list and retrieve actions
     - Automatic cache invalidation on create/update/destroy actions
+
+    Subclasses only need to set:
+    - queryset
+    - serializer_class
+    - cache_model (to override the default)
+    - permission_classes (if different from default)
     """
 
     permission_classes: ClassVar[list[Any]] = [InvestigationRequestPermission]
     cache_app: str = "student_groups"
-    cache_model: str = "investigation_requests"
-    cache_retrieve_params: ClassVar[list[str]] = ["patient", "user"]
+    cache_model: str = "investigation_requests"  # Default, subclasses should override
+    cache_retrieve_params: ClassVar[list[str]] = ["patient"]
     cache_invalidate_params: ClassVar[list[str]] = ["patient_id", "user_id"]
+    cache_user_sensitive: ClassVar[bool] = True
 
     @extend_schema(
         parameters=[
@@ -269,6 +278,8 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         if serializer.is_valid():
             try:
                 created_objects = serializer.save()
+                # Invalidate cache for observations list
+                CacheManager.invalidate_cache(["student_groups:observations:list:*"])
             except ValidationError as e:
                 # Use DRF standard 'detail' for error messages
                 return Response(
@@ -288,7 +299,7 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         summary="List observations",
         description=(
             "Retrieve observations for the authenticated user and a specific patient. "
-            "Supports ordering and basic pagination via page_size parameter. "
+            "Supports basic pagination via page_size parameter. "
             "\n\nNote: This endpoint returns multiple heterogeneous observation types in a single response, "
             "which doesn't support standard DRF pagination (page numbers, next/previous links). "
             "For full pagination support with individual observation types, use the specific endpoints: "
@@ -301,13 +312,6 @@ class ObservationsViewSet(viewsets.GenericViewSet):
                 location=OpenApiParameter.QUERY,
                 required=True,
                 description="Patient ID",
-            ),
-            OpenApiParameter(
-                name="ordering",
-                type=str,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Order by field (e.g., 'created_at' or '-created_at' for descending). Default: '-created_at'",
             ),
             OpenApiParameter(
                 name="page_size",
@@ -325,12 +329,12 @@ class ObservationsViewSet(viewsets.GenericViewSet):
 
         Returns observations grouped by type (blood_pressure, heart_rate, etc.).
         Only shows observations created by the authenticated user for privacy.
+        Observations are ordered by creation time (newest first).
 
         Query Parameters:
         - patient (required): Patient ID
         - types (optional): Comma-separated list of observation types to filter
         - page_size (optional): Number of records per type (default: 10, max: 100)
-        - ordering (optional): 'created_at' or '-created_at' (default: '-created_at')
 
         Returns paginated response with observations grouped by type.
         Note: Full pagination support available via individual type endpoints.
@@ -350,17 +354,28 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         except (ValueError, TypeError):
             page_size = 10  # Default to 10 if invalid value provided
 
-        # Get ordering parameter (default to -created_at for most recent first)
-        ordering = request.query_params.get("ordering", "-created_at")
-        # Validate ordering parameter
-        if ordering not in ["created_at", "-created_at"]:
-            ordering = "-created_at"  # Default to descending if invalid value
+        # Build cache key
+        cache_params = {
+            "patient": patient_id,
+            "user_id": request.user.id,
+            "page_size": page_size,
+        }
+        cache_key = CacheKeyGenerator.generate_key(
+            "student_groups", "observations", "list", **cache_params
+        )
 
-        # Get observations with ordering
+        # Try cache
+        cached_data = CacheManager.get_cached(cache_key)
+        if cached_data is not None:
+            # Use custom pagination class to wrap cached data
+            paginator = ObservationsPagination()
+            paginator.total_count = cached_data["total_count"]
+            return paginator.get_paginated_response(cached_data["data"])
+
+        # Get observations (automatically ordered by model default)
         observations = ObservationManager.get_observations_by_user_and_patient(
             request.user.id,
             patient_id,
-            ordering=ordering,
         )
 
         # Apply pagination (slicing) to each observation type
@@ -376,6 +391,14 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         # Calculate total count across all observation types
         total_count = sum(len(obs_list) for obs_list in observations.values())
         paginator.total_count = total_count
+
+        # Cache the response
+        cache_data = {
+            "data": serializer.data,
+            "total_count": total_count,
+        }
+        CacheManager.set_cached(cache_key, cache_data)
+
         return paginator.get_paginated_response(serializer.data)
 
 
@@ -384,6 +407,7 @@ class NoteViewSet(BaseObservationViewSet):
 
     queryset = Note.objects.all()
     serializer_class = NoteSerializer
+    cache_model: str = "notes"
 
 
 class BloodPressureViewSet(BaseObservationViewSet):
@@ -391,6 +415,7 @@ class BloodPressureViewSet(BaseObservationViewSet):
 
     queryset = BloodPressure.objects.all()
     serializer_class = BloodPressureSerializer
+    cache_model: str = "blood_pressures"
 
 
 class HeartRateViewSet(BaseObservationViewSet):
@@ -398,6 +423,7 @@ class HeartRateViewSet(BaseObservationViewSet):
 
     queryset = HeartRate.objects.all()
     serializer_class = HeartRateSerializer
+    cache_model: str = "heart_rates"
 
 
 class BodyTemperatureViewSet(BaseObservationViewSet):
@@ -405,6 +431,7 @@ class BodyTemperatureViewSet(BaseObservationViewSet):
 
     queryset = BodyTemperature.objects.all()
     serializer_class = BodyTemperatureSerializer
+    cache_model: str = "body_temperatures"
 
 
 class RespiratoryRateViewSet(BaseObservationViewSet):
@@ -412,6 +439,7 @@ class RespiratoryRateViewSet(BaseObservationViewSet):
 
     queryset = RespiratoryRate.objects.all()
     serializer_class = RespiratoryRateSerializer
+    cache_model: str = "respiratory_rates"
 
 
 class BloodSugarViewSet(BaseObservationViewSet):
@@ -419,6 +447,7 @@ class BloodSugarViewSet(BaseObservationViewSet):
 
     queryset = BloodSugar.objects.all()
     serializer_class = BloodSugarSerializer
+    cache_model: str = "blood_sugars"
 
 
 class OxygenSaturationViewSet(BaseObservationViewSet):
@@ -426,6 +455,7 @@ class OxygenSaturationViewSet(BaseObservationViewSet):
 
     queryset = OxygenSaturation.objects.all()
     serializer_class = OxygenSaturationSerializer
+    cache_model: str = "oxygen_saturations"
 
 
 class PainScoreViewSet(BaseObservationViewSet):
@@ -433,6 +463,7 @@ class PainScoreViewSet(BaseObservationViewSet):
 
     queryset = PainScore.objects.all()
     serializer_class = PainScoreSerializer
+    cache_model: str = "pain_scores"
 
 
 class ImagingRequestViewSet(BaseInvestigationRequestViewSet):
@@ -440,6 +471,7 @@ class ImagingRequestViewSet(BaseInvestigationRequestViewSet):
 
     queryset = ImagingRequest.objects.select_related("user", "patient")
     serializer_class = ImagingRequestSerializer
+    cache_model: str = "imaging_requests"
 
     def get_serializer_class(self) -> type[Serializer]:
         if self.action in {"update", "partial_update"}:
@@ -500,6 +532,7 @@ class BloodTestRequestViewSet(BaseInvestigationRequestViewSet):
 
     queryset = BloodTestRequest.objects.select_related("user", "patient")
     serializer_class = BloodTestRequestSerializer
+    cache_model: str = "blood_test_requests"
 
     def get_serializer_class(self) -> type[Serializer]:
         if self.action in {"update", "partial_update"}:
@@ -561,6 +594,7 @@ class MedicationOrderViewSet(BaseInvestigationRequestViewSet):
     queryset = MedicationOrder.objects.all()
     serializer_class = MedicationOrderSerializer
     permission_classes: ClassVar[list[Any]] = [MedicationOrderPermission]
+    cache_model: str = "medication_orders"
 
 
 class DischargeSummaryViewSet(BaseInvestigationRequestViewSet):
@@ -569,3 +603,4 @@ class DischargeSummaryViewSet(BaseInvestigationRequestViewSet):
     queryset = DischargeSummary.objects.all()
     serializer_class = DischargeSummarySerializer
     permission_classes: ClassVar[list[Any]] = [DischargeSummaryPermission]
+    cache_model: str = "discharge_summaries"

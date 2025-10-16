@@ -48,10 +48,8 @@ class PatientViewSet(CacheMixin, viewsets.ModelViewSet):
     cache_app: str = "patients"
     cache_model: str = "patients"
     cache_retrieve_params: ClassVar[list[str]] = []
-    cache_invalidate_params: ClassVar[list[str]] = []
-
-    def perform_create(self, serializer: object) -> None:
-        serializer.save()
+    cache_invalidate_params: ClassVar[list[str]] = ["id"]
+    cache_user_sensitive: ClassVar[bool] = False
 
 
 class FileViewSet(CacheMixin, viewsets.ModelViewSet):
@@ -95,6 +93,7 @@ class FileViewSet(CacheMixin, viewsets.ModelViewSet):
     cache_model: str = "files"
     cache_retrieve_params: ClassVar[list[str]] = ["patient_pk"]
     cache_invalidate_params: ClassVar[list[str]] = ["patient_id"]
+    cache_user_sensitive: ClassVar[bool] = True
 
     def get_queryset(self) -> QuerySet:
         """

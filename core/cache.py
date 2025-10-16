@@ -13,18 +13,33 @@ Cache Key Strategy:
 - Includes: application, model name, action, and sorted parameters
 """
 
-import contextlib
 import hashlib
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from functools import wraps
-from typing import Any
+from typing import ClassVar
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Model
 from rest_framework import status
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import Serializer
+
+VERSION_PARTS_COUNT = 3
+
+
+@dataclass
+class CacheParamConfig:
+    """Configuration for building cache parameters."""
+
+    cache_key_params: list[str] | None = None
+    kwargs: dict | None = None
+    user_sensitive: bool = False
+    include_page: bool = True
+    exclude_params: set[str] | None = None
 
 
 class CacheKeyGenerator:
@@ -34,22 +49,14 @@ class CacheKeyGenerator:
     DEFAULT_TTL = getattr(settings, "DMR_CACHE_TTL", 300)
 
     @staticmethod
-    def _serialize_params(params: dict[str, "Any"]) -> str:
-        """
-        Serialize parameters to a consistent string format.
-
-        Ensures same parameters always generate the same key,
-        regardless of parameter order.
-        """
-        # Sort by key for consistency
+    def _serialize_params(params: dict[str, object]) -> str:
+        """Serialize parameters to a consistent string format."""
         sorted_params = sorted(params.items())
-        # Use JSON for reliable serialization
         return json.dumps(sorted_params, default=str, sort_keys=True)
 
     @staticmethod
     def _hash_params(params_str: str) -> str:
         """Hash parameters string for URL-safe key format."""
-        # Using SHA256 instead of MD5 for security
         return hashlib.sha256(params_str.encode()).hexdigest()[:16]
 
     @staticmethod
@@ -57,7 +64,7 @@ class CacheKeyGenerator:
         app: str,
         model: str,
         action: str,
-        **params: Any,  # type: ignore[misc]
+        **params: object,
     ) -> str:
         """
         Generate a cache key following best practices.
@@ -92,7 +99,7 @@ class CacheKeyGenerator:
         cls,
         app: str,
         model: str,
-        **params: Any,  # type: ignore[misc]
+        **params: object,
     ) -> list[str]:
         """
         Generate cache keys to invalidate on write operations.
@@ -135,14 +142,14 @@ class CacheManager:
     """Manage cache operations for model queries and writes."""
 
     @staticmethod
-    def get_cached(key: str, default: Any = None) -> Any:
+    def get_cached(key: str, default: object = None) -> object:
         """Get value from cache."""
         return cache.get(key, default)
 
     @staticmethod
     def set_cached(
         key: str,
-        value: Any,
+        value: object,
         timeout: int | None = None,
     ) -> None:
         """
@@ -156,6 +163,53 @@ class CacheManager:
         if timeout is None:
             timeout = CacheKeyGenerator.DEFAULT_TTL
         cache.set(key, value, timeout)
+
+    @staticmethod
+    def _extract_actual_cache_key(cache_key: str) -> str:
+        """Extract actual cache key from internal Django cache format."""
+        if cache_key.startswith(":"):
+            parts = cache_key.split(":", 2)
+            return parts[2] if len(parts) == VERSION_PARTS_COUNT else cache_key
+        return cache_key
+
+    @staticmethod
+    def _extract_pattern_prefix(pattern: str) -> str:
+        """Extract the pattern prefix for matching cache keys."""
+        pattern_stripped = pattern.rstrip("*")
+        if ":write:" in pattern_stripped:
+            parts = pattern_stripped.split(":write:")
+            return parts[0]
+        return pattern_stripped
+
+    @staticmethod
+    def _invalidate_redis_cache(patterns: list[str]) -> bool:
+        """Attempt to invalidate cache using Redis delete_pattern."""
+        try:
+            for pattern in patterns:
+                cache.delete_pattern(pattern)
+        except AttributeError:
+            return False
+        else:
+            return True
+
+    @staticmethod
+    def _invalidate_locmem_cache(patterns: list[str]) -> None:
+        """Invalidate cache for LocMemCache backend."""
+        try:
+            if not hasattr(cache, "_cache"):
+                return
+            cache_dict = cache._cache  # noqa: SLF001
+            for pattern in patterns:
+                pattern_prefix = CacheManager._extract_pattern_prefix(pattern)
+                keys_to_delete = []
+                for k in cache_dict:
+                    actual_key = CacheManager._extract_actual_cache_key(k)
+                    if pattern_prefix in actual_key:
+                        keys_to_delete.append(actual_key)
+                for key in keys_to_delete:
+                    cache.delete(key)
+        except (AttributeError, TypeError):
+            pass
 
     @staticmethod
     def invalidate_cache(patterns: str | list[str]) -> None:
@@ -175,56 +229,62 @@ class CacheManager:
         # Convert single string to list
         pattern_list = [patterns] if isinstance(patterns, str) else patterns
 
-        for pattern in pattern_list:
-            # Try redis delete_pattern first
-            with contextlib.suppress(AttributeError):
-                # This works with django-redis
-                cache.delete_pattern(pattern)  # type: ignore[attr-defined]
-                return
+        # Try Redis first, then fallback to LocMemCache
+        if not CacheManager._invalidate_redis_cache(pattern_list):
+            CacheManager._invalidate_locmem_cache(pattern_list)
 
-            # Fallback for locmem: manually clear matching keys
-            try:
-                # Access the underlying cache dict directly
-                # For ConnectionProxy to LocMemCache, _cache is an OrderedDict
-                if hasattr(cache, "_cache"):
-                    cache_dict = cache._cache  # type: ignore[attr-defined]
-                    pattern_stripped = pattern.rstrip("*")
 
-                    # Handle write invalidation patterns
-                    # Pattern like "app:model:write:param:*" should clear "app:model:*" cache
-                    if ":write:" in pattern_stripped:
-                        # Extract app and model from write pattern
-                        parts = pattern_stripped.split(":write:")
-                        model_prefix = parts[0]  # e.g., "student_groups:observations"
-                        # Match all keys that start with this app:model prefix
-                        pattern_prefix = model_prefix
-                    else:
-                        # Regular pattern matching
-                        pattern_prefix = pattern_stripped
+class CacheParamBuilder:
+    """Helper class to build cache parameters from request and kwargs."""
 
-                    # Find all keys that match the pattern
-                    # Keys have format `:VERSION:actual_key`, so we need to extract actual_key
-                    keys_to_delete = []
-                    for k in cache_dict:
-                        # Extract actual key from `:1:actual_key` format
-                        if k.startswith(":"):
-                            parts = k.split(":", 2)  # Split into ['', 'VERSION', 'actual_key']
-                            if len(parts) == 3:
-                                actual_key = parts[2]
-                            else:
-                                actual_key = k
-                        else:
-                            actual_key = k
+    @staticmethod
+    def build_from_request(
+        request: Request,
+        config: CacheParamConfig | None = None,
+    ) -> dict[str, object]:
+        """Build cache parameters from request query params and kwargs."""
+        config = config or CacheParamConfig()
+        params = {}
+        kwargs = config.kwargs or {}
 
-                        # Check if pattern matches
-                        if pattern_prefix in actual_key:
-                            keys_to_delete.append(actual_key)
+        # Include configured parameters
+        for param in config.cache_key_params or []:
+            value = request.query_params.get(param)
+            if value is None and param in kwargs:
+                value = kwargs[param]  # type: ignore[assignment]
+            if value is not None:
+                params[param] = value
 
-                    # Delete matching keys using cache.delete() to handle expiry properly
-                    for key in keys_to_delete:
-                        cache.delete(key)
-            except (AttributeError, TypeError):
-                pass
+        # Include pagination if requested and user ID if sensitive
+        if config.include_page or config.user_sensitive:
+            page = request.query_params.get("page", "1")
+            params["page"] = page
+            if config.user_sensitive:
+                params["user_id"] = request.user.id
+
+        return params
+
+    @staticmethod
+    def build_with_all_query_params(
+        request: Request,
+        *,
+        user_sensitive: bool = False,
+        exclude_params: set[str] | None = None,
+    ) -> dict[str, object]:
+        """Build cache parameters including all query params except excluded ones."""
+        exclude_params = exclude_params or {"page", "page_size", "format", "callback"}
+        params = {
+            param: value
+            for param, value in request.query_params.items()
+            if param not in exclude_params
+        }
+
+        page = request.query_params.get("page", "1")
+        params["page"] = page
+        if user_sensitive:
+            params["user_id"] = request.user.id
+
+        return params
 
 
 def cache_retrieve_response(
@@ -232,73 +292,35 @@ def cache_retrieve_response(
     model: str,
     cache_key_params: list[str] | None = None,
     ttl: int | None = None,
+    *,
+    user_sensitive: bool = False,
 ) -> Callable:
-    """
-    Decorator to cache GET/retrieve responses.
-
-    Caches the serialized response data for list/retrieve endpoints.
-
-    Args:
-        app: Application name
-        model: Model name
-        cache_key_params: List of query parameter names to include in cache key
-                         (e.g., ['patient', 'user', 'category'])
-        ttl: Cache timeout in seconds
-
-    Usage:
-        @cache_retrieve_response('patients', 'file', ['patient_id', 'category'])
-        def list(self, request, *args, **kwargs):
-            return super().list(request, *args, **kwargs)
-
-    Example:
-        When requesting GET /patients/1/files/?category=Imaging
-        Cache key will be: patients:file:list:hash({category: Imaging, patient_id: 1})
-    """
+    """Decorator to cache GET/retrieve responses based on query parameters."""
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(self: Any, request: Any, *args: Any, **kwargs: Any) -> Any:
-            # Only cache GET requests
+        def wrapper(
+            self: object, request: Request, *args: object, **kwargs: object
+        ) -> object:
             if request.method != "GET":
                 return func(self, request, *args, **kwargs)
 
-            # Build cache key parameters from query params and URL kwargs
-            cache_params = {}
-
-            if cache_key_params:
-                for param in cache_key_params:
-                    # Check query parameters first
-                    value = request.query_params.get(param)
-                    # Then check URL kwargs
-                    if value is None and param in kwargs:
-                        value = kwargs[param]
-
-                    if value is not None:
-                        cache_params[param] = value
-
-            # Add pagination info to cache key
-            page = request.query_params.get("page", "1")
-            cache_params["page"] = page
-
-            # Generate cache key
-            action = getattr(self, "action", "list")
-            cache_key = CacheKeyGenerator.generate_key(
-                app,
-                model,
-                action,
-                **cache_params,
+            config = CacheParamConfig(
+                cache_key_params=cache_key_params,
+                kwargs=kwargs,
+                user_sensitive=user_sensitive,
             )
+            params = CacheParamBuilder.build_from_request(request, config)
 
-            # Try to get from cache
+            action = getattr(self, "action", "list")
+            cache_key = CacheKeyGenerator.generate_key(app, model, action, **params)
+
             cached_response = CacheManager.get_cached(cache_key)
             if cached_response is not None:
-                # Return cached response data
                 return cached_response
 
-            # Call original function
             response = func(self, request, *args, **kwargs)
 
-            # Cache the response (only success responses)
             if response.status_code == status.HTTP_200_OK:
                 CacheManager.set_cached(cache_key, response.data, ttl)
 
@@ -314,35 +336,13 @@ def invalidate_cache_on_write(
     model: str,
     invalidate_params: list[str] | None = None,
 ) -> Callable:
-    """
-    Decorator to invalidate related caches on write operations.
-
-    When create/update/delete operations succeed, invalidate all related
-    query caches that might be affected.
-
-    Args:
-        app: Application name
-        model: Model name
-        invalidate_params: List of model field names to use for cache invalidation
-                          (e.g., ['patient_id', 'user_id'])
-
-    Usage:
-        @invalidate_cache_on_write('patients', 'file', ['patient_id', 'user_id'])
-        def perform_create(self, serializer):
-            super().perform_create(serializer)
-
-    Example:
-        When creating a file with patient_id=1, user_id=2:
-        Invalidates: patients:file:list:*, patients:file:list:patient_id_1:*, etc.
-    """
+    """Decorator to invalidate related caches on write operations (create/update/delete)."""
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
-            # Call original function
+        def wrapper(self: object, *args: object, **kwargs: object) -> object:
             result = func(self, *args, **kwargs)
 
-            # Extract instance being modified
             instance = None
             if args and isinstance(args[0], Model):
                 instance = args[0]
@@ -350,24 +350,20 @@ def invalidate_cache_on_write(
                 instance = self.instance
 
             if instance and invalidate_params:
-                # Build invalidation parameters from instance
                 invalidation_data = {}
                 for param in invalidate_params:
                     value = getattr(instance, param, None)
                     if value is not None:
                         invalidation_data[param] = value
 
-                # Generate and invalidate cache keys
-                keys_to_invalidate = (
-                    CacheKeyGenerator.generate_invalidation_keys(
+                if invalidation_data:
+                    keys_to_invalidate = CacheKeyGenerator.generate_invalidation_keys(
                         app,
                         model,
                         **invalidation_data,
                     )
-                )
-
-                for key_pattern in keys_to_invalidate:
-                    CacheManager.invalidate_cache(key_pattern)
+                    for key_pattern in keys_to_invalidate:
+                        CacheManager.invalidate_cache(key_pattern)
 
             return result
 
@@ -377,128 +373,85 @@ def invalidate_cache_on_write(
 
 
 class CacheMixin:
-    """
-    Mixin for ViewSets to add caching capabilities.
-
-    Usage:
-        class FileViewSet(CacheMixin, viewsets.ModelViewSet):
-            cache_app = 'patients'
-            cache_model = 'file'
-            cache_retrieve_params = ['patient_id', 'category']
-            cache_invalidate_params = ['patient_id', 'user_id']
-            cache_ttl = 300
-    """
+    """Mixin for ViewSets to add automatic caching to list and write operations."""
 
     cache_app: str = "app"
     cache_model: str = "model"
-    cache_retrieve_params: list[str] = []
-    cache_invalidate_params: list[str] = []
+    cache_retrieve_params: ClassVar[list[str]] = []
+    cache_invalidate_params: ClassVar[list[str]] = []
+    cache_user_sensitive: ClassVar[bool] = False
     cache_ttl: int | None = None
 
-    def list(self, request: Any, *args: Any, **kwargs: Any) -> Any:
+    def _invalidate_cache_for_instance(self, instance: Model | None) -> None:
+        """Extract parameters from instance and invalidate related caches."""
+        if not instance or not self.cache_invalidate_params:
+            return
+
+        invalidation_data = {}
+        for param in self.cache_invalidate_params:
+            value = getattr(instance, param, None)
+            if value is not None:
+                invalidation_data[param] = value
+
+        if invalidation_data:
+            keys_to_invalidate = CacheKeyGenerator.generate_invalidation_keys(
+                self.cache_app,
+                self.cache_model,
+                **invalidation_data,
+            )
+            for key_pattern in keys_to_invalidate:
+                CacheManager.invalidate_cache(key_pattern)
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> object:
         """Override list to add caching."""
-        # Only cache GET requests
         if request.method != "GET":
             return super().list(request, *args, **kwargs)
 
-        # Build cache key
-        cache_params = {}
-        for param in self.cache_retrieve_params:
-            value = request.query_params.get(param)
-            if value is None and param in kwargs:
-                value = kwargs[param]
-            if value is not None:
-                cache_params[param] = value
+        params = CacheParamBuilder.build_with_all_query_params(
+            request,
+            user_sensitive=self.cache_user_sensitive,
+        )
 
-        page = request.query_params.get("page", "1")
-        cache_params["page"] = page
+        # Add any configured retrieve params not already captured
+        for param in self.cache_retrieve_params:
+            if param not in params:
+                value = request.query_params.get(param)
+                if value is None and hasattr(self, "kwargs") and param in self.kwargs:
+                    value = self.kwargs[param]  # type: ignore[attr-defined]
+                if value is not None:
+                    params[param] = value
 
         cache_key = CacheKeyGenerator.generate_key(
             self.cache_app,
             self.cache_model,
             "list",
-            **cache_params,
+            **params,
         )
 
-        # Try cache
+        # Try cache first
         cached_data = CacheManager.get_cached(cache_key)
         if cached_data is not None:
-            return Response(cached_data)
+            return Response(cached_data, status=status.HTTP_200_OK)
 
-        # Call parent
         response = super().list(request, *args, **kwargs)
 
-        # Cache if successful
+        # Cache successful response
         if response.status_code == status.HTTP_200_OK:
             CacheManager.set_cached(cache_key, response.data, self.cache_ttl)
 
         return response
 
-    def perform_create(self, serializer: Any) -> None:
+    def perform_create(self, serializer: Serializer) -> None:
         """Override to invalidate cache on create."""
         super().perform_create(serializer)
+        self._invalidate_cache_for_instance(serializer.instance)
 
-        instance = serializer.instance
-        if instance and self.cache_invalidate_params:
-            invalidation_data = {}
-            for param in self.cache_invalidate_params:
-                value = getattr(instance, param, None)
-                if value is not None:
-                    invalidation_data[param] = value
-
-            keys_to_invalidate = (
-                CacheKeyGenerator.generate_invalidation_keys(
-                    self.cache_app,
-                    self.cache_model,
-                    **invalidation_data,
-                )
-            )
-
-            for key_pattern in keys_to_invalidate:
-                CacheManager.invalidate_cache(key_pattern)
-
-    def perform_update(self, serializer: Any) -> None:
+    def perform_update(self, serializer: Serializer) -> None:
         """Override to invalidate cache on update."""
         super().perform_update(serializer)
+        self._invalidate_cache_for_instance(serializer.instance)
 
-        instance = serializer.instance
-        if instance and self.cache_invalidate_params:
-            invalidation_data = {}
-            for param in self.cache_invalidate_params:
-                value = getattr(instance, param, None)
-                if value is not None:
-                    invalidation_data[param] = value
-
-            keys_to_invalidate = (
-                CacheKeyGenerator.generate_invalidation_keys(
-                    self.cache_app,
-                    self.cache_model,
-                    **invalidation_data,
-                )
-            )
-
-            for key_pattern in keys_to_invalidate:
-                CacheManager.invalidate_cache(key_pattern)
-
-    def perform_destroy(self, instance: Any) -> None:
+    def perform_destroy(self, instance: Model) -> None:
         """Override to invalidate cache on delete."""
-        if instance and self.cache_invalidate_params:
-            invalidation_data = {}
-            for param in self.cache_invalidate_params:
-                value = getattr(instance, param, None)
-                if value is not None:
-                    invalidation_data[param] = value
-
-            keys_to_invalidate = (
-                CacheKeyGenerator.generate_invalidation_keys(
-                    self.cache_app,
-                    self.cache_model,
-                    **invalidation_data,
-                )
-            )
-
+        self._invalidate_cache_for_instance(instance)
         super().perform_destroy(instance)
-
-        if instance and self.cache_invalidate_params:
-            for key_pattern in keys_to_invalidate:
-                CacheManager.invalidate_cache(key_pattern)

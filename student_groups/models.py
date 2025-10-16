@@ -358,48 +358,43 @@ class ObservationManager(models.Manager):
     def get_observations_by_user_and_patient(
         user_id: int | str,
         patient_id: int | str,
-        ordering: str | None = None,
     ) -> dict[str, models.QuerySet]:
         """
         Get all observations for a specific user and patient.
 
         :param user_id: User ID to filter by
         :param patient_id: Patient ID to filter by
-        :param ordering: Optional ordering field (e.g., 'created_at' or '-created_at')
         :return: Dictionary of querysets for each observation type
         """
-        if ordering is None:
-            ordering = "-created_at"  # Default to newest first
-
         return {
             "blood_pressures": BloodPressure.objects.filter(
                 user_id=user_id,
                 patient_id=patient_id,
-            ).order_by(ordering),
+            ),
             "heart_rates": HeartRate.objects.filter(
                 user_id=user_id,
                 patient_id=patient_id,
-            ).order_by(ordering),
+            ),
             "body_temperatures": BodyTemperature.objects.filter(
                 user_id=user_id,
                 patient_id=patient_id,
-            ).order_by(ordering),
+            ),
             "respiratory_rates": RespiratoryRate.objects.filter(
                 user_id=user_id,
                 patient_id=patient_id,
-            ).order_by(ordering),
+            ),
             "blood_sugars": BloodSugar.objects.filter(
                 user_id=user_id,
                 patient_id=patient_id,
-            ).order_by(ordering),
+            ),
             "oxygen_saturations": OxygenSaturation.objects.filter(
                 user_id=user_id,
                 patient_id=patient_id,
-            ).order_by(ordering),
+            ),
             "pain_scores": PainScore.objects.filter(
                 user_id=user_id,
                 patient_id=patient_id,
-            ).order_by(ordering),
+            ),
         }
 
 
