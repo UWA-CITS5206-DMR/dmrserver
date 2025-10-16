@@ -621,3 +621,99 @@ class FileAccessIntegrationTest(TestCase):
         # Should see error about invalid page range, not authorization
         assert "invalid page range" in response_text.lower()
         assert "valid pages: 1-5" in response_text.lower()
+
+    def test_student_multiple_approved_files_merge_page_ranges(self) -> None:
+        """Test that multiple approved files for same file merge page ranges"""
+        from student_groups.models import BloodTestRequest
+
+        # Enable pagination for the file (has 5 pages)
+        self.file.requires_pagination = True
+        self.file.save()
+
+        # Delete the default approved file and create specific ones for testing
+        ApprovedFile.objects.filter(file=self.file).delete()
+
+        # Create approved files with non-overlapping ranges to test merging
+        # First approved file: "1-2" (from imaging request)
+        ApprovedFile.objects.create(
+            imaging_request=self.imaging_request,
+            file=self.file,
+            page_range="1-2",
+        )
+
+        # Second approved file: "4" (from blood test request)
+        blood_test_request = BloodTestRequest.objects.create(
+            user=self.student,
+            patient=self.patient,
+            test_type="FBC",
+            status="completed",
+        )
+        ApprovedFile.objects.create(
+            blood_test_request=blood_test_request,
+            file=self.file,
+            page_range="4",
+        )
+
+        # Third approved file: "5" (from another imaging request)
+        imaging_request2 = ImagingRequest.objects.create(
+            user=self.student,
+            patient=self.patient,
+            test_type=ImagingRequest.TestType.ULTRASOUND_SCAN,
+            details="Second imaging request for file integration test",
+            infection_control_precautions=ImagingRequest.InfectionControlPrecaution.NONE,
+            imaging_focus="Abdomen",
+            name="Dr. Test",
+            role="Doctor",
+            status="completed",
+        )
+        ApprovedFile.objects.create(
+            imaging_request=imaging_request2,
+            file=self.file,
+            page_range="5",
+        )
+
+        self.client.force_authenticate(user=self.student)
+        url = reverse(
+            "file-view",
+            kwargs={"patient_pk": self.patient.id, "pk": self.file.id},
+        )
+
+        # Merged page range should be "1-2,4-5" (page 3 is not authorized)
+
+        # Test: Student should be able to access page 1 (from first approved file)
+        response = self.client.get(url, {"page_range": "1"})
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
+
+        # Test: Student should be able to access page 2 (from first approved file)
+        response = self.client.get(url, {"page_range": "2"})
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
+
+        # Test: Student should be able to access page 4 (from second approved file)
+        response = self.client.get(url, {"page_range": "4"})
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
+
+        # Test: Student should be able to access page 5 (from third approved file)
+        response = self.client.get(url, {"page_range": "5"})
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
+
+        # Test: Student should NOT be able to access page 3 (not in any approved range)
+        response = self.client.get(url, {"page_range": "3"})
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        response_text = response.content.decode()
+        assert (
+            "not authorized" in response_text.lower()
+            or "unauthorized" in response_text.lower()
+        )
+
+        # Test: Student can access multiple pages from merged ranges
+        response = self.client.get(url, {"page_range": "1,2,4,5"})
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"] == "application/pdf"
+
+        # Test: Student cannot access mix of authorized and unauthorized pages
+        response = self.client.get(url, {"page_range": "1,3"})
+        assert response.status_code == status.HTTP_403_FORBIDDEN
