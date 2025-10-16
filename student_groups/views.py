@@ -10,6 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 
+from core.cache import CacheMixin
 from core.context import Role, ViewContext
 from core.permissions import (
     DischargeSummaryPermission,
@@ -55,7 +56,7 @@ from .serializers import (
 )
 
 
-class BaseObservationViewSet(viewsets.ModelViewSet):
+class BaseObservationViewSet(CacheMixin, viewsets.ModelViewSet):
     """
     Base ViewSet for all observation types.
 
@@ -64,6 +65,8 @@ class BaseObservationViewSet(viewsets.ModelViewSet):
     - Optional patient filtering via query parameter
     - Automatic user assignment in perform_create()
     - ObservationPermission enforcement
+    - Automatic response caching on list and retrieve actions
+    - Automatic cache invalidation on create/update/destroy actions
 
     Subclasses only need to set:
     - queryset
@@ -74,6 +77,10 @@ class BaseObservationViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes: ClassVar[list[Any]] = [ObservationPermission]
+    cache_app: str = "student_groups"
+    cache_model: str = "observations"
+    cache_retrieve_params: ClassVar[list[str]] = ["patient"]
+    cache_invalidate_params: ClassVar[list[str]] = ["patient_id"]
 
     @extend_schema(
         parameters=[
@@ -111,10 +118,22 @@ class BaseObservationViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-class BaseInvestigationRequestViewSet(viewsets.ModelViewSet):
-    """Shared base for investigation requests across roles."""
+class BaseInvestigationRequestViewSet(CacheMixin, viewsets.ModelViewSet):
+    """
+    Shared base for investigation requests across roles.
+
+    Provides:
+    - Role-aware filtering (students see own requests, instructors see all)
+    - Patient and user filtering via query parameters
+    - Automatic response caching on list and retrieve actions
+    - Automatic cache invalidation on create/update/destroy actions
+    """
 
     permission_classes: ClassVar[list[Any]] = [InvestigationRequestPermission]
+    cache_app: str = "student_groups"
+    cache_model: str = "investigation_requests"
+    cache_retrieve_params: ClassVar[list[str]] = ["patient", "user"]
+    cache_invalidate_params: ClassVar[list[str]] = ["patient_id", "user_id"]
 
     @extend_schema(
         parameters=[

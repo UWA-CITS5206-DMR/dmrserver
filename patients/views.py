@@ -10,6 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from core.cache import CacheMixin
 from core.context import Role
 from core.permissions import (
     FileAccessPermission,
@@ -30,26 +31,32 @@ from .serializers import (
 from .services import PdfPaginationService
 
 
-class PatientViewSet(viewsets.ModelViewSet):
+class PatientViewSet(CacheMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing patient records.
 
-    Provides CRUD operations for patients.
+    Provides CRUD operations for patients with caching:
     - Students: read-only access
     - Instructors/Admins: full CRUD access
+    - Automatic response caching on list and retrieve actions
+    - Automatic cache invalidation on create/update/destroy actions
     """
 
     queryset = Patient.objects.all()
     serializer_class = PatientSerializer
     permission_classes: ClassVar[list[object]] = [PatientPermission]
+    cache_app: str = "patients"
+    cache_model: str = "patients"
+    cache_retrieve_params: ClassVar[list[str]] = []
+    cache_invalidate_params: ClassVar[list[str]] = []
 
     def perform_create(self, serializer: object) -> None:
         serializer.save()
 
 
-class FileViewSet(viewsets.ModelViewSet):
+class FileViewSet(CacheMixin, viewsets.ModelViewSet):
     """
-    ViewSet for managing patient files.
+    ViewSet for managing patient files with caching support.
 
     Provides full CRUD operations for file management:
     - List files for a specific patient
@@ -58,6 +65,8 @@ class FileViewSet(viewsets.ModelViewSet):
     - Update file metadata (category, pagination settings)
     - Delete files (removes from disk)
     - View file content with optional PDF pagination
+    - Automatic response caching on list and retrieve actions
+    - Automatic cache invalidation on create/update/destroy actions
 
     Permissions (via FileAccessPermission):
     - List action:
@@ -82,6 +91,10 @@ class FileViewSet(viewsets.ModelViewSet):
     queryset = File.objects.all()
     serializer_class = FileSerializer
     permission_classes: ClassVar[list[object]] = [FileAccessPermission]
+    cache_app: str = "patients"
+    cache_model: str = "files"
+    cache_retrieve_params: ClassVar[list[str]] = ["patient_pk"]
+    cache_invalidate_params: ClassVar[list[str]] = ["patient_id"]
 
     def get_queryset(self) -> QuerySet:
         """
