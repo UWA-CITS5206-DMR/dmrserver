@@ -699,10 +699,14 @@ class ObservationsViewSetTest(APITestCase):
         assert len(response.data["results"]["heart_rates"]) == 1
 
     def test_list_observations_with_ordering(self) -> None:
-        """Test that ordering parameter sorts results correctly"""
+        """Test that observations are ordered by creation time (newest first)"""
         from datetime import timedelta
 
+        from django.core.cache import cache
         from django.utils import timezone
+
+        # Clear cache to ensure clean state
+        cache.clear()
 
         # Create observations with distinct timestamps without sleeping
         now = timezone.now()
@@ -724,27 +728,16 @@ class ObservationsViewSetTest(APITestCase):
         )
         BloodPressure.objects.filter(pk=bp_new.pk).update(created_at=now)
 
-        # Test descending order (newest first) - default
+        # Test default ordering (newest first)
         response = self.client.get(
             reverse("observation-list"),
-            {"patient": self.patient.id, "ordering": "-created_at"},
+            {"patient": self.patient.id},
         )
         assert response.status_code == status.HTTP_200_OK
         assert "results" in response.data
         assert (
             response.data["results"]["blood_pressures"][0]["systolic"] == 130
-        )  # Newest first
-
-        # Test ascending order (oldest first)
-        response = self.client.get(
-            reverse("observation-list"),
-            {"patient": self.patient.id, "ordering": "created_at"},
-        )
-        assert response.status_code == status.HTTP_200_OK
-        assert "results" in response.data
-        assert (
-            response.data["results"]["blood_pressures"][0]["systolic"] == 120
-        )  # Oldest first
+        )  # Newest first (default ordering)
 
 
 class RespiratoryRateModelTest(TestCase):

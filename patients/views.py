@@ -4,12 +4,13 @@ from wsgiref.util import FileWrapper
 
 from django.db.models import Q, QuerySet
 from django.http import Http404
-from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from core.cache import CacheMixin
 from core.context import Role
 from core.permissions import (
     FileAccessPermission,
@@ -30,24 +31,28 @@ from .serializers import (
 from .services import PdfPaginationService
 
 
-class PatientViewSet(viewsets.ModelViewSet):
+class PatientViewSet(CacheMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing patient records.
 
-    Provides CRUD operations for patients.
+    Provides CRUD operations for patients with caching:
     - Students: read-only access
     - Instructors/Admins: full CRUD access
+    - Automatic response caching on list and retrieve actions
+    - Automatic cache invalidation on create/update/destroy actions
     """
 
     queryset = Patient.objects.all()
     serializer_class = PatientSerializer
     permission_classes: ClassVar[list[object]] = [PatientPermission]
+    cache_app: str = "patients"
+    cache_model: str = "patients"
+    cache_key_params: ClassVar[list[str]] = []
+    cache_invalidate_params: ClassVar[list[str]] = ["id"]
+    cache_user_sensitive: ClassVar[bool] = False
 
-    def perform_create(self, serializer: object) -> None:
-        serializer.save()
 
-
-class FileViewSet(viewsets.ModelViewSet):
+class FileViewSet(CacheMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing patient files.
 
@@ -59,29 +64,18 @@ class FileViewSet(viewsets.ModelViewSet):
     - Delete files (removes from disk)
     - View file content with optional PDF pagination
 
-    Permissions (via FileAccessPermission):
-    - List action:
-      - Students: Can view file lists (filtered to Admission files + approved files from completed investigation requests or manual releases)
-      - Instructors/Admins: Can view all files
-    - Other CRUD actions:
-      - Instructors/Admins: Full CRUD access
-      - Students: No direct CRUD access (only SAFE_METHODS allowed, but object-level checks restrict access to approved files)
-    - File viewing (view action): Uses same FileAccessPermission with object-level authorization
-      - Students: Can only view files approved via completed investigation requests or manual releases
-      - Instructors/Admins: Full access to all files and pages
-
-    File Categories:
-    - Admission: Admission documents (always visible to students)
-    - Pathology: Pathology reports
-    - Imaging: Imaging results (X-rays, CT scans, etc.)
-    - Diagnostics: Diagnostic test results
-    - Lab Results: Laboratory test results
-    - Other: Miscellaneous files
+    Uses CacheMixin for automatic caching and invalidation.
+    Cache invalidation is triggered on create/update/delete.
     """
 
     queryset = File.objects.all()
     serializer_class = FileSerializer
     permission_classes: ClassVar[list[object]] = [FileAccessPermission]
+    cache_app: str = "patients"
+    cache_model: str = "files"
+    cache_key_params: ClassVar[list[str]] = ["patient_pk"]
+    cache_invalidate_params: ClassVar[list[str]] = ["patient_id"]
+    cache_user_sensitive: ClassVar[bool] = True
 
     def get_queryset(self) -> QuerySet:
         """
@@ -120,97 +114,6 @@ class FileViewSet(viewsets.ModelViewSet):
         return base_queryset
 
     @extend_schema(
-        summary="List files for a patient",
-        description=(
-            "Returns files associated with a specific patient, filtered by user role:\n\n"
-            "**Students:** Can view:\n"
-            "- All Admission type files (always visible)\n"
-            "- Files approved in their completed investigation requests\n"
-            "- Files manually released to their student group\n\n"
-            "**Instructors/Admins:** Can view all files for the patient."
-        ),
-        responses={200: FileSerializer(many=True)},
-    )
-    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        return super().list(request, *args, **kwargs)
-
-    @extend_schema(
-        summary="Upload a new file",
-        description="Upload a new file for a patient. "
-        "The file can be categorized using the 'category' field. "
-        "For PDF files, set 'requires_pagination' to true to enable page-based authorization. "
-        "Only accessible by instructors and admins.",
-        request=FileSerializer,
-        responses={201: FileSerializer},
-        examples=[
-            OpenApiExample(
-                "Upload PDF with pagination enabled",
-                value={
-                    "file": "(binary data)",
-                    "category": "Imaging",
-                    "requires_pagination": True,
-                },
-                request_only=True,
-                description="Upload a PDF file with pagination enabled for granular access control",
-            ),
-            OpenApiExample(
-                "Upload pathology report",
-                value={
-                    "file": "(binary data)",
-                    "category": "Pathology",
-                    "requires_pagination": False,
-                },
-                request_only=True,
-                description="Upload a regular pathology report without pagination",
-            ),
-        ],
-    )
-    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
-        return super().create(request, *args, **kwargs)
-
-    @extend_schema(
-        summary="Retrieve file details",
-        description="Get metadata for a specific file including category, pagination status, and creation date. "
-        "Only accessible by instructors and admins.",
-        responses={200: FileSerializer},
-    )
-    def retrieve(self, request: Request, *args: object, **kwargs: object) -> Response:
-        return super().retrieve(request, *args, **kwargs)
-
-    @extend_schema(
-        summary="Update file metadata",
-        description="Update file metadata such as category or pagination settings. "
-        "Note: The actual file content cannot be updated - delete and recreate instead. "
-        "Only accessible by instructors and admins.",
-        request=FileSerializer,
-        responses={200: FileSerializer},
-    )
-    def update(self, request: Request, *args: object, **kwargs: object) -> Response:
-        return super().update(request, *args, **kwargs)
-
-    @extend_schema(
-        summary="Partially update file metadata",
-        description="Partially update file metadata such as category or pagination settings. "
-        "Only accessible by instructors and admins.",
-        request=FileSerializer,
-        responses={200: FileSerializer},
-    )
-    def partial_update(
-        self, request: Request, *args: object, **kwargs: object
-    ) -> Response:
-        return super().partial_update(request, *args, **kwargs)
-
-    @extend_schema(
-        summary="Delete a file",
-        description="Delete a file and remove it from disk. "
-        "This will also remove any approved file associations. "
-        "Only accessible by instructors and admins.",
-        responses={204: None},
-    )
-    def destroy(self, request: Request, *args: object, **kwargs: object) -> Response:
-        return super().destroy(request, *args, **kwargs)
-
-    @extend_schema(
         summary="Manually release file access to student groups",
         description=(
             "Grant one or more student group accounts access to this file without requiring "
@@ -247,14 +150,6 @@ class FileViewSet(viewsets.ModelViewSet):
         }
         response_serializer = ManualFileReleaseResponseSerializer(response_payload)
         return Response(response_serializer.data, status=status.HTTP_200_OK)
-
-    def perform_create(self, serializer: object) -> None:
-        """
-        Override perform_create to automatically set the patient from the URL.
-        The patient_pk comes from the nested route.
-        """
-        patient_id = self.kwargs.get("patient_pk")
-        serializer.save(patient_id=patient_id)
 
     @extend_schema(
         summary="View a specific file",
