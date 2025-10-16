@@ -276,7 +276,7 @@ class ObservationManagerTest(TestCase):
         BloodSugar.objects.create(
             patient=cls.patient,
             user=cls.user,
-            sugar_level="100.0",
+            sugar_level="5.6",
         )
         OxygenSaturation.objects.create(
             patient=cls.patient,
@@ -306,7 +306,7 @@ class ObservationManagerTest(TestCase):
         assert observations["heart_rates"].first().heart_rate == 72
         assert observations["body_temperatures"].first().temperature == Decimal("36.6")
         assert observations["respiratory_rates"].first().respiratory_rate == 16
-        assert observations["blood_sugars"].first().sugar_level == Decimal("100.0")
+        assert observations["blood_sugars"].first().sugar_level == Decimal("5.6")
         assert observations["oxygen_saturations"].first().saturation_percentage == 98
 
     def test_create_observations(self) -> None:
@@ -330,7 +330,7 @@ class ObservationManagerTest(TestCase):
             "blood_sugar": {
                 "patient": self.patient,
                 "user": self.user,
-                "sugar_level": "110.0",
+                "sugar_level": "6.1",
             },
             "oxygen_saturation": {
                 "patient": self.patient,
@@ -372,7 +372,7 @@ class ObservationManagerTest(TestCase):
         assert rr.respiratory_rate == 18
 
         bs = BloodSugar.objects.first()
-        assert bs.sugar_level == Decimal("110.0")
+        assert bs.sugar_level == Decimal("6.1")
 
         os = OxygenSaturation.objects.first()
         assert os.saturation_percentage == 97
@@ -462,7 +462,7 @@ class ObservationsSerializerTest(TestCase):
             "blood_sugar": {
                 "patient": cls.patient.id,
                 "user": cls.user.id,
-                "sugar_level": "100.0",
+                "sugar_level": "5.6",
             },
             "oxygen_saturation": {
                 "patient": cls.patient.id,
@@ -801,13 +801,13 @@ class BloodSugarModelTest(TestCase):
         blood_sugar = BloodSugar.objects.create(
             patient=self.patient,
             user=self.user,
-            sugar_level=Decimal("99.5"),
+            sugar_level=Decimal("5.5"),
         )
         assert blood_sugar.patient == self.patient
         assert blood_sugar.user == self.user
-        assert blood_sugar.sugar_level == Decimal("99.5")
+        assert blood_sugar.sugar_level == Decimal("5.5")
         assert blood_sugar.created_at is not None
-        assert str(blood_sugar) == f"{self.patient} - 99.5 mg/dL ({self.user.username})"
+        assert str(blood_sugar) == f"{self.patient} - 5.5 mmol/L ({self.user.username})"
 
 
 class OxygenSaturationModelTest(TestCase):

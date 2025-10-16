@@ -207,7 +207,7 @@ class BloodSugar(models.Model):
     sugar_level = models.DecimalField(
         max_digits=5,
         decimal_places=1,
-        verbose_name="Blood Sugar Level (mg/dL)",
+        verbose_name="Blood Sugar Level (mmol/L)",
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
 
@@ -217,7 +217,7 @@ class BloodSugar(models.Model):
         ordering: ClassVar[list[str]] = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"{self.patient} - {self.sugar_level} mg/dL ({self.user.username})"
+        return f"{self.patient} - {self.sugar_level} mmol/L ({self.user.username})"
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()

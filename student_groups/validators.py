@@ -5,8 +5,8 @@ _TEMP_MIN = 30.0
 _TEMP_MAX = 45.0
 _RESP_RATE_MIN = 5
 _RESP_RATE_MAX = 60
-_BLOOD_SUGAR_MIN = 40.0
-_BLOOD_SUGAR_MAX = 600.0
+_BLOOD_SUGAR_MIN = 2.0  # mmol/L
+_BLOOD_SUGAR_MAX = 33.0  # mmol/L
 _OXY_MIN = 50
 _OXY_MAX = 100
 _PAIN_MIN = 0
@@ -109,7 +109,7 @@ class ObservationValidator:
         try:
             sugar = float(sugar_level)
             if sugar < _BLOOD_SUGAR_MIN or sugar > _BLOOD_SUGAR_MAX:
-                msg = f"Blood sugar level out of reasonable range ({_BLOOD_SUGAR_MIN}-{_BLOOD_SUGAR_MAX} mg/dL)"
+                msg = f"Blood sugar level out of reasonable range ({_BLOOD_SUGAR_MIN}-{_BLOOD_SUGAR_MAX} mmol/L)"
                 raise ValidationError(msg)
         except (ValueError, TypeError) as err:
             msg = "Blood sugar level must be a valid number"

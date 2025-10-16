@@ -87,6 +87,7 @@ class PdfAuthorizationService:
             - Admins and instructors have unrestricted access to all pages
             - Students must have an ApprovedFile from a completed lab request
             - Lab requests can be ImagingRequest or BloodTestRequest
+            - Multiple approved files for the same file are merged into a single page range
         """
         user_role = get_user_role(user)
 
@@ -94,29 +95,83 @@ class PdfAuthorizationService:
         if user_role in [Role.ADMIN.value, Role.INSTRUCTOR.value]:
             return None
 
-        # Students must have an approved lab request for this file
-        # Check ImagingRequest first
-        approved_file = ApprovedFile.objects.filter(
-            file=file_instance,
-            imaging_request__user=user,
-            imaging_request__status="completed",
-        ).first()
+        # Students must have approved lab requests for this file
+        # Collect all approved files for this user and file
+        approved_files = (
+            list(
+                ApprovedFile.objects.filter(
+                    file=file_instance,
+                    imaging_request__user=user,
+                    imaging_request__status="completed",
+                )
+            )
+            + list(
+                ApprovedFile.objects.filter(
+                    file=file_instance,
+                    blood_test_request__user=user,
+                    blood_test_request__status="completed",
+                )
+            )
+            + list(
+                ApprovedFile.objects.filter(
+                    file=file_instance,
+                    released_to_user=user,
+                )
+            )
+        )
 
-        if not approved_file:
-            # If not found in ImagingRequest, check BloodTestRequest
-            approved_file = ApprovedFile.objects.filter(
-                file=file_instance,
-                blood_test_request__user=user,
-                blood_test_request__status="completed",
-            ).first()
+        if not approved_files:
+            return None
 
-        if not approved_file:
-            approved_file = ApprovedFile.objects.filter(
-                file=file_instance,
-                released_to_user=user,
-            ).first()
+        # Merge all page ranges from approved files
+        return PdfAuthorizationService._merge_page_ranges(approved_files)
 
-        return approved_file.page_range if approved_file else None
+    @staticmethod
+    def _merge_page_ranges(approved_files: list[ApprovedFile]) -> str:
+        """
+        Merge page ranges from multiple approved files into a single range string.
+
+        Args:
+            approved_files: List of ApprovedFile objects
+
+        Returns:
+            Merged page range string (e.g., "1-5,7,10-12")
+        """
+        parser = PdfPageRangeParser()
+        all_pages = set()
+
+        for approved_file in approved_files:
+            if approved_file.page_range:
+                pages = parser.parse(approved_file.page_range)
+                all_pages.update(pages)
+
+        if not all_pages:
+            return ""
+
+        # Sort pages and create ranges
+        sorted_pages = sorted(all_pages)
+        ranges = []
+        start = sorted_pages[0]
+        prev = sorted_pages[0]
+
+        for page in sorted_pages[1:]:
+            if page == prev + 1:
+                prev = page
+            else:
+                if start == prev:
+                    ranges.append(str(start))
+                else:
+                    ranges.append(f"{start}-{prev}")
+                start = page
+                prev = page
+
+        # Add the last range
+        if start == prev:
+            ranges.append(str(start))
+        else:
+            ranges.append(f"{start}-{prev}")
+
+        return ",".join(ranges)
 
 
 class PdfPaginationService:
