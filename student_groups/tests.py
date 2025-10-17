@@ -393,7 +393,7 @@ class InvestigationRequestRBACIntegrationTest(RoleFixtureMixin, APITestCase):
         request_obj = BloodTestRequest.objects.create(
             patient=self.patient,
             user=self.other_student,
-            test_type=BloodTestRequest.TestType.FBC,
+            test_types=[BloodTestRequest.TestType.FBC],
             details="Other student's request",
             name="Other blood",
             role="Medical Student",

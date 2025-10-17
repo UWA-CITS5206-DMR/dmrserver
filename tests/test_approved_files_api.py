@@ -162,7 +162,7 @@ class ApprovedFilesAPITestCase(TestCase):
         blood_test_request = BloodTestRequest.objects.create(
             patient=self.patient,
             user=self.student_user,
-            test_type=BloodTestRequest.TestType.CRP,
+            test_types=[BloodTestRequest.TestType.CRP],
             details="Test reason",
             status="completed",
             name="Dr. Johnson",

@@ -623,10 +623,9 @@ class BloodTestRequest(models.Model):
         related_name="blood_test_requests",
         verbose_name="User",
     )
-    test_type = models.CharField(
-        max_length=50,
-        choices=TestType.choices,
-        verbose_name="Test Type",
+    test_types = models.JSONField(
+        verbose_name="Test Types",
+        help_text="List of blood test types to be performed",
     )
     details = models.TextField(verbose_name="Details")
     status = models.CharField(
@@ -652,7 +651,36 @@ class BloodTestRequest(models.Model):
         ordering: ClassVar[list[str]] = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"Blood test request for {self.patient} by {self.user.username} ({self.status})"
+        test_types_str = (
+            ", ".join(self.test_types)
+            if isinstance(self.test_types, list)
+            else str(self.test_types)
+        )
+        return f"Blood test request for {self.patient} by {self.user.username} ({test_types_str}) - {self.status}"
+
+    def clean(self) -> None:
+        """Validate test_types field."""
+        super().clean()
+
+        if not isinstance(self.test_types, list):
+            msg = "test_types must be a list"
+            raise ValidationError({"test_types": msg})
+
+        if not self.test_types:
+            msg = "At least one test type must be selected"
+            raise ValidationError({"test_types": msg})
+
+        # Validate all test types are valid choices
+        valid_choices = {choice[0] for choice in self.TestType.choices}
+        invalid_types = [t for t in self.test_types if t not in valid_choices]
+        if invalid_types:
+            msg = f"Invalid test types: {', '.join(invalid_types)}"
+            raise ValidationError({"test_types": msg})
+
+        # Check for duplicates
+        if len(self.test_types) != len(set(self.test_types)):
+            msg = "Duplicate test types are not allowed"
+            raise ValidationError({"test_types": msg})
 
 
 class MedicationOrder(models.Model):
