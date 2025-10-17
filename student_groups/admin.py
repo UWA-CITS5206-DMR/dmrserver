@@ -237,7 +237,7 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
     list_display: ClassVar[list[str]] = [
         "patient",
         "user",
-        "test_type",
+        "get_test_types",
         "status",
         "created_at",
         "updated_at",
@@ -245,7 +245,6 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
     list_filter: ClassVar[list[str]] = [
         "user",
         "status",
-        "test_type",
         "created_at",
         "updated_at",
     ]
@@ -253,7 +252,6 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
         "patient__first_name",
         "patient__last_name",
         "user__username",
-        "test_type",
         "name",
         "role",
     ]
@@ -269,7 +267,7 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
                 "fields": (
                     "name",
                     "role",
-                    "test_type",
+                    "test_types",
                     "details",
                     "status",
                 ),
@@ -280,6 +278,14 @@ class BloodTestRequestAdmin(admin.ModelAdmin):
             {"fields": ("created_at", "updated_at"), "classes": ("collapse",)},
         ),
     )
+
+    def get_test_types(self, obj: BloodTestRequest) -> str:
+        """Display test types as comma-separated string."""
+        if isinstance(obj.test_types, list):
+            return ", ".join(obj.test_types)
+        return str(obj.test_types)
+
+    get_test_types.short_description = "Test Types"  # type: ignore[attr-defined]
 
 
 @admin.register(MedicationOrder)

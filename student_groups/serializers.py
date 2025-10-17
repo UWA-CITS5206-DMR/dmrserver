@@ -503,7 +503,7 @@ class BloodTestRequestSerializer(BaseModelSerializer):
             "id",
             "patient",
             "user",
-            "test_type",
+            "test_types",
             "details",
             "status",
             "name",
@@ -520,6 +520,30 @@ class BloodTestRequestSerializer(BaseModelSerializer):
             "updated_at",
             "approved_files",
         ]
+
+    def validate_test_types(self, value: object) -> list[str]:
+        """Validate test_types field."""
+        if not isinstance(value, list):
+            msg = "test_types must be a list"
+            raise serializers.ValidationError(msg)
+
+        if not value:
+            msg = "At least one test type must be selected"
+            raise serializers.ValidationError(msg)
+
+        # Validate all test types are valid choices
+        valid_choices = {choice[0] for choice in BloodTestRequest.TestType.choices}
+        invalid_types = [t for t in value if t not in valid_choices]
+        if invalid_types:
+            msg = f"Invalid test types: {', '.join(invalid_types)}"
+            raise serializers.ValidationError(msg)
+
+        # Check for duplicates
+        if len(value) != len(set(value)):
+            msg = "Duplicate test types are not allowed"
+            raise serializers.ValidationError(msg)
+
+        return value
 
     def to_representation(self, instance: BloodTestRequest) -> dict[str, Any]:
         context = self.context or {}

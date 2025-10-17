@@ -121,7 +121,7 @@ class PatientFilteringTestCase(TestCase):
             user=cls.student1,
             name="Dr. Smith",
             role="Physician",
-            test_type=BloodTestRequest.TestType.FBC,
+            test_types=[BloodTestRequest.TestType.FBC],
             details="Routine check",
         )
 

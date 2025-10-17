@@ -472,7 +472,7 @@ class FileAccessIntegrationTest(TestCase):
         blood_test_request = BloodTestRequest.objects.create(
             user=self.student,
             patient=self.patient,
-            test_type=BloodTestRequest.TestType.FBC,
+            test_types=[BloodTestRequest.TestType.FBC],
             details="Test blood test request for file integration test",
             name="Dr. Lab",
             role="Pathologist",
@@ -524,7 +524,7 @@ class FileAccessIntegrationTest(TestCase):
         blood_test_request = BloodTestRequest.objects.create(
             user=self.student,
             patient=self.patient,
-            test_type=BloodTestRequest.TestType.EUC,
+            test_types=[BloodTestRequest.TestType.EUC],
             details="Test paginated blood test file access",
             name="Dr. Lab",
             role="Pathologist",
@@ -645,7 +645,10 @@ class FileAccessIntegrationTest(TestCase):
         blood_test_request = BloodTestRequest.objects.create(
             user=self.student,
             patient=self.patient,
-            test_type="FBC",
+            test_types=["FBC"],
+            details="Test details",
+            name="Dr. Lab",
+            role="Pathologist",
             status="completed",
         )
         ApprovedFile.objects.create(
