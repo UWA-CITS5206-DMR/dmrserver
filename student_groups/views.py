@@ -213,21 +213,16 @@ class ObservationsViewSet(viewsets.GenericViewSet):
         ],
     )
     def create(self, request: Request) -> Response:
-        # Inject the authenticated user into each observation type
+        # Use the view serializer with the proper context so nested
+        # BaseModelSerializer validators can pick up the authenticated user
+        # from the request context (instead of relying on input JSON).
         data = request.data.copy()
-        for observation_type in [
-            "blood_pressure",
-            "heart_rate",
-            "body_temperature",
-            "respiratory_rate",
-            "blood_sugar",
-            "oxygen_saturation",
-            "pain_score",
-        ]:
-            if data.get(observation_type):
-                data[observation_type]["user"] = request.user.id
 
-        serializer = ObservationsSerializer(data=data)
+        # Do not inject `user` into the request data - the nested
+        # serializers will set the user from the request context. This
+        # avoids accidentally setting a primitive id that bypasses
+        # BaseModelSerializer logic.
+        serializer = self.get_serializer(data=data)
 
         if serializer.is_valid():
             try:

@@ -283,6 +283,24 @@ class ObservationsViewSetTest(RoleFixtureMixin, APITestCase):
         assert response_invalid.status_code == status.HTTP_200_OK
         assert len(response_invalid.data["results"]["blood_pressures"]) == 3
 
+    def test_create_with_nested_payload_does_not_raise_keyerror(self) -> None:
+        payload = {
+            "blood_pressure": {
+                "patient": self.patient.id,
+                "systolic": 120,
+                "diastolic": 80,
+                "user": self.student.id,  # simulate client that includes user id
+            }
+        }
+        response = self.client.post(
+            "/api/student-groups/observations/",
+            payload,
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        # Confirm that created object's user is the authenticated user (not the passed id)
+        assert response.data["blood_pressure"]["user"] == self.student.id
+
 
 class InvestigationRequestRBACIntegrationTest(RoleFixtureMixin, APITestCase):
     @classmethod
